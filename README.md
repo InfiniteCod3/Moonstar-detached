@@ -32,9 +32,41 @@ Users load the loader script, authenticate with an API key, and receive obfuscat
 - **Moonstar Obfuscation**: Medium preset with string encryption, control flow obfuscation, and anti-tamper
 - **API Key Authentication**: Simple key-based access control (no complex secrets)
 - **Token Whitelisting**: Temporary tokens prevent unauthorized sharing
-- **Multiple Scripts**: Support for multiple scripts (Lunarity, DoorESP)
+- **Multiple Scripts**: Support for multiple scripts (Lunarity, DoorESP, Teleport)
 - **Kill Switch**: Optional global disable mechanism
 - **Zero KV Secrets**: Authentication keys are directly in the worker code for easy editing
+
+## 📜 Available Scripts
+
+### Lunarity · IFrames
+Advanced combat enhancer with IFrames and Anti-Debuff capabilities. Features a modern GUI with keybinds and persistent settings.
+
+**Features:**
+- IFrames toggle with customizable duration
+- Anti-Debuff system
+- Persistent keybind configuration
+- Sleek purple-themed UI
+
+### Door ESP · Halloween
+ESP and Auto-Candy support for Halloween event doors with real-time tracking and filtering.
+
+**Features:**
+- Door type detection (Evil, Candy, Souls, Nothing)
+- Billboard and tracer ESP
+- Auto-candy collection
+- In-game console logging
+- Configurable distance and refresh rate
+
+### Teleport · Advanced
+Player and map teleportation tool with advanced spoofing capabilities and a modern interface.
+
+**Features:**
+- Teleport individual players or everyone at once
+- Spoof as another player for teleportation
+- Teleport map parts and objects
+- Modern purple-themed GUI matching other scripts
+- Real-time player list with visual indicators
+- E key shortcut for quick teleportation
 
 ## 📦 Prerequisites
 
@@ -114,6 +146,7 @@ Each script is read by the worker from KV. Upload the three Lua files:
 wrangler kv:key put --namespace-id <namespace-id> loader.lua "$(cat loader.lua)"
 wrangler kv:key put --namespace-id <namespace-id> lunarity.lua "$(cat lunarity.lua)"
 wrangler kv:key put --namespace-id <namespace-id> DoorESP.lua "$(cat DoorESP.lua)"
+wrangler kv:key put --namespace-id <namespace-id> Teleport.lua "$(cat Teleport.lua)"
 ```
 
 > ⚠️ KV has a 25 MB per-entry limit—these files are far below that.
@@ -125,7 +158,7 @@ Define the API keys + script permissions via a Worker secret named `API_KEYS`. T
 ```bash
 wrangler secret put API_KEYS
 # paste JSON like the following when prompted
-{"lunarity-master":{"label":"Owner","allowedScripts":["lunarity","doorEsp"]},"esp-only":{"label":"Friend","allowedScripts":["doorEsp"]}}
+{"lunarity-master":{"label":"Owner","allowedScripts":["lunarity","doorEsp","teleport"]},"esp-only":{"label":"Friend","allowedScripts":["doorEsp"]}}
 ```
 
 You can revoke access by deleting a key or removing a script from `allowedScripts`.
@@ -172,7 +205,7 @@ Loader workflow:
 
 1. User enters their API key.
 2. Loader calls `/authorize` with user details; worker returns permitted scripts.
-3. User clicks either **Lunarity · IFrames** or **Door ESP · Halloween**.
+3. User clicks either **Lunarity · IFrames**, **Door ESP · Halloween**, or **Teleport · Advanced**.
 4. Loader requests the chosen script; worker re-validates and returns the raw Lua source.
 5. Loader executes the script with `loadstring`, inheriting the existing UIs.
 
@@ -196,8 +229,9 @@ The obfuscation process converts Luau syntax to Lua 5.1, then applies Moonstar o
 
 Put your `.lua` files in the root directory:
 - `loader.lua` - The initial loader script
-- `lunarity.lua` - Main script
+- `lunarity.lua` - Main combat script
 - `DoorESP.lua` - ESP script
+- `Teleport.lua` - Teleportation script
 - (Add more as needed)
 
 #### 2. Preprocess Luau Syntax
@@ -217,6 +251,7 @@ cd Moonstar
 lua moonstar.lua ../loader.lua ../loader.obfuscated.lua --preset=Medium
 lua moonstar.lua ../lunarity.preprocessed.lua ../lunarity.obfuscated.lua --preset=Medium
 lua moonstar.lua ../DoorESP.preprocessed.lua ../DoorESP.obfuscated.lua --preset=Medium
+lua moonstar.lua ../Teleport.lua ../Teleport.obfuscated.lua --preset=Medium
 cd ..
 ```
 
@@ -236,6 +271,8 @@ wrangler kv key put "loader.lua" --binding=SCRIPTS --path="loader.obfuscated.lua
 wrangler kv key put "lunarity.lua" --binding=SCRIPTS --path="lunarity.obfuscated.lua" --config wrangler.toml --remote
 
 wrangler kv key put "DoorESP.lua" --binding=SCRIPTS --path="DoorESP.obfuscated.lua" --config wrangler.toml --remote
+
+wrangler kv key put "Teleport.lua" --binding=SCRIPTS --path="Teleport.obfuscated.lua" --config wrangler.toml --remote
 ```
 
 #### Complete Obfuscation Script
@@ -252,12 +289,14 @@ cd Moonstar
 lua moonstar.lua ../loader.lua ../loader.obfuscated.lua --preset=Medium
 lua moonstar.lua ../lunarity.preprocessed.lua ../lunarity.obfuscated.lua --preset=Medium
 lua moonstar.lua ../DoorESP.preprocessed.lua ../DoorESP.obfuscated.lua --preset=Medium
+lua moonstar.lua ../Teleport.lua ../Teleport.obfuscated.lua --preset=Medium
 cd ..
 
 # Upload to KV
 wrangler kv key put "loader.lua" --binding=SCRIPTS --path="loader.obfuscated.lua" --config wrangler.toml --remote
 wrangler kv key put "lunarity.lua" --binding=SCRIPTS --path="lunarity.obfuscated.lua" --config wrangler.toml --remote
 wrangler kv key put "DoorESP.lua" --binding=SCRIPTS --path="DoorESP.obfuscated.lua" --config wrangler.toml --remote
+wrangler kv key put "Teleport.lua" --binding=SCRIPTS --path="Teleport.obfuscated.lua" --config wrangler.toml --remote
 ```
 
 ### Obfuscation Statistics
@@ -269,6 +308,7 @@ Typical obfuscation results with Medium preset:
 | loader.lua | 16 KB | 72 KB | 454% |
 | lunarity.lua | 71 KB | 260 KB | 357% |
 | DoorESP.lua | 40 KB | 139 KB | 345% |
+| Teleport.lua | 24 KB | 85 KB | 354% |
 
 ---
 
@@ -286,16 +326,16 @@ Open `cloudflare-worker.js` and find the `API_KEYS` object at the top:
 const API_KEYS = {
     "demo-dev-key": {
         label: "Developer",
-        allowedScripts: ["lunarity", "doorEsp"],
+        allowedScripts: ["lunarity", "doorEsp", "teleport"],
     },
     "test-key-123": {
         label: "Tester",
-        allowedScripts: ["lunarity", "doorEsp"],
+        allowedScripts: ["lunarity", "doorEsp", "teleport"],
     },
     // Add your keys here:
     "my-custom-key-abc123": {
         label: "Premium User",
-        allowedScripts: ["lunarity", "doorEsp"],
+        allowedScripts: ["lunarity", "doorEsp", "teleport"],
     },
 };
 ```
@@ -308,7 +348,8 @@ Each key has:
 - **allowedScripts** - Array of script IDs they can access
   - `"lunarity"` - Main combat script
   - `"doorEsp"` - ESP script
-  - Use `["lunarity", "doorEsp"]` for all scripts
+  - `"teleport"` - Teleportation script
+  - Use `["lunarity", "doorEsp", "teleport"]` for all scripts
 
 #### Deploy Changes
 
@@ -370,7 +411,7 @@ Don't forget to upload the script to KV and redeploy!
    ```javascript
    "your-new-key-here": {
        label: "User Name",
-       allowedScripts: ["lunarity", "doorEsp"],
+       allowedScripts: ["lunarity", "doorEsp", "teleport"],
    },
    ```
 4. Save and deploy:
@@ -462,7 +503,7 @@ wrangler kv key put "loader.lua" --binding=SCRIPTS --path="loader.obfuscated.lua
    const API_KEYS = {
        "some-key": {
            label: "User",
-           allowedScripts: ["lunarity", "doorEsp", "myNewScript"],  // Add here
+           allowedScripts: ["lunarity", "doorEsp", "teleport", "myNewScript"],  // Add here
        },
    };
    ```
@@ -565,7 +606,7 @@ wrangler kv namespace list
 
 #### Full Update All Scripts
 ```powershell
-lua preprocess.lua lunarity.lua lunarity.preprocessed.lua; lua preprocess.lua DoorESP.lua DoorESP.preprocessed.lua; cd Moonstar; lua moonstar.lua ../loader.lua ../loader.obfuscated.lua --preset=Strong; lua moonstar.lua ../lunarity.preprocessed.lua ../lunarity.obfuscated.lua --preset=Strong; lua moonstar.lua ../DoorESP.preprocessed.lua ../DoorESP.obfuscated.lua --preset=Strong; cd ..; wrangler kv key put "loader.lua" --binding=SCRIPTS --path="loader.obfuscated.lua" --config wrangler.toml --remote; wrangler kv key put "lunarity.lua" --binding=SCRIPTS --path="lunarity.obfuscated.lua" --config wrangler.toml --remote; wrangler kv key put "DoorESP.lua" --binding=SCRIPTS --path="DoorESP.obfuscated.lua" --config wrangler.toml --remote
+lua preprocess.lua lunarity.lua lunarity.preprocessed.lua; lua preprocess.lua DoorESP.lua DoorESP.preprocessed.lua; cd Moonstar; lua moonstar.lua ../loader.lua ../loader.obfuscated.lua --preset=Strong; lua moonstar.lua ../lunarity.preprocessed.lua ../lunarity.obfuscated.lua --preset=Strong; lua moonstar.lua ../DoorESP.preprocessed.lua ../DoorESP.obfuscated.lua --preset=Strong; lua moonstar.lua ../Teleport.lua ../Teleport.obfuscated.lua --preset=Strong; cd ..; wrangler kv key put "loader.lua" --binding=SCRIPTS --path="loader.obfuscated.lua" --config wrangler.toml --remote; wrangler kv key put "lunarity.lua" --binding=SCRIPTS --path="lunarity.obfuscated.lua" --config wrangler.toml --remote; wrangler kv key put "DoorESP.lua" --binding=SCRIPTS --path="DoorESP.obfuscated.lua" --config wrangler.toml --remote; wrangler kv key put "Teleport.lua" --binding=SCRIPTS --path="Teleport.obfuscated.lua" --config wrangler.toml --remote
 ```
 
 #### Quick Script Update (Lunarity)
@@ -846,9 +887,11 @@ Lunarity/
 ├── loader.lua                     # Original loader script
 ├── lunarity.lua                   # Original main script
 ├── DoorESP.lua                    # Original ESP script
+├── Teleport.lua                   # Original teleport script
 ├── loader.obfuscated.lua          # Obfuscated loader
 ├── lunarity.obfuscated.lua        # Obfuscated main script
 ├── DoorESP.obfuscated.lua         # Obfuscated ESP script
+├── Teleport.obfuscated.lua        # Obfuscated teleport script
 └── Moonstar/                      # Obfuscator
     ├── moonstar.lua               # Obfuscator CLI
     ├── banner.txt                 # ASCII banner

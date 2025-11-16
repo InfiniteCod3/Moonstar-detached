@@ -10,3 +10,9 @@ id = "236ec48cb9ed4b39a73d25ce3654e2c5"
 [[routes]]
 pattern = "api.relayed.network"
 custom_domain = true
+
+[observability]
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true

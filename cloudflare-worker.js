@@ -25,6 +25,13 @@ const CONFIG = {
             version: "1.0.0",
             enabled: true,
         },
+        teleport: {
+            kvKey: "Teleport.lua",
+            label: "Teleport · Advanced",
+            description: "Player and map teleportation with spoofing support",
+            version: "1.0.0",
+            enabled: true,
+        },
     },
 };
 
@@ -33,16 +40,16 @@ const CONFIG = {
 const API_KEYS = {
     "demo-dev-key": {
         label: "Developer",
-        allowedScripts: ["lunarity", "doorEsp"],
+        allowedScripts: ["lunarity", "doorEsp", "teleport"],
     },
     "test-key-123": {
         label: "Tester",
-        allowedScripts: ["lunarity", "doorEsp"],
+        allowedScripts: ["lunarity", "doorEsp", "teleport"],
     },
     // Add more keys here:
     // "your-custom-key": {
     //     label: "Your Name",
-    //     allowedScripts: ["lunarity", "doorEsp"],
+    //     allowedScripts: ["lunarity", "doorEsp", "teleport"],
     // },
 };
 
