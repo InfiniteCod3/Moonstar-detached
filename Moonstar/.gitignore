@@ -1,0 +1,21 @@
+# Ignore output files
+output/*.lua
+output/*.txt
+output.lua
+deobfuscated-output.lua
+*_obfuscated.lua
+*_obf.lua
+
+# Ignore temporary files
+*.tmp
+*.bak
+*.log
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Keep directory structure
+!output/.gitkeep
+!examples/.gitkeep
+!misc/.gitkeep

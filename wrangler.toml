@@ -1,0 +1,12 @@
+name = "aetherfalls-lunarity"
+main = "cloudflare-worker.js"
+compatibility_date = "2025-11-16"
+workers_dev = false
+
+[[kv_namespaces]]
+binding = "SCRIPTS"
+id = "236ec48cb9ed4b39a73d25ce3654e2c5"
+
+[[routes]]
+pattern = "api.relayed.network"
+custom_domain = true

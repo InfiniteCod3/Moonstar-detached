@@ -1,0 +1,1 @@
+# Ignore backup of inner git\nMoonstar/.git-backup/\n# Node modules\nnode_modules/\n# Wrangler build dir\n.wrangler/\n# Local env\n.env\n

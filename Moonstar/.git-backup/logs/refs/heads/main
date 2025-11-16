@@ -1,0 +1,73 @@
+0000000000000000000000000000000000000000 85856141d98467d5ff82e9f5c7a6c64ed20b6af7 Aurologic <foxyss@pm.me> 1759225827 +0200	commit (initial): Add VM instruction sets and runtime generator for Moonstar obfuscator
+85856141d98467d5ff82e9f5c7a6c64ed20b6af7 8177298a8c88370f960c12915cb3ab1072f7d662 Aurologic <foxyss@pm.me> 1759225858 +0200	commit: Enhance VM execution flow with improved jump and function call handling
+8177298a8c88370f960c12915cb3ab1072f7d662 71c62fe003a0705dda4724979b44fba3ef867e1d Aurologic <foxyss@pm.me> 1759249637 +0200	commit: Implement VM2 Runtime and Obfuscator
+71c62fe003a0705dda4724979b44fba3ef867e1d 7d7381fb2a6d5677f25ca816e37f84ce0a98f023 Aurologic <foxyss@pm.me> 1759341766 +0200	commit: Add Packer Obfuscator and Text Encoder modules for code obfuscation
+7d7381fb2a6d5677f25ca816e37f84ce0a98f023 c716e0b6c3bf53a65ce0bfed349f4765ec79aec2 Aurologic <foxyss@pm.me> 1759343912 +0200	pull --tags origin main: Fast-forward
+c716e0b6c3bf53a65ce0bfed349f4765ec79aec2 24b6f492535cd041fbb49f6fa093388d4bb1d87b Aurologic <foxyss@pm.me> 1759410610 +0200	pull --tags origin main: Fast-forward
+24b6f492535cd041fbb49f6fa093388d4bb1d87b 410487e708bb602acfbcb12c30fecd714139e63c Aurologic <foxyss@pm.me> 1759485401 +0200	pull --tags origin main: Fast-forward
+410487e708bb602acfbcb12c30fecd714139e63c 666e5fc25f4be9a2808bcce1ba06d7ed762948df Aurologic <foxyss@pm.me> 1759485857 +0200	commit: update
+666e5fc25f4be9a2808bcce1ba06d7ed762948df a69c054a1acf7fdd66e3484f331d3c0254bb73af Aurologic <foxyss@pm.me> 1759487619 +0200	pull --tags origin main: Fast-forward
+a69c054a1acf7fdd66e3484f331d3c0254bb73af f8ccfea9c20bab1f7e35ce125cb6f08fba3a3954 Aurologic <foxyss@pm.me> 1759487986 +0200	commit: bwah
+f8ccfea9c20bab1f7e35ce125cb6f08fba3a3954 9eacfb8ffe5348f054a72697d7b839b4516d9506 Aurologic <foxyss@pm.me> 1759506823 +0200	pull --tags origin main: Fast-forward
+9eacfb8ffe5348f054a72697d7b839b4516d9506 e23034e9c55a451f620734f551982c859e81cb16 Aurologic <foxyss@pm.me> 1759506965 +0200	commit: update
+e23034e9c55a451f620734f551982c859e81cb16 cf08704f0d3516a93752c3309f5d106d61eff389 Aurologic <foxyss@pm.me> 1759508986 +0200	pull --tags origin main: Fast-forward
+cf08704f0d3516a93752c3309f5d106d61eff389 219b8655fd5e2d0a13d72e736cd130cf069d92b2 Aurologic <foxyss@pm.me> 1759509126 +0200	commit: vm2 yes
+219b8655fd5e2d0a13d72e736cd130cf069d92b2 c58a059f993b603097d4c57e1a119a933b2ad997 Aurologic <foxyss@pm.me> 1759511686 +0200	pull --tags origin main: Fast-forward
+c58a059f993b603097d4c57e1a119a933b2ad997 494834f1bf391e37e8f6cba2ef17547124c4a71a Aurologic <foxyss@pm.me> 1759512750 +0200	commit: Remove VM2 runtime and obfuscator implementations; update compatibility tests to exclude VM2 obfuscation cases.
+494834f1bf391e37e8f6cba2ef17547124c4a71a 5025f8d0e80adc354cf594490103a45030905538 Aurologic <foxyss@pm.me> 1759521917 +0200	pull --tags origin main: Fast-forward
+5025f8d0e80adc354cf594490103a45030905538 8011e9f2b3321a4c2fcd03937b98674f4ac9e63b Aurologic <foxyss@pm.me> 1759554390 +0200	commit: Add IFrames and Anti-Debuff module with GUI controls
+8011e9f2b3321a4c2fcd03937b98674f4ac9e63b 7a7a1231c61780539359a2af65119c565bc96542 Aurologic <foxyss@pm.me> 1759556015 +0200	pull origin main: Fast-forward
+7a7a1231c61780539359a2af65119c565bc96542 decf97e923abbdee564cb9935c81a5d11b5d31d2 Aurologic <foxyss@pm.me> 1759556045 +0200	commit: Add new test scripts for closures, Fibonacci, loops, and prime number generation
+decf97e923abbdee564cb9935c81a5d11b5d31d2 fbe07060e31602222f8789d1b2b1cb5f64e57a77 Aurologic <foxyss@pm.me> 1759557403 +0200	pull --tags origin main: Fast-forward
+fbe07060e31602222f8789d1b2b1cb5f64e57a77 1c950c536c0bcb723eb120f380c0ba1845bec63f Aurologic <foxyss@pm.me> 1759560978 +0200	commit: Refactor code structure for improved readability and maintainability
+1c950c536c0bcb723eb120f380c0ba1845bec63f 792069ba442896b850bb8aa9b1ac254a5177e47b Aurologic <foxyss@pm.me> 1759562523 +0200	pull --tags origin main: Fast-forward
+792069ba442896b850bb8aa9b1ac254a5177e47b ede1da270aa5a4523ffbf2d95557b6126b94065e Aurologic <foxyss@pm.me> 1759565549 +0200	pull --tags origin main: Fast-forward
+ede1da270aa5a4523ffbf2d95557b6126b94065e a6b674cb6178232b3c126dd050c6bf150e6eb844 Aurologic <foxyss@pm.me> 1759572214 +0200	commit: Implement code changes to enhance functionality and improve performance
+a6b674cb6178232b3c126dd050c6bf150e6eb844 d843d20e623dfefba894f446278c4d284970dc32 Aurologic <foxyss@pm.me> 1759573647 +0200	pull --tags origin main: Fast-forward
+d843d20e623dfefba894f446278c4d284970dc32 4c3f4ce670ae4fce92e71cfdbb83d7af5aff7e0c Aurologic <foxyss@pm.me> 1759574348 +0200	commit: Enhance Vmify functionality with input validation and improved junk code insertion
+4c3f4ce670ae4fce92e71cfdbb83d7af5aff7e0c 91a72db5f66d9c22a275be7ffc881d78e2b3d17d Aurologic <foxyss@pm.me> 1759588678 +0200	commit: Add comprehensive test suite for Moonstar obfuscator
+91a72db5f66d9c22a275be7ffc881d78e2b3d17d 54d2eb8e3f71d1cae8f1a7002762905e74f1502e Aurologic <foxyss@pm.me> 1759662190 +0200	commit: Implement code changes to enhance functionality and improve performance
+54d2eb8e3f71d1cae8f1a7002762905e74f1502e a855a5efe7856b2da5a132a7058b079f1858af7d Aurologic <foxyss@pm.me> 1759666603 +0200	pull --tags origin main: Fast-forward
+a855a5efe7856b2da5a132a7058b079f1858af7d a189fb485bd75e14f1ba41c47ae76c23e47a39a2 Aurologic <foxyss@pm.me> 1759666873 +0200	pull --tags origin main: Fast-forward
+a189fb485bd75e14f1ba41c47ae76c23e47a39a2 496de8f93a6140fc2c1d7a66c139387f23c87dd5 Aurologic <foxyss@pm.me> 1759672898 +0200	commit: add someone's deobfuscation
+496de8f93a6140fc2c1d7a66c139387f23c87dd5 95750d42ca8084a8226391ccd92f860b3aceb103 Aurologic <foxyss@pm.me> 1759683012 +0200	pull --tags origin main: Fast-forward
+95750d42ca8084a8226391ccd92f860b3aceb103 c6b7e929111371653d51e39349cbd6d3f41c246e Aurologic <foxyss@pm.me> 1759683824 +0200	commit: Implement code changes to enhance functionality and improve performance
+c6b7e929111371653d51e39349cbd6d3f41c246e 339e65b53f84929ea2fbba81593a70936427750e Aurologic <foxyss@pm.me> 1759684773 +0200	pull --tags origin main: Fast-forward
+339e65b53f84929ea2fbba81593a70936427750e d82ec68314593771d125e61a2fc1c417a27d3c15 Aurologic <foxyss@pm.me> 1759754804 +0200	commit: Refactor VmifyEnhancer: Remove unused functions and streamline enhancement process
+d82ec68314593771d125e61a2fc1c417a27d3c15 dbe8f2b4f090ef0446c0f9a629641b431f729b4d Aurologic <foxyss@pm.me> 1759754813 +0200	pull --tags origin main: Merge made by the 'ort' strategy.
+dbe8f2b4f090ef0446c0f9a629641b431f729b4d b89007140b536594bc6d75bcdf12f73e7fc077d6 Aurologic <foxyss@pm.me> 1759758743 +0200	pull --tags origin main: Fast-forward
+b89007140b536594bc6d75bcdf12f73e7fc077d6 e7a821faab3fe05fb19728ba1edc945a7f422a88 Aurologic <foxyss@pm.me> 1759759746 +0200	commit: Add GitHub Actions workflow for Copilot setup steps
+e7a821faab3fe05fb19728ba1edc945a7f422a88 b868dda4075195b5f307545658777ecbc0476a45 Aurologic <foxyss@pm.me> 1759760181 +0200	commit: Refactor documentation: streamline project overview and clarify Moonstar's role as a Prometheus wrapper
+b868dda4075195b5f307545658777ecbc0476a45 6091d6046976e6b062c0615682d796a5b50b8637 Aurologic <foxyss@pm.me> 1759772999 +0200	pull --tags origin main: Fast-forward
+6091d6046976e6b062c0615682d796a5b50b8637 76b62746fd594c8ad2f9bdee89bec7a56ef6b236 Aurologic <foxyss@pm.me> 1759773328 +0200	commit: Remove deprecated validation script and add new demo scripts for instruction set randomization, anti-tamper security fixes, and packer usage. Introduce convenience obfuscation script and validation for instruction set randomization. Enhance documentation and examples for better user guidance.
+76b62746fd594c8ad2f9bdee89bec7a56ef6b236 b03f2363eac09981a30fd185f8fd91d9add9f968 Aurologic <foxyss@pm.me> 1759818523 +0200	pull --tags origin main: Fast-forward
+b03f2363eac09981a30fd185f8fd91d9add9f968 b78cb299d765cc26a2b59a9341e3cc159fedee5a Aurologic <foxyss@pm.me> 1759857562 +0200	commit: Implement code changes to enhance functionality and improve performance
+b78cb299d765cc26a2b59a9341e3cc159fedee5a e569db23e76c69329756cb9b926c63a364c73e32 Aurologic <foxyss@pm.me> 1759857570 +0200	pull --tags origin main: Merge made by the 'ort' strategy.
+e569db23e76c69329756cb9b926c63a364c73e32 4573bf64d08f7e6c7c14bcd4c69ba13259c3c9c8 Aurologic <foxyss@pm.me> 1759859761 +0200	pull --tags origin main: Fast-forward
+4573bf64d08f7e6c7c14bcd4c69ba13259c3c9c8 294ebf0c0092768f0c10f1d2fe367e751ac2cee5 Aurologic <foxyss@pm.me> 1759932327 +0200	commit: Add comprehensive deobfuscation documentation for Lua strings
+294ebf0c0092768f0c10f1d2fe367e751ac2cee5 4debeaa3b300b5a1488cebe55bccc186ff39515b Aurologic <foxyss@pm.me> 1759933714 +0200	pull --tags origin main: Fast-forward
+4debeaa3b300b5a1488cebe55bccc186ff39515b b737b76a2c395feae4b267af3b62ce954e709e1d Aurologic <foxyss@pm.me> 1759934394 +0200	commit: Add comprehensive deobfuscation documentation for updated Lua obfuscation format (V2)
+b737b76a2c395feae4b267af3b62ce954e709e1d 7a309f67ba07f38b270e3e6a028bf0c9de4de33f Aurologic <foxyss@pm.me> 1759935441 +0200	pull --tags origin main: Fast-forward
+7a309f67ba07f38b270e3e6a028bf0c9de4de33f a019f5d9eae1a9052b4b262415835b740ffafb4e Aurologic <foxyss@pm.me> 1760191662 +0200	commit: Remove outdated deobfuscation documentation for V2 and update implementation details for improved string extraction, decoding, and mapping processes.
+a019f5d9eae1a9052b4b262415835b740ffafb4e 10a3f9cbfc4682cc68d455486ce152fbd2faba6e Aurologic <foxyss@pm.me> 1760259402 +0200	commit: Add comprehensive test suite for Moonstar v4.0 and v4.2 obfuscation features
+10a3f9cbfc4682cc68d455486ce152fbd2faba6e cfcd32d9a7a09a9e330117b6403b8dd9df0dda64 root <root@DESKTOP-L61OR63.> 1760515124 +0200	commit: feat: Implement comprehensive anti-fingerprinting measures for obfuscation
+cfcd32d9a7a09a9e330117b6403b8dd9df0dda64 c79a78ea1286d3fe6dd0a66644b0e83b73457815 root <root@DESKTOP-L61OR63.> 1760515165 +0200	commit (amend): feat: Implement comprehensive anti-fingerprinting measures for obfuscation
+c79a78ea1286d3fe6dd0a66644b0e83b73457815 e6889cd4c8eb326524e647ece469632361d97b6b Aurologic <foxyss@pm.me> 1760515254 +0200	commit: yes
+e6889cd4c8eb326524e647ece469632361d97b6b 10a3f9cbfc4682cc68d455486ce152fbd2faba6e Aurologic <foxyss@pm.me> 1760517395 +0200	reset: moving to 10a3f9cbfc4682cc68d455486ce152fbd2faba6e
+10a3f9cbfc4682cc68d455486ce152fbd2faba6e 4dc5a9639eb67bdfda92323cb1c9d0995a7ad8ba Aurologic <foxyss@pm.me> 1760518412 +0200	commit: yuh
+4dc5a9639eb67bdfda92323cb1c9d0995a7ad8ba cdbda1e91b1111424a8c12bf8de6af8b15a6bc1d Aurologic <foxyss@pm.me> 1760519815 +0200	pull --tags origin main: Fast-forward
+cdbda1e91b1111424a8c12bf8de6af8b15a6bc1d b614b6fa69daf85e4759976916faf754ee0bd272 Aurologic <foxyss@pm.me> 1762194901 +0100	commit: yes
+b614b6fa69daf85e4759976916faf754ee0bd272 e5332fd75eafc2932c6cebab335175b0f43b03a3 Aurologic <foxyss@pm.me> 1762194909 +0100	pull --tags origin main: Merge made by the 'ort' strategy.
+e5332fd75eafc2932c6cebab335175b0f43b03a3 a153045354c7fc8a388c452cd9e446ad7751d776 Aurologic <foxyss@pm.me> 1762197078 +0100	pull --tags origin main: Fast-forward
+a153045354c7fc8a388c452cd9e446ad7751d776 efae1c767a4e02cb15472e637868ecf0372d83e0 Aurologic <foxyss@pm.me> 1762197873 +0100	commit: yes
+efae1c767a4e02cb15472e637868ecf0372d83e0 e82e2c4e57f2745396d833ccb654a0291708bdda Aurologic <foxyss@pm.me> 1762199113 +0100	pull --tags origin main: Fast-forward
+e82e2c4e57f2745396d833ccb654a0291708bdda c273decebf197ea1990841e604ea56ff2f4cb859 Aurologic <foxyss@pm.me> 1762199991 +0100	commit: yes
+c273decebf197ea1990841e604ea56ff2f4cb859 b49bcf183b976bcaa2dff3369042ac17ea238768 Aurologic <foxyss@pm.me> 1762202346 +0100	commit: Consolidate presets into runtime, clone before mutation, and clean up legacy test artifacts
+b49bcf183b976bcaa2dff3369042ac17ea238768 4ed75ba9d7d195cdbdd09c1adc3a49b5408f66a4 Aurologic <foxyss@pm.me> 1762621962 +0100	commit: Add new Moonstar steps and update runner
+4ed75ba9d7d195cdbdd09c1adc3a49b5408f66a4 b49bcf183b976bcaa2dff3369042ac17ea238768 Aurologic <foxyss@pm.me> 1762622050 +0100	reset: moving to HEAD~1
+b49bcf183b976bcaa2dff3369042ac17ea238768 0274f8933f14b2c93a81ec7250966f92ec317dab Aurologic <foxyss@pm.me> 1762639688 +0100	pull --tags origin main: Fast-forward
+0274f8933f14b2c93a81ec7250966f92ec317dab 90db48ae22d425e480b4bff1bde2846e3e10d1ca Aurologic <foxyss@pm.me> 1762640468 +0100	commit: Add comprehensive objectives and architecture overview to plan document
+90db48ae22d425e480b4bff1bde2846e3e10d1ca d55139f0780fa0e1cbe2b16dc512d3c10c1bef87 Aurologic <foxyss@pm.me> 1762678500 +0100	pull --tags origin main: Fast-forward
+d55139f0780fa0e1cbe2b16dc512d3c10c1bef87 9c2725281290cea7f3e18cafe05b09a83f969924 Aurologic <foxyss@pm.me> 1762679880 +0100	commit: feat(pipeline): Implement canonical ordered pipeline construction with new config schema
+9c2725281290cea7f3e18cafe05b09a83f969924 9f8554b850231f5bb968b293e89fe91f17aab4e4 Aurologic <foxyss@pm.me> 1762679956 +0100	commit: docs: Add comprehensive AI development guide for Moonstar obfuscator
+9f8554b850231f5bb968b293e89fe91f17aab4e4 7e1e4da5f1659095f411e098d94d38006c6c5fa2 Aurologic <foxyss@pm.me> 1762680761 +0100	pull --tags origin main: Fast-forward
