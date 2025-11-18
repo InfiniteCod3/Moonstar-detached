@@ -32,6 +32,13 @@ const CONFIG = {
             version: "1.0.0",
             enabled: true,
         },
+        remoteLogger: {
+            kvKey: "RemoteLogger.lua",
+            label: "Remote Logger · Dev",
+            description: "Developer tool that logs incoming/outgoing remotes",
+            version: "1.0.0",
+            enabled: true,
+        },
     },
 };
 
@@ -40,7 +47,7 @@ const CONFIG = {
 const API_KEYS = {
     "demo-dev-key": {
         label: "Developer",
-        allowedScripts: ["lunarity", "doorEsp", "teleport"],
+        allowedScripts: ["lunarity", "doorEsp", "teleport", "remoteLogger"],
     },
     "test-key-123": {
         label: "Tester",
