@@ -279,13 +279,14 @@ function ProifyLocals:apply(ast, pipeline)
     end, function(node, data)
         -- Local Variable Declaration
         if(node.kind == AstKind.LocalVariableDeclaration) then
+            -- FIX: Initialize expressions if nil
+            node.expressions = node.expressions or {}
+            
             for i, id in ipairs(node.ids) do
                 local expr = node.expressions[i] or Ast.NilExpression();
                 local localMetatableInfo = getLocalMetatableInfo(node.scope, id);
-                -- Apply Only to Some Variables if Treshold is non 1
                 if localMetatableInfo then
-                    local newExpr = self:CreateAssignmentExpression(localMetatableInfo, expr, node.scope);
-                    node.expressions[i] = newExpr;
+                    node.expressions[i] = self:CreateAssignmentExpression(localMetatableInfo, expr, node.scope);
                 end
             end
         end

@@ -26,6 +26,23 @@ local Unparser = {}
 Unparser.SPACE = config.SPACE;
 Unparser.TAB = config.TAB;
 
+local function getVarNameSafe(scope, id, context)
+    if not scope or not scope.getVariableName then
+        local f = io.open("debug_log_crash.txt", "a")
+        if f then
+            f:write("CRASH in " .. tostring(context) .. "\n")
+            f:write("Scope: " .. tostring(scope) .. "\n")
+            if type(scope) == "table" then
+                 local mt = getmetatable(scope)
+                 f:write("Metatable: " .. tostring(mt) .. "\n")
+            end
+            f:close()
+        end
+        error("Scope missing getVariableName in " .. tostring(context))
+    end
+    return scope:getVariableName(id)
+end
+
 local function escapeString(str)
 	str = util.escape(str)
 	return str;
@@ -186,7 +203,7 @@ function Unparser:unparseStatement(statement, tabbing)
 	elseif(statement.kind == AstKind.ForStatement) then
 		local bodyCode = self:unparseBlock(statement.body, tabbing);
 		
-		code = "for" .. self:whitespace() .. statement.scope:getVariableName(statement.id) .. self:optionalWhitespace() .. "=";
+		code = "for" .. self:whitespace() .. getVarNameSafe(statement.scope, statement.id, "ForStatement") .. self:optionalWhitespace() .. "=";
 		code = code .. self:optionalWhitespace() .. self:unparseExpression(statement.initialValue, tabbing) .. ",";
 		code = code .. self:optionalWhitespace() .. self:unparseExpression(statement.finalValue, tabbing) .. ",";
 		
@@ -205,7 +222,7 @@ function Unparser:unparseStatement(statement, tabbing)
 				code = code .. "," .. self:optionalWhitespace();
 			end
 			
-			code = code .. statement.scope:getVariableName(id);
+			code = code .. getVarNameSafe(statement.scope, id, "ForInStatement");
 		end
 		
 		code = code .. self:whitespace() .. "in";
@@ -250,7 +267,7 @@ function Unparser:unparseStatement(statement, tabbing)
 		
 	-- Function Declaration
 	elseif(statement.kind == AstKind.FunctionDeclaration) then
-		local funcname = statement.scope:getVariableName(statement.id);
+		local funcname = getVarNameSafe(statement.scope, statement.id, "FunctionDeclaration");
 		for _, index in ipairs(statement.indices) do
 			funcname = funcname .. "." .. index;
 		end
@@ -264,7 +281,7 @@ function Unparser:unparseStatement(statement, tabbing)
 			if(arg.kind == AstKind.VarargExpression) then
 				code = code .. "...";
 			else
-				code = code .. arg.scope:getVariableName(arg.id);
+				code = code .. getVarNameSafe(arg.scope, arg.id, "FunctionDeclarationArg");
 			end
 		end
 		code = code .. ")";
@@ -275,7 +292,7 @@ function Unparser:unparseStatement(statement, tabbing)
 		
 	-- Local Function Declaration
 	elseif(statement.kind == AstKind.LocalFunctionDeclaration) then
-		local funcname = statement.scope:getVariableName(statement.id);
+		local funcname = getVarNameSafe(statement.scope, statement.id, "LocalFunctionDeclaration");
 		code = "local" ..  self:whitespace() .. "function" .. self:whitespace() .. funcname .. "(";
 		
 		for i, arg in ipairs(statement.args) do
@@ -285,7 +302,7 @@ function Unparser:unparseStatement(statement, tabbing)
 			if(arg.kind == AstKind.VarargExpression) then
 				code = code .. "...";
 			else
-				code = code .. arg.scope:getVariableName(arg.id);
+				code = code .. getVarNameSafe(arg.scope, arg.id, "FunctionDeclarationArg");
 			end
 		end
 		code = code .. ")";
@@ -301,7 +318,7 @@ function Unparser:unparseStatement(statement, tabbing)
 			if i > 1 then
 				code = code .. "," .. self:optionalWhitespace();
 			end
-			code = code .. statement.scope:getVariableName(id);
+			code = code .. getVarNameSafe(statement.scope, id, "ForInStatement");
 		end
 
 		if(#statement.expressions > 0) then
@@ -460,13 +477,12 @@ function Unparser:unparseExpression(expression, tabbing)
 	end
 	
 	if(expression.kind == AstKind.VariableExpression or expression.kind == AstKind.AssignmentVariable) then
-			return expression.scope:getVariableName(expression.id);
+			return getVarNameSafe(expression.scope, expression.id, "VariableExpression");
 	end
 	
 	if(expression.kind == AstKind.StringExpression) then
 		return "\"" .. escapeString(expression.value) .. "\"";
 	end
-	
 	if(expression.kind == AstKind.NilExpression) then
 		return "nil";
 	end
@@ -830,7 +846,7 @@ function Unparser:unparseExpression(expression, tabbing)
 			if(arg.kind == AstKind.VarargExpression) then
 				code = code .. "...";
 			else
-				code = code .. arg.scope:getVariableName(arg.id);
+				code = code .. getVarNameSafe(arg.scope, arg.id, "FunctionDeclarationArg");
 			end
 		end
 		code = code .. ")";

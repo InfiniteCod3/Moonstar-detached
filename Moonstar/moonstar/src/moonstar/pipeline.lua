@@ -91,7 +91,6 @@ end
 --  - No dynamic reordering beyond this deterministic template.
 local CANONICAL_ORDER = {
 	"WrapInFunction",
-	"EnvFingerprint",
 	"EncryptStrings",
 	"SplitStrings",
 	"ConstantArray",
@@ -106,10 +105,6 @@ local CANONICAL_ORDER = {
 	"VmProfileRandomizer",
 	"StagedConstantDecode",
 	"PolymorphicLayout",
-	"IntegrityMesh",
-	"AntiTamper",
-	"AntiDebug",
-	"WatermarkCheck",
 	"LocalLifetimeSplitting",
 };
 
@@ -117,7 +112,6 @@ local CANONICAL_ORDER = {
 -- These defaults are intentionally conservative; presets should override explicitly.
 local DEFAULT_ENABLED = {
 	WrapInFunction           = false,
-	EnvFingerprint           = false,
 	EncryptStrings           = false,
 	SplitStrings             = false,
 	ConstantArray            = false,
@@ -132,10 +126,6 @@ local DEFAULT_ENABLED = {
 	VmProfileRandomizer      = false,
 	StagedConstantDecode     = false,
 	PolymorphicLayout        = false,
-	IntegrityMesh            = false,
-	AntiTamper               = false,
-	AntiDebug                = false,
-	WatermarkCheck           = false,
 	LocalLifetimeSplitting   = false,
 };
 
@@ -308,7 +298,23 @@ function Pipeline:apply(code, filename)
 	end
 	
 	-- Rename Variables Step
+    local f = io.open("debug_pipeline.txt", "a")
+    if f then
+        f:write("Before Renaming:\n")
+        f:write("ast.body.scope: " .. tostring(ast.body.scope) .. "\n")
+        f:write("Metatable: " .. tostring(getmetatable(ast.body.scope)) .. "\n")
+        f:close()
+    end
+
 	self:renameVariables(ast);
+
+    f = io.open("debug_pipeline.txt", "a")
+    if f then
+        f:write("After Renaming:\n")
+        f:write("ast.body.scope: " .. tostring(ast.body.scope) .. "\n")
+        f:write("Metatable: " .. tostring(getmetatable(ast.body.scope)) .. "\n")
+        f:close()
+    end
 	
 	code = self:unparse(ast);
 	

@@ -165,23 +165,6 @@ local Presets   = {
             Enabled = true;
             Probability = 0.15;
         };
-
-        OpaquePredicates = {
-            Enabled = true;
-            Complexity = "low";
-        };
-
-        ControlFlowRestructuring = {
-            Enabled = true;
-            Aggressiveness = "medium";
-            UseOpaquePredicates = true;
-        };
-
-        StructuredJunk = {
-            Enabled = true;
-            Density = "low";
-            MaxNesting = 2;
-        };
     };
 
     ["Strong"] = {
@@ -212,12 +195,6 @@ local Presets   = {
             IndexObfuscation = true;
         };
 
-        LayeredStringDecrypt = {
-            Enabled = true;
-            LayerDepth = 2;
-            UseTableIndirection = true;
-        };
-
         NumbersToExpressions = {
             Enabled = true;
             Complexity = "high";
@@ -228,28 +205,9 @@ local Presets   = {
             Probability = 0.25;
         };
 
-        OpaquePredicates = {
-            Enabled = true;
-            Complexity = "medium";
-            DeadBranchProbability = 0.2;
-        };
-
-        ControlFlowRestructuring = {
-            Enabled = true;
-            Aggressiveness = "high";
-            UseOpaquePredicates = true;
-        };
-
-        StructuredJunk = {
-            Enabled = true;
-            Density = "medium";
-            MaxNesting = 3;
-        };
-
         Vmify = {
             Enabled = true;
             Profile = "baseline";
-            PartialRatio = 0.3;
         };
 
         VmProfileRandomizer = {
@@ -258,27 +216,8 @@ local Presets   = {
             ShuffleHandlers = true;
             RandomizeNames = true;
         };
-
-        PolymorphicLayout = {
-            Enabled = true;
-            VaryHelperOrder = true;
-            VaryJunkPlacement = true;
-            VaryNamingSchemes = true;
-        };
-
-        IntegrityMesh = {
-            Enabled = true;
-            Scope = "all_critical";
-            ChecksumVariant = "mixed";
-        };
-
-        AntiTamper = {
-            Enabled = true;
-            Scope = "all_critical";
-            ChecksumVariant = "mixed";
-            UseDebug = false;
-        };
     };
+
 
     ["Panic"] = {
         LuaVersion    = "Lua51";
@@ -288,12 +227,6 @@ local Presets   = {
         Seed          = 0;
 
         WrapInFunction = { Enabled = true };
-
-        EnvFingerprint = {
-            Enabled = true;
-            UseTableSignals = true;
-            UseStringSignals = true;
-        };
 
         EncryptStrings = {
             Enabled = true;
@@ -315,13 +248,6 @@ local Presets   = {
             IndexObfuscation = true;
         };
 
-        LayeredStringDecrypt = {
-            Enabled = true;
-            LayerDepth = 3;
-            UseTableIndirection = true;
-            UseEnvFingerprint = true;
-        };
-
         NumbersToExpressions = {
             Enabled = true;
             Complexity = "high";
@@ -337,28 +263,9 @@ local Presets   = {
             Probability = 0.5;
         };
 
-        ControlFlowRestructuring = {
-            Enabled = true;
-            Aggressiveness = "high";
-            UseOpaquePredicates = true;
-        };
-
-        OpaquePredicates = {
-            Enabled = true;
-            Complexity = "high";
-            DeadBranchProbability = 0.4;
-        };
-
-        StructuredJunk = {
-            Enabled = true;
-            Density = "high";
-            MaxNesting = 4;
-        };
-
         Vmify = {
             Enabled = true;
             Profile = "heavy";
-            PartialRatio = 1.0;
             ObfuscateHandlers = true;
             InlineVMState = true;
         };
@@ -368,149 +275,6 @@ local Presets   = {
             PermuteOpcodes = true;
             ShuffleHandlers = true;
             RandomizeNames = true;
-        };
-
-        StagedConstantDecode = {
-            Enabled = true;
-            StageCount = 4;
-            TieToControlFlow = true;
-            TieToEnvFingerprint = true;
-        };
-
-        PolymorphicLayout = {
-            Enabled = true;
-            VaryHelperOrder = true;
-            VaryJunkPlacement = true;
-            VaryNamingSchemes = true;
-        };
-
-        AntiTamper = {
-            Enabled = true;
-            Scope = "all_critical";
-            ChecksumVariant = "mixed";
-            UseDebug = false;
-        };
-    };
-
-    ["Panic"] = {
-        LuaVersion    = "Lua51";
-        VarNamePrefix = "";
-        NameGenerator = "MangledShuffled";
-        PrettyPrint   = false;
-        Seed          = 0;
-
-        WrapInFunction = { Enabled = true };
-
-        EnvFingerprint = {
-            Enabled = true;
-            UseTableSignals = true;
-            UseStringSignals = true;
-        };
-
-        EncryptStrings = {
-            Enabled = true;
-            Mode = "aggressive";
-            DecryptorVariant = "mixed";
-            LayerDepth = 3;
-            LocalizeDecryptor = true;
-        };
-
-        SplitStrings = {
-            Enabled = true;
-            MaxSegmentLength = 8;
-            Strategy = "random";
-        };
-
-        ConstantArray = {
-            Enabled = true;
-            EncodeStrings = true;
-            IndexObfuscation = true;
-        };
-
-        LayeredStringDecrypt = {
-            Enabled = true;
-            LayerDepth = 3;
-            UseTableIndirection = true;
-            UseEnvFingerprint = true;
-        };
-
-        NumbersToExpressions = {
-            Enabled = true;
-            Complexity = "high";
-        };
-
-        ProxifyLocals = {
-            Enabled = true;
-            Mode = "aggressive";
-        };
-
-        AddVararg = {
-            Enabled = true;
-            Probability = 0.5;
-        };
-
-        ControlFlowRestructuring = {
-            Enabled = true;
-            Aggressiveness = "high";
-            UseOpaquePredicates = true;
-        };
-
-        OpaquePredicates = {
-            Enabled = true;
-            Complexity = "high";
-            DeadBranchProbability = 0.4;
-        };
-
-        StructuredJunk = {
-            Enabled = true;
-            Density = "high";
-            MaxNesting = 4;
-        };
-
-        Vmify = {
-            Enabled = true;
-            Profile = "heavy";
-            PartialRatio = 1.0;
-            ObfuscateHandlers = true;
-            InlineVMState = true;
-        };
-
-        VmProfileRandomizer = {
-            Enabled = true;
-            PermuteOpcodes = true;
-            ShuffleHandlers = true;
-            RandomizeNames = true;
-        };
-
-        StagedConstantDecode = {
-            Enabled = true;
-            StageCount = 4;
-            TieToControlFlow = true;
-            TieToEnvFingerprint = true;
-        };
-
-        PolymorphicLayout = {
-            Enabled = true;
-            VaryHelperOrder = true;
-            VaryJunkPlacement = true;
-            VaryNamingSchemes = true;
-        };
-
-        AntiTamper = {
-            Enabled = true;
-            Scope = "all_critical";
-            ChecksumVariant = "mixed";
-            UseDebug = false;
-        };
-
-        AntiDebug = {
-            Enabled = true;
-            CheckDebugHooks = true;
-            ReactionMode = "silent";
-        };
-
-        WatermarkCheck = {
-            Enabled = true;
         };
     };
 };

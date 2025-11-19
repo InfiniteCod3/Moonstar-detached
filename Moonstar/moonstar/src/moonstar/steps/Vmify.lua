@@ -28,12 +28,6 @@ Vmify.SettingsDescriptor = {
 		values = {"baseline", "stealth", "heavy"},
 		default = "baseline",
 	},
-	PartialRatio = {
-		type = "number",
-		default = 1.0,
-		min = 0.0,
-		max = 1.0,
-	},
 	InlineVMState = {
 		type = "boolean",
 		default = false,
@@ -89,22 +83,6 @@ function Vmify:apply(ast, pipeline)
         enableRandomization = true
     end
     -- baseline uses default settings
-    
-    -- Check PartialRatio for selective vmification
-    local partialRatio = self.PartialRatio or 1.0
-    if partialRatio < 1.0 then
-        -- Partial vmification: only process a percentage of the code
-        -- For simplicity, we'll use a probability check
-        -- A full implementation would selectively vmify specific functions
-        if math.random() > partialRatio then
-            -- Skip vmification for this run (simplified implementation)
-            -- In a full implementation, we'd need to:
-            -- 1. Parse AST to identify functions
-            -- 2. Select subset based on PartialRatio
-            -- 3. Only vmify selected functions
-            -- For now, apply standard vmification
-        end
-    end
     
     -- Create Compiler with instruction randomization and profile config
 	local compiler = Compiler:new({
