@@ -19,15 +19,31 @@ end
 -- Helper to list test files
 local function get_test_files()
     local files = {}
-    -- Windows command to list files in tests folder
-    -- Using dir /b /s to get full paths relative to current dir would be nice, but /b gives filenames
-    local handle = io.popen('dir /b "tests\\*.lua"')
+    -- Cross-platform command to list files in tests folder
+    -- Try to detect OS
+    local separator = package.config:sub(1,1)
+    local cmd
+    if separator == '\\' then
+        -- Windows
+        cmd = 'dir /b "tests\\*.lua"'
+    else
+        -- Unix-like (Linux, macOS)
+        cmd = 'ls tests/*.lua 2>/dev/null'
+    end
+    
+    local handle = io.popen(cmd)
     if handle then
-        for file in handle:lines() do
+        for line in handle:lines() do
             -- Trim whitespace just in case
-            file = file:gsub("^%s*(.-)%s*$", "%1")
-            if file ~= "" then
-                table.insert(files, "tests/" .. file)
+            line = line:gsub("^%s*(.-)%s*$", "%1")
+            if line ~= "" then
+                -- On Unix, ls returns full path, on Windows just filename
+                if separator == '\\' then
+                    table.insert(files, "tests/" .. line)
+                else
+                    -- Already has path from ls
+                    table.insert(files, line)
+                end
             end
         end
         handle:close()
@@ -44,7 +60,8 @@ local function run_lua_code(code)
     f:write(code)
     f:close()
 
-    local output = run_command("lua " .. tmp_file)
+    -- Capture stderr as well
+    local output = run_command("lua " .. tmp_file .. " 2>&1")
     os.remove(tmp_file)
     return output
 end
@@ -111,6 +128,14 @@ for _, preset_name in ipairs(preset_names) do
                     print("      Expected: " .. string.format("%q", expected_clean))
                     print("      Actual:   " .. string.format("%q", actual_clean))
                     failed_tests = failed_tests + 1
+                    
+                    -- Save failed code
+                    local f_fail = io.open("failed_code.lua", "w")
+                    if f_fail then
+                        f_fail:write(obfuscated_code)
+                        f_fail:close()
+                        print("    [INFO] Saved failed code to failed_code.lua")
+                    end
                 end
             end
         end

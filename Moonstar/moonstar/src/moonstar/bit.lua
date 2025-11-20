@@ -203,9 +203,12 @@ end
 local function make_bitop_uncached(t, m)
 	local function bitop(a, b)
 		local res,p = 0,1
-		while a ~= 0 and b ~= 0 do
-			local am, bm = a%m, b%m
-			res = res + t[am][bm]*p
+			while a ~= 0 and b ~= 0 do
+			    local am, bm = a % m, b % m
+				local tm = (t and t[am])
+			    local val = 0
+			    if tm then val = tm[bm] or 0 end
+			    res = res + val * p
 			a = (a - am) / m
 			b = (b - bm) / m
 			p = p*m

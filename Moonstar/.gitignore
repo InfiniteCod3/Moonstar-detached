@@ -19,3 +19,5 @@ Thumbs.db
 !output/.gitkeep
 !examples/.gitkeep
 !misc/.gitkeep
+test*.lua
+test*_output.lua

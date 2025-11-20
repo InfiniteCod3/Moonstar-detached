@@ -176,10 +176,14 @@ local Presets   = {
 
         WrapInFunction = { Enabled = true };
 
+        ConstantFolding = {
+            Enabled = true;
+        };
+
         EncryptStrings = {
             Enabled = true;
             Mode = "aggressive";
-            DecryptorVariant = "mixed";
+            DecryptorVariant = "xor_byte";
             LayerDepth = 2;
         };
 
@@ -205,9 +209,13 @@ local Presets   = {
             Probability = 0.25;
         };
 
+        AntiTamper = {
+            Enabled = true;
+        };
+
         Vmify = {
             Enabled = true;
-            Profile = "baseline";
+            Profile = "array";
         };
 
         VmProfileRandomizer = {

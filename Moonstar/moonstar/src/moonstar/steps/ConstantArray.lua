@@ -109,6 +109,12 @@ ConstantArray.SettingsDescriptor = {
 		type = "boolean",
 		default = true,
 	},
+	EncodeNumbers = {
+		name = "EncodeNumbers",
+		description = "Enable XOR encoding for numeric constants in the array",
+		type = "boolean",
+		default = false,  -- Disabled by default due to issues with negative numbers
+	},
 }
 
 local function callNameGenerator(generatorFunction, ...)
@@ -124,6 +130,12 @@ function ConstantArray:init(settings)
 		-- Generate a random salt for index transformation
 		self.indexSalt = math.random(1, 100)
 	end
+	
+	-- Generate XOR key for number encoding if enabled
+	if self.EncodeNumbers then
+		-- Generate a random XOR key (0-255 for simple XOR)
+		self.xorKey = math.random(0, 255)
+	end
 end
 
 function ConstantArray:createArray()
@@ -131,6 +143,13 @@ function ConstantArray:createArray()
 	for i, v in ipairs(self.constants) do
 		if type(v) == "string" then
 			v = self:encode(v);
+		elseif type(v) == "number" and self.EncodeNumbers then
+			-- Apply XOR encoding to numeric constants
+			-- Load bit library for XOR operation
+			local bit = require("moonstar.bit");
+			local bxor = bit.bxor;
+			-- XOR encode the number with the key
+			v = bxor(v, self.xorKey);
 		end
 		entries[i] = Ast.TableEntry(Ast.ConstantNode(v));
 	end
@@ -263,6 +282,57 @@ function ConstantArray:addRotateCode(ast, shift)
 end
 
 function ConstantArray:addDecodeCode(ast)
+	-- Add XOR number decoding if enabled
+	if self.EncodeNumbers then
+		local numberDecodeCode = [[
+	do
+		local arr = ARR;
+		local type = type;
+		local key = XOR_KEY;
+		-- Inline XOR implementation (pure Lua, no dependencies)
+		local function bxor(a, b)
+			local p, c = 1, 0
+			while a > 0 or b > 0 do
+				local ra, rb = a % 2, b % 2
+				if ra ~= rb then c = c + p end
+				a, b, p = (a - ra) / 2, (b - rb) / 2, p * 2
+			end
+			return c
+		end
+		for i = 1, #arr do
+			local data = arr[i];
+			if type(data) == "number" then
+				arr[i] = bxor(data, key);
+			end
+		end
+	end
+]];
+		
+		local parser = Parser:new({
+			LuaVersion = LuaVersion.Lua51;
+		});
+
+		local newAst = parser:parse(numberDecodeCode);
+		local doStat = newAst.body.statements[1];
+		doStat.body.scope:setParent(ast.body.scope);
+
+		visitast(newAst, nil, function(node, data)
+			if(node.kind == AstKind.VariableExpression) then
+				if(node.scope:getVariableName(node.id) == "ARR") then
+					data.scope:removeReferenceToHigherScope(node.scope, node.id);
+					data.scope:addReferenceToHigherScope(self.rootScope, self.arrId);
+					node.scope = self.rootScope;
+					node.id    = self.arrId;
+				elseif(node.scope:getVariableName(node.id) == "XOR_KEY") then
+					data.scope:removeReferenceToHigherScope(node.scope, node.id);
+					return Ast.NumberExpression(self.xorKey);
+				end
+			end
+		end)
+	
+		table.insert(ast.body.statements, 1, doStat);
+	end
+	
 	if self.Encoding == "base64" then
 		local base64DecodeCode = [[
 	do ]] .. table.concat(util.shuffle{

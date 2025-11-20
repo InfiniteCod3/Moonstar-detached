@@ -90,7 +90,9 @@ end
 --  - Inclusion is driven by StepConfig.Enabled flags (or defaults), not by arbitrary arrays.
 --  - No dynamic reordering beyond this deterministic template.
 local CANONICAL_ORDER = {
+	"AntiTamper",
 	"WrapInFunction",
+	"ConstantFolding",
 	"EncryptStrings",
 	"SplitStrings",
 	"ConstantArray",
@@ -111,7 +113,9 @@ local CANONICAL_ORDER = {
 -- Default enablement for steps when using the canonical schema (may be refined by presets).
 -- These defaults are intentionally conservative; presets should override explicitly.
 local DEFAULT_ENABLED = {
+	AntiTamper               = false,
 	WrapInFunction           = false,
+	ConstantFolding          = false,
 	EncryptStrings           = false,
 	SplitStrings             = false,
 	ConstantArray            = false,

@@ -112,6 +112,9 @@ function Compiler:new(config)
         -- Instruction randomization config
         enableInstructionRandomization = config.enableInstructionRandomization or false;
         
+        -- VM profile for dispatch method
+        vmProfile = config.vmProfile or "baseline";
+        
         -- VUL-2025-003 FIX: Per-compilation salt for non-uniform distribution
         compilationSalt = config.enableInstructionRandomization and math.random(0, 2^20) or 0;
 
@@ -146,7 +149,10 @@ end
 
 function Compiler:createBlock()
     local id;
-    if self.enableInstructionRandomization then
+    if self.vmProfile == "array" then
+        -- Array profile: use sequential block IDs (1..N) for dense handler table
+        id = #self.blocks + 1;
+    elseif self.enableInstructionRandomization then
         -- VUL-2025-003 FIX: Non-uniform distribution to prevent statistical fingerprinting
         repeat
             -- Use exponential distribution with random base and exponent
@@ -245,6 +251,7 @@ function Compiler:compile(ast)
 
     self.posVar = self.containerFuncScope:addVariable();
     self.argsVar = self.containerFuncScope:addVariable();
+    self.registersTableVar = self.containerFuncScope:addVariable(); -- For array-based VM
     self.currentUpvaluesVar = self.containerFuncScope:addVariable();
     self.detectGcCollectVar = self.containerFuncScope:addVariable();
     self.returnVar  = self.containerFuncScope:addVariable();
@@ -797,7 +804,59 @@ function Compiler:emitContainerFuncBody()
         return buildIfBlock(ifScope, bound, lBlock, rBlock);
     end
 
-    local whileBody = buildWhileBody(blocks, 1, #blocks, self.containerFuncScope, self.whileScope);
+    local whileBody;
+    local useArrayDispatch = (self.vmProfile == "array");
+    local handlerTableDecl; -- Declaration for array dispatch
+    
+    if useArrayDispatch then
+        -- Array-based dispatch: create a dense handler table (list) with sequential indices
+        local handlerVar = self.containerFuncScope:addVariable();
+        local handlerEntries = {};
+        
+        for _, block in ipairs(blocks) do
+            local id = block.id;
+            
+            -- Ensure block has a valid scope
+            if not block.block.scope then
+                -- Create a new scope if missing
+                block.block.scope = Scope:new(self.containerFuncScope);
+            else
+                -- Set parent scope for the block
+                block.block.scope:setParent(self.containerFuncScope);
+            end
+            
+            -- Handler function that executes the block code
+            local handlerFunc = Ast.FunctionLiteralExpression({}, block.block);
+            
+            -- Add to handler table using sequential indices (dense list)
+            -- Since blocks are sorted by ID and IDs are sequential (1..N),
+            -- we can use TableEntry instead of KeyedTableEntry
+            table.insert(handlerEntries, Ast.TableEntry(handlerFunc));
+        end
+        
+        -- Create the handler table declaration
+        handlerTableDecl = Ast.LocalVariableDeclaration(
+            self.containerFuncScope,
+            {handlerVar},
+            {Ast.TableConstructorExpression(handlerEntries)}
+        );
+        
+        -- Create the dispatch loop: while pos do handlers[pos]() end
+        self.whileScope:addReferenceToHigherScope(self.containerFuncScope, handlerVar);
+        
+        local dispatchCall = Ast.FunctionCallStatement(
+            Ast.IndexExpression(
+                Ast.VariableExpression(self.containerFuncScope, handlerVar),
+                Ast.VariableExpression(self.containerFuncScope, self.posVar)
+            ),
+            {}
+        );
+        
+        whileBody = Ast.Block({dispatchCall}, self.whileScope);
+    else
+        -- Standard binary search tree dispatch (if-chain)
+        whileBody = buildWhileBody(blocks, 1, #blocks, self.containerFuncScope, self.whileScope);
+    end
 
     self.whileScope:addReferenceToHigherScope(self.containerFuncScope, self.returnVar, 1);
     self.whileScope:addReferenceToHigherScope(self.containerFuncScope, self.posVar);
@@ -810,7 +869,9 @@ function Compiler:emitContainerFuncBody()
 
     for i, var in pairs(self.registerVars) do
         if(i ~= MAX_REGS) then
-            table.insert(declarations, var);
+            if not useArrayDispatch then
+                table.insert(declarations, var);
+            end
         end
     end
 
@@ -829,8 +890,23 @@ function Compiler:emitContainerFuncBody()
         }
     }
 
-    if self.maxUsedRegister >= MAX_REGS then
+    if not useArrayDispatch and self.maxUsedRegister >= MAX_REGS then
+        -- Ensure registerVars[MAX_REGS] exists before using it
+        if not self.registerVars[MAX_REGS] then
+            self.registerVars[MAX_REGS] = self.containerFuncScope:addVariable();
+        end
         table.insert(stats, 1, Ast.LocalVariableDeclaration(self.containerFuncScope, {self.registerVars[MAX_REGS]}, {Ast.TableConstructorExpression({})}));
+    end
+    
+    -- Insert handler table declaration if using array dispatch
+    if useArrayDispatch then
+        -- Declare registers table
+        table.insert(stats, 1, Ast.LocalVariableDeclaration(self.containerFuncScope, {self.registersTableVar}, {Ast.TableConstructorExpression({})}));
+        
+        if handlerTableDecl then
+            -- Must be inserted AFTER registers (index 1) and returnVar (index 2) declarations
+            table.insert(stats, 3, handlerTableDecl);
+        end
     end
 
     return Ast.Block(stats, self.containerFuncScope);
@@ -937,6 +1013,11 @@ function Compiler:register(scope, id)
         return self:getReturn(scope);
     end
 
+    if self.vmProfile == "array" then
+        scope:addReferenceToHigherScope(self.containerFuncScope, self.registersTableVar);
+        return Ast.IndexExpression(Ast.VariableExpression(self.containerFuncScope, self.registersTableVar), Ast.NumberExpression(id));
+    end
+
     if id < MAX_REGS then
         local vid = self:getRegisterVarId(id);
         scope:addReferenceToHigherScope(self.containerFuncScope, vid);
@@ -962,6 +1043,11 @@ function Compiler:registerAssignment(scope, id)
     end
     if id == self.RETURN_REGISTER then
         return self:returnAssignment(scope);
+    end
+
+    if self.vmProfile == "array" then
+        scope:addReferenceToHigherScope(self.containerFuncScope, self.registersTableVar);
+        return Ast.AssignmentIndexing(Ast.VariableExpression(self.containerFuncScope, self.registersTableVar), Ast.NumberExpression(id));
     end
 
     if id < MAX_REGS then

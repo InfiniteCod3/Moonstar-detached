@@ -32,7 +32,7 @@ EncryptStrings.SettingsDescriptor = {
 	},
 	DecryptorVariant = {
 		type = "enum",
-		values = {"arith", "table", "vmcall", "mixed"},
+		values = {"arith", "table", "vmcall", "mixed", "xor_byte"},
 		default = "arith",
 	},
 	LayerDepth = {
@@ -137,6 +137,25 @@ function EncryptStrings:CreateEncrypionService()
 			prevVal = byte;
 		end
 		return table.concat(out), seed;
+	end
+	
+	-- XOR byte encryption - returns byte array table
+	local function encrypt_xor(str)
+		local bit = require("moonstar.bit")
+		local bxor = bit.bxor
+		
+		local seed = gen_seed();
+		set_seed(seed)
+		local len = string.len(str)
+		local out = {}
+		
+		for i = 1, len do
+			local byte = string.byte(str, i);
+			local key = get_next_pseudo_random_byte();
+			-- XOR encryption: encrypted = plaintext XOR key
+			out[i] = bxor(byte, key);
+		end
+		return out, seed;  -- Return byte array, not string
 	end
 
     local function genCode()
@@ -270,7 +289,58 @@ do
 		return seed;
 	end
 ]]
-		else  -- "arith" (default)
+		elseif variant == "xor_byte" then
+            -- XOR Byte Array Decryptor
+            -- Expects 'str' to be a table of bytes {b1, b2, ...} not a string
+            -- But the current architecture passes a string literal in the AST.
+            -- We need to handle the AST transformation separately.
+            -- Here we define the runtime decryptor.
+            code = code .. [[
+    -- Inline XOR implementation (pure Lua, no dependencies)
+    local function bxor(a, b)
+        local p, c = 1, 0
+        while a > 0 or b > 0 do
+            local ra, rb = a % 2, b % 2
+            if ra ~= rb then c = c + p end
+            a, b, p = (a - ra) / 2, (b - rb) / 2, p * 2
+        end
+        return c
+    end
+    
+    function DECRYPT(bytes, seed)
+        local realStringsLocal = realStrings;
+        if(realStringsLocal[seed]) then else
+            prev_values = {};
+            local chars = charmap;
+            state_45 = seed % 35184372088832
+            state_8 = seed % 255 + 2
+            
+            local result = {}
+            local len = #bytes
+            local prevVal = ]] .. tostring(secret_key_8) .. [[;
+            
+            for i=1, len do
+                local b = bytes[i]
+                local r = get_next_pseudo_random_byte()
+                -- Decrypt: (b XOR r) - prevVal
+                -- Note: The encryption must be: (byte + prevVal) XOR r
+                -- Let's stick to the requested XOR logic:
+                -- "store strings as byte arrays {12, 244, 21...} and use a runtime XOR function to decrypt them"
+                -- We will use a simple XOR chain for this variant to match the user request specifically.
+                
+                -- Revised Logic for XOR variant:
+                -- Encrypted = Byte XOR Key
+                -- We will use the pseudo-random stream as the key stream.
+                
+                local decrypted = bxor(b, r)
+                table.insert(result, chars[decrypted + 1])
+            end
+            realStringsLocal[seed] = table.concat(result)
+        end
+        return seed;
+    end
+]]
+        else  -- "arith" (default)
 			-- Arithmetic-based decryptor (original)
 			code = code .. [[
   	function DECRYPT(str, seed)
@@ -300,6 +370,7 @@ do
 
     return {
         encrypt = encrypt,
+        encrypt_xor = encrypt_xor,
         param_mul_45 = param_mul_45,
         param_mul_8 = param_mul_8,
         param_add_45 = param_add_45,
@@ -340,14 +411,33 @@ function EncryptStrings:apply(ast, pipeline)
 		end
 	end)
 
+	local variant = self.DecryptorVariant or "arith"
+	
 	visitast(ast, nil, function(node, data)
 		if(node.kind == AstKind.StringExpression) then
 			data.scope:addReferenceToHigherScope(scope, stringsVar);
 			data.scope:addReferenceToHigherScope(scope, decryptVar);
-			local encrypted, seed = Encryptor.encrypt(node.value);
-			return Ast.IndexExpression(Ast.VariableExpression(scope, stringsVar), Ast.FunctionCallExpression(Ast.VariableExpression(scope, decryptVar), {
-				Ast.StringExpression(encrypted), Ast.NumberExpression(seed),
-			}));
+			
+			if variant == "xor_byte" then
+				-- Use XOR byte encryption
+				local encrypted_bytes, seed = Encryptor.encrypt_xor(node.value);
+				
+				-- Create table constructor with byte entries
+				local byte_entries = {}
+				for i, byte_val in ipairs(encrypted_bytes) do
+					table.insert(byte_entries, Ast.TableEntry(Ast.NumberExpression(byte_val)));
+				end
+				
+				return Ast.IndexExpression(Ast.VariableExpression(scope, stringsVar), Ast.FunctionCallExpression(Ast.VariableExpression(scope, decryptVar), {
+					Ast.TableConstructorExpression(byte_entries), Ast.NumberExpression(seed),
+				}));
+			else
+				-- Use standard string encryption
+				local encrypted, seed = Encryptor.encrypt(node.value);
+				return Ast.IndexExpression(Ast.VariableExpression(scope, stringsVar), Ast.FunctionCallExpression(Ast.VariableExpression(scope, decryptVar), {
+					Ast.StringExpression(encrypted), Ast.NumberExpression(seed),
+				}));
+			end
 		end
 	end)
 

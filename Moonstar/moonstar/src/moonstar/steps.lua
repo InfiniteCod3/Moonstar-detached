@@ -8,4 +8,6 @@ return {
 	NumbersToExpressions     = require("moonstar.steps.NumbersToExpressions");
 	AddVararg                = require("moonstar.steps.AddVararg");
 	VmProfileRandomizer      = require("moonstar.steps.VmProfileRandomizer");
+	ConstantFolding          = require("moonstar.steps.ConstantFolding");
+	AntiTamper               = require("moonstar.steps.AntiTamper");
 }
