@@ -163,6 +163,8 @@ end
 
 function Unparser:unparseStatement(statement, tabbing)
 	tabbing = tabbing and tabbing + 1 or 0;
+	-- Memory optimization: Use table parts for building code strings
+	local parts = {};
 	local code = "";
 	
 	if(statement.kind == AstKind.ContinueStatement) then
@@ -206,67 +208,91 @@ function Unparser:unparseStatement(statement, tabbing)
 	-- For Statement
 	elseif(statement.kind == AstKind.ForStatement) then
 		local bodyCode = self:unparseBlock(statement.body, tabbing);
-		
-		code = "for" .. self:whitespace() .. getVarNameSafe(statement.scope, statement.id, "ForStatement") .. self:optionalWhitespace() .. "=";
-		code = code .. self:optionalWhitespace() .. self:unparseExpression(statement.initialValue, tabbing) .. ",";
-		code = code .. self:optionalWhitespace() .. self:unparseExpression(statement.finalValue, tabbing) .. ",";
-		
 		local incrementByCode = statement.incrementBy and self:unparseExpression(statement.incrementBy, tabbing) or "1";
-		code = code .. self:optionalWhitespace() .. incrementByCode .. self:whitespaceIfNeeded2(incrementByCode)  .. "do" .. self:whitespaceIfNeeded(bodyCode, self:newline(true))
-			.. bodyCode .. self:newline(false)
-			.. self:whitespaceIfNeeded2(bodyCode, self:tabs(tabbing, true)) .. "end";
+		
+		parts = {"for", self:whitespace(), getVarNameSafe(statement.scope, statement.id, "ForStatement"), 
+			self:optionalWhitespace(), "=", self:optionalWhitespace(), 
+			self:unparseExpression(statement.initialValue, tabbing), ",", 
+			self:optionalWhitespace(), self:unparseExpression(statement.finalValue, tabbing), ",",
+			self:optionalWhitespace(), incrementByCode, self:whitespaceIfNeeded2(incrementByCode), 
+			"do", self:whitespaceIfNeeded(bodyCode, self:newline(true)),
+			bodyCode, self:newline(false),
+			self:whitespaceIfNeeded2(bodyCode, self:tabs(tabbing, true)), "end"};
+		code = table.concat(parts);
 		
 		
 	-- For In Statement
 	elseif(statement.kind == AstKind.ForInStatement) then
-		code = "for" .. self:whitespace();
+		parts = {"for", self:whitespace()};
 		
 		for i, id in ipairs(statement.ids) do
 			if(i ~= 1) then
-				code = code .. "," .. self:optionalWhitespace();
+				table.insert(parts, ",");
+				table.insert(parts, self:optionalWhitespace());
 			end
-			
-			code = code .. getVarNameSafe(statement.scope, id, "ForInStatement");
+			table.insert(parts, getVarNameSafe(statement.scope, id, "ForInStatement"));
 		end
 		
-		code = code .. self:whitespace() .. "in";
+		table.insert(parts, self:whitespace());
+		table.insert(parts, "in");
 		
 		local exprcode = self:unparseExpression(statement.expressions[1], tabbing);
-		code = code .. self:whitespaceIfNeeded(exprcode) .. exprcode;
+		table.insert(parts, self:whitespaceIfNeeded(exprcode));
+		table.insert(parts, exprcode);
 		for i = 2, #statement.expressions, 1 do
 			exprcode = self:unparseExpression(statement.expressions[i], tabbing);
-			code = code .. "," .. self:optionalWhitespace() .. exprcode;
+			table.insert(parts, ",");
+			table.insert(parts, self:optionalWhitespace());
+			table.insert(parts, exprcode);
 		end
 		
 		local bodyCode = self:unparseBlock(statement.body, tabbing);
-		code = code .. self:whitespaceIfNeeded2(code) .. "do" .. self:whitespaceIfNeeded(bodyCode, self:newline(true))
-			.. bodyCode .. self:newline(false)
-			.. self:whitespaceIfNeeded2(bodyCode, self:tabs(tabbing, true)) .. "end";
+		table.insert(parts, self:whitespaceIfNeeded2(table.concat(parts)));
+		table.insert(parts, "do");
+		table.insert(parts, self:whitespaceIfNeeded(bodyCode, self:newline(true)));
+		table.insert(parts, bodyCode);
+		table.insert(parts, self:newline(false));
+		table.insert(parts, self:whitespaceIfNeeded2(bodyCode, self:tabs(tabbing, true)));
+		table.insert(parts, "end");
+		code = table.concat(parts);
 		
 		
 	-- If Statement
 	elseif(statement.kind == AstKind.IfStatement) then
 		local exprcode = self:unparseExpression(statement.condition, tabbing);
-		
 		local bodyCode = self:unparseBlock(statement.body, tabbing);
-		code = "if" .. self:whitespaceIfNeeded(exprcode) .. exprcode .. self:whitespaceIfNeeded2(exprcode) .. "then" .. self:whitespaceIfNeeded(bodyCode, self:newline(true))
-			.. bodyCode;
+		
+		parts = {"if", self:whitespaceIfNeeded(exprcode), exprcode, 
+			self:whitespaceIfNeeded2(exprcode), "then", 
+			self:whitespaceIfNeeded(bodyCode, self:newline(true)), bodyCode};
 		
 		for i, eif in ipairs(statement.elseifs) do
 			exprcode = self:unparseExpression(eif.condition, tabbing);
 			bodyCode = self:unparseBlock(eif.body, tabbing);
-			code = code .. self:newline(false) .. self:whitespaceIfNeeded2(code, self:tabs(tabbing, true)) .. "elseif" .. self:whitespaceIfNeeded(exprcode) .. exprcode .. self:whitespaceIfNeeded2(exprcode) 
-				.. "then" .. self:whitespaceIfNeeded(bodyCode, self:newline(true))
-				.. bodyCode;
+			table.insert(parts, self:newline(false));
+			table.insert(parts, self:whitespaceIfNeeded2(table.concat(parts), self:tabs(tabbing, true)));
+			table.insert(parts, "elseif");
+			table.insert(parts, self:whitespaceIfNeeded(exprcode));
+			table.insert(parts, exprcode);
+			table.insert(parts, self:whitespaceIfNeeded2(exprcode));
+			table.insert(parts, "then");
+			table.insert(parts, self:whitespaceIfNeeded(bodyCode, self:newline(true)));
+			table.insert(parts, bodyCode);
 		end
 		
 		if(statement.elsebody) then
 			bodyCode = self:unparseBlock(statement.elsebody, tabbing);
-			code = code .. self:newline(false) .. self:whitespaceIfNeeded2(code, self:tabs(tabbing, true)) .. "else" .. self:whitespaceIfNeeded(bodyCode, self:newline(true))
-				.. bodyCode;
+			table.insert(parts, self:newline(false));
+			table.insert(parts, self:whitespaceIfNeeded2(table.concat(parts), self:tabs(tabbing, true)));
+			table.insert(parts, "else");
+			table.insert(parts, self:whitespaceIfNeeded(bodyCode, self:newline(true)));
+			table.insert(parts, bodyCode);
 		end
 		
-		code = code .. self:newline(false) .. self:whitespaceIfNeeded2(bodyCode, self:tabs(tabbing, true)) .. "end";
+		table.insert(parts, self:newline(false));
+		table.insert(parts, self:whitespaceIfNeeded2(bodyCode, self:tabs(tabbing, true)));
+		table.insert(parts, "end");
+		code = table.concat(parts);
 		
 		
 	-- Function Declaration
@@ -276,133 +302,170 @@ function Unparser:unparseStatement(statement, tabbing)
 			funcname = funcname .. "." .. index;
 		end
 		
-		code = "function" .. self:whitespace() .. funcname .. "(";
+		parts = {"function", self:whitespace(), funcname, "("};
 		
 		for i, arg in ipairs(statement.args) do
 			if i > 1 then
-				code = code .. "," .. self:optionalWhitespace();
+				table.insert(parts, ",");
+				table.insert(parts, self:optionalWhitespace());
 			end
 			if(arg.kind == AstKind.VarargExpression) then
-				code = code .. "...";
+				table.insert(parts, "...");
 			else
-				code = code .. getVarNameSafe(arg.scope, arg.id, "FunctionDeclarationArg");
+				table.insert(parts, getVarNameSafe(arg.scope, arg.id, "FunctionDeclarationArg"));
 			end
 		end
-		code = code .. ")";
+		table.insert(parts, ")");
 		
 		local bodyCode = self:unparseBlock(statement.body, tabbing);
-		code = code .. self:newline(false) .. bodyCode .. self:newline(false) .. self:whitespaceIfNeeded2(bodyCode, self:tabs(tabbing, true)) .. "end";
+		table.insert(parts, self:newline(false));
+		table.insert(parts, bodyCode);
+		table.insert(parts, self:newline(false));
+		table.insert(parts, self:whitespaceIfNeeded2(bodyCode, self:tabs(tabbing, true)));
+		table.insert(parts, "end");
+		code = table.concat(parts);
 		
 		
 	-- Local Function Declaration
 	elseif(statement.kind == AstKind.LocalFunctionDeclaration) then
 		local funcname = getVarNameSafe(statement.scope, statement.id, "LocalFunctionDeclaration");
-		code = "local" ..  self:whitespace() .. "function" .. self:whitespace() .. funcname .. "(";
+		parts = {"local", self:whitespace(), "function", self:whitespace(), funcname, "("};
 		
 		for i, arg in ipairs(statement.args) do
 			if i > 1 then
-				code = code .. "," .. self:optionalWhitespace();
+				table.insert(parts, ",");
+				table.insert(parts, self:optionalWhitespace());
 			end
 			if(arg.kind == AstKind.VarargExpression) then
-				code = code .. "...";
+				table.insert(parts, "...");
 			else
-				code = code .. getVarNameSafe(arg.scope, arg.id, "FunctionDeclarationArg");
+				table.insert(parts, getVarNameSafe(arg.scope, arg.id, "FunctionDeclarationArg"));
 			end
 		end
-		code = code .. ")";
+		table.insert(parts, ")");
 
 		local bodyCode = self:unparseBlock(statement.body, tabbing);
-		code = code .. self:newline(false) .. bodyCode .. self:newline(false) .. self:whitespaceIfNeeded2(bodyCode, self:tabs(tabbing, true)) .. "end";
+		table.insert(parts, self:newline(false));
+		table.insert(parts, bodyCode);
+		table.insert(parts, self:newline(false));
+		table.insert(parts, self:whitespaceIfNeeded2(bodyCode, self:tabs(tabbing, true)));
+		table.insert(parts, "end");
+		code = table.concat(parts);
 		
 	-- Local Variable Declaration
 	elseif(statement.kind == AstKind.LocalVariableDeclaration) then
-		code = "local" .. self:whitespace();
+		parts = {"local", self:whitespace()};
 		
 		for i, id in ipairs(statement.ids) do
 			if i > 1 then
-				code = code .. "," .. self:optionalWhitespace();
+				table.insert(parts, ",");
+				table.insert(parts, self:optionalWhitespace());
 			end
-			code = code .. getVarNameSafe(statement.scope, id, "ForInStatement");
+			table.insert(parts, getVarNameSafe(statement.scope, id, "ForInStatement"));
 		end
 
 		if(#statement.expressions > 0) then
-			code = code .. self:optionalWhitespace() .. "=" .. self:optionalWhitespace();
+			table.insert(parts, self:optionalWhitespace());
+			table.insert(parts, "=");
+			table.insert(parts, self:optionalWhitespace());
 			for i, expr in ipairs(statement.expressions) do
 				if i > 1 then
-					code = code .. "," .. self:optionalWhitespace();
+					table.insert(parts, ",");
+					table.insert(parts, self:optionalWhitespace());
 				end
-				code = code .. self:unparseExpression(expr, tabbing + 1);
+				table.insert(parts, self:unparseExpression(expr, tabbing + 1));
 			end
 		end
+		code = table.concat(parts);
 	-- Function Call Statement
 	elseif(statement.kind == AstKind.FunctionCallStatement) then
+		parts = {};
 		if not (statement.base.kind == AstKind.IndexExpression or statement.base.kind == AstKind.VariableExpression) then
-			code = "(" .. self:unparseExpression(statement.base, tabbing) .. ")";
+			table.insert(parts, "(");
+			table.insert(parts, self:unparseExpression(statement.base, tabbing));
+			table.insert(parts, ")");
 		else
-			code = self:unparseExpression(statement.base, tabbing);
+			table.insert(parts, self:unparseExpression(statement.base, tabbing));
 		end
 		
-		code = code .. "(";
+		table.insert(parts, "(");
 		
 		for i, arg in ipairs(statement.args) do
 			if i > 1 then
-				code = code .. "," .. self:optionalWhitespace();
+				table.insert(parts, ",");
+				table.insert(parts, self:optionalWhitespace());
 			end
-			code = code .. self:unparseExpression(arg, tabbing);
+			table.insert(parts, self:unparseExpression(arg, tabbing));
 		end
 		
-		code = code .. ")";
+		table.insert(parts, ")");
+		code = table.concat(parts);
 		
 	-- Pass Self Function Call Statement
 	elseif(statement.kind == AstKind.PassSelfFunctionCallStatement) then
+		parts = {};
 		if not (statement.base.kind == AstKind.IndexExpression or statement.base.kind == AstKind.VariableExpression) then
-			code = "(" .. self:unparseExpression(statement.base, tabbing) .. ")";
+			table.insert(parts, "(");
+			table.insert(parts, self:unparseExpression(statement.base, tabbing));
+			table.insert(parts, ")");
 		else
-			code = self:unparseExpression(statement.base, tabbing);
+			table.insert(parts, self:unparseExpression(statement.base, tabbing));
 		end
 
-		code = code .. ":" .. statement.passSelfFunctionName;
-
-		code = code .. "(";
+		table.insert(parts, ":");
+		table.insert(parts, statement.passSelfFunctionName);
+		table.insert(parts, "(");
 
 		for i, arg in ipairs(statement.args) do
 			if i > 1 then
-				code = code .. "," .. self:optionalWhitespace();
+				table.insert(parts, ",");
+				table.insert(parts, self:optionalWhitespace());
 			end
-			code = code .. self:unparseExpression(arg, tabbing);
+			table.insert(parts, self:unparseExpression(arg, tabbing));
 		end
 
-		code = code .. ")";
+		table.insert(parts, ")");
+		code = table.concat(parts);
 		
 		
 	elseif(statement.kind == AstKind.AssignmentStatement) then
+		parts = {};
 		for i, primary_expr in ipairs(statement.lhs) do
 			if i > 1 then
-				code = code .. "," .. self:optionalWhitespace();
+				table.insert(parts, ",");
+				table.insert(parts, self:optionalWhitespace());
 			end
-			code = code .. self:unparseExpression(primary_expr, tabbing);
+			table.insert(parts, self:unparseExpression(primary_expr, tabbing));
 		end
 		
-		code = code .. self:optionalWhitespace() .. "=" .. self:optionalWhitespace();
+		table.insert(parts, self:optionalWhitespace());
+		table.insert(parts, "=");
+		table.insert(parts, self:optionalWhitespace());
 		
 		for i, expr in ipairs(statement.rhs) do
 			if i > 1 then
-				code = code .. "," .. self:optionalWhitespace();
+				table.insert(parts, ",");
+				table.insert(parts, self:optionalWhitespace());
 			end
-			code = code .. self:unparseExpression(expr, tabbing + 1);
+			table.insert(parts, self:unparseExpression(expr, tabbing + 1));
 		end
+		code = table.concat(parts);
 		
 	-- Return Statement
 	elseif(statement.kind == AstKind.ReturnStatement) then
-		code = "return";
+		parts = {"return"};
 		if(#statement.args > 0) then
 			local exprcode = self:unparseExpression(statement.args[1], tabbing);
-			code = code .. self:whitespaceIfNeeded(exprcode) .. exprcode;
+			table.insert(parts, self:whitespaceIfNeeded(exprcode));
+			table.insert(parts, exprcode);
 			for i = 2, #statement.args, 1 do
 				exprcode = self:unparseExpression(statement.args[i], tabbing);
-				code = code .. "," .. self:optionalWhitespace() .. exprcode;
+				table.insert(parts, ",");
+				table.insert(parts, self:optionalWhitespace());
+				table.insert(parts, exprcode);
 			end
 		end
+		code = table.concat(parts);
 	elseif self.luaVersion == LuaVersion.LuaU then
 		local compoundOperators = {
 		    [AstKind.CompoundAddStatement] = "+=",
@@ -416,7 +479,9 @@ function Unparser:unparseStatement(statement, tabbing)
 		
 		local operator = compoundOperators[statement.kind]
 		if operator then
-		    code = code .. self:unparseExpression(statement.lhs, tabbing) .. self:optionalWhitespace() .. operator .. self:optionalWhitespace() .. self:unparseExpression(statement.rhs, tabbing)
+		    parts = {self:unparseExpression(statement.lhs, tabbing), self:optionalWhitespace(), 
+		    	operator, self:optionalWhitespace(), self:unparseExpression(statement.rhs, tabbing)};
+		    code = table.concat(parts);
 		else
 		    logger:error(string.format("\"%s\" is not a valid unparseable statement in %s!", statement.kind, self.luaVersion))
 		end

@@ -376,3 +376,15 @@ Metatable: table: 0x55897636ad40
 After Renaming:
 ast.body.scope: table: 0x55897cc56060
 Metatable: table: 0x55897636ad40
+Before Renaming:
+ast.body.scope: table: 0x5631da7a4c90
+Metatable: table: 0x5631d9aadd40
+After Renaming:
+ast.body.scope: table: 0x5631da7a4c90
+Metatable: table: 0x5631d9aadd40
+Before Renaming:
+ast.body.scope: table: 0x562e637cd3d0
+Metatable: table: 0x562e5ceedd40
+After Renaming:
+ast.body.scope: table: 0x562e637cd3d0
+Metatable: table: 0x562e5ceedd40
