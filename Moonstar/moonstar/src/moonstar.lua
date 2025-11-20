@@ -182,17 +182,11 @@ local Presets   = {
 
         EncryptStrings = {
             Enabled = true;
-            Mode = "aggressive";
+            Mode = "standard";
             DecryptorVariant = "polymorphic";
-            LayerDepth = 2;
-            InlineThreshold = 16;
-            EnvironmentCheck = true;
-        };
-
-        SplitStrings = {
-            Enabled = true;
-            MaxSegmentLength = 12;
-            Strategy = "random";
+            LayerDepth = 1;
+            InlineThreshold = 0;
+            EnvironmentCheck = false;
         };
 
         ConstantArray = {
