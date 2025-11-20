@@ -370,3 +370,9 @@ Metatable: table: 00B42F90
 After Renaming:
 ast.body.scope: table: 089A8248
 Metatable: table: 00B42F90
+Before Renaming:
+ast.body.scope: table: 0x55897cc56060
+Metatable: table: 0x55897636ad40
+After Renaming:
+ast.body.scope: table: 0x55897cc56060
+Metatable: table: 0x55897636ad40
