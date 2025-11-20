@@ -674,37 +674,36 @@ local function teleportMapParts()
     local sourceHRP = HumanoidRootPart
 
     for _, instance in pairs(Workspace:GetChildren()) do
-        if Players:GetPlayerFromCharacter(instance) or 
+        if not (Players:GetPlayerFromCharacter(instance) or 
            instance:IsA("Terrain") or 
            instance.Name == "Camera" or 
            instance == LocalCharacter or
-           instance.Name:lower() == "baseplate" then
-            continue 
-        end
+           instance.Name:lower() == "baseplate") then
         
-        local targetPart = nil
+            local targetPart = nil
 
-        if instance:IsA("BasePart") then
-            targetPart = instance
-        elseif instance:IsA("Model") and instance.PrimaryPart and instance.PrimaryPart:IsA("BasePart") then
-            targetPart = instance.PrimaryPart
-        end
-
-        if targetPart then
-            local success = pcall(function()
-                Welds:FireServer(
-                    sourceHRP,
-                    targetPart,
-                    targetCFrame,
-                    Vector3.new(0, 0, 0),
-                    CFrame.new(0, 0, 0)
-                )
-            end)
-            
-            if success then
-                partsMoved = partsMoved + 1
+            if instance:IsA("BasePart") then
+                targetPart = instance
+            elseif instance:IsA("Model") and instance.PrimaryPart and instance.PrimaryPart:IsA("BasePart") then
+                targetPart = instance.PrimaryPart
             end
-            task.wait(0.05)
+
+            if targetPart then
+                local success = pcall(function()
+                    Welds:FireServer(
+                        sourceHRP,
+                        targetPart,
+                        targetCFrame,
+                        Vector3.new(0, 0, 0),
+                        CFrame.new(0, 0, 0)
+                    )
+                end)
+                
+                if success then
+                    partsMoved = partsMoved + 1
+                end
+                task.wait(0.05)
+            end
         end
     end
 end

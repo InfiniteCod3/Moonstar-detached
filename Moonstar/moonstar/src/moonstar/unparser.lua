@@ -129,32 +129,36 @@ function Unparser:unparse(ast)
 end
 
 function Unparser:unparseBlock(block, tabbing)
-	local code = "";
-	
 	if(#block.statements < 1) then
 		return self:whitespace();
 	end
 	
+	-- Memory optimization: Use table.concat instead of repeated string concatenation
+	-- This is critical for large obfuscated files (Strong preset with VM obfuscation)
+	local parts = {};
+	local lastCode = "";
+	
 	for i, statement in ipairs(block.statements) do
 		if(statement.kind ~= AstKind.NopStatement) then
 			local statementCode = self:unparseStatement(statement, tabbing);
-			if(not self.prettyPrint and #code > 0 and string.sub(statementCode, 1, 1) == "(") then
+			if(not self.prettyPrint and #parts > 0 and string.sub(statementCode, 1, 1) == "(") then
 				-- This is so that the following works:
 				-- print("Test");(function() print("Test2") end)();
 				statementCode = ";" .. statementCode;
 			end
-			local ws = self:whitespaceIfNeeded2(code, self:whitespaceIfNeeded(statementCode, self:newline(true)));
-			if i ~= 1 then
-				code = code .. ws;
+			local ws = self:whitespaceIfNeeded2(lastCode, self:whitespaceIfNeeded(statementCode, self:newline(true)));
+			if i ~= 1 and #ws > 0 then
+				table.insert(parts, ws);
 			end
 			if(self.prettyPrint) then
 				statementCode = statementCode .. ";"
 			end
-			code = code .. statementCode;
+			table.insert(parts, statementCode);
+			lastCode = statementCode;
 		end
 	end
 	
-	return code;
+	return table.concat(parts);
 end
 
 function Unparser:unparseStatement(statement, tabbing)
