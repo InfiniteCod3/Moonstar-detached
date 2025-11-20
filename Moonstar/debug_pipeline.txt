@@ -1,48 +1,372 @@
 Before Renaming:
-ast.body.scope: table: 01976388
-Metatable: table: 00C225C0
+ast.body.scope: table: 00C64950
+Metatable: table: 00BB3E40
 After Renaming:
-ast.body.scope: table: 01976388
-Metatable: table: 00C225C0
+ast.body.scope: table: 00C64950
+Metatable: table: 00BB3E40
 Before Renaming:
-ast.body.scope: table: 034D6C80
-Metatable: table: 00B42830
+ast.body.scope: table: 00CD4DA8
+Metatable: table: 00BB3E40
 After Renaming:
-ast.body.scope: table: 034D6C80
-Metatable: table: 00B42830
+ast.body.scope: table: 00CD4DA8
+Metatable: table: 00BB3E40
 Before Renaming:
-ast.body.scope: table: 0228B0B8
-Metatable: table: 00B91D10
+ast.body.scope: table: 00D07900
+Metatable: table: 00BB3E40
 After Renaming:
-ast.body.scope: table: 0228B0B8
-Metatable: table: 00B91D10
+ast.body.scope: table: 00D07900
+Metatable: table: 00BB3E40
 Before Renaming:
-ast.body.scope: table: 01FF23E8
-Metatable: table: 00BA2B28
+ast.body.scope: table: 00D592C8
+Metatable: table: 00BB3E40
 After Renaming:
-ast.body.scope: table: 01FF23E8
-Metatable: table: 00BA2B28
+ast.body.scope: table: 00D592C8
+Metatable: table: 00BB3E40
 Before Renaming:
-ast.body.scope: table: 00BD95A0
-Metatable: table: 00B2EF18
+ast.body.scope: table: 00D9CA60
+Metatable: table: 00BB3E40
 After Renaming:
-ast.body.scope: table: 00BD95A0
-Metatable: table: 00B2EF18
+ast.body.scope: table: 00D9CA60
+Metatable: table: 00BB3E40
 Before Renaming:
-ast.body.scope: table: 01A14F60
-Metatable: table: 00BB2678
+ast.body.scope: table: 00D9A440
+Metatable: table: 00BB3E40
 After Renaming:
-ast.body.scope: table: 01A14F60
-Metatable: table: 00BB2678
+ast.body.scope: table: 00D9A440
+Metatable: table: 00BB3E40
 Before Renaming:
-ast.body.scope: table: 0350ADA8
-Metatable: table: 00B52A88
+ast.body.scope: table: 00D96020
+Metatable: table: 00BB3E40
 After Renaming:
-ast.body.scope: table: 0350ADA8
-Metatable: table: 00B52A88
+ast.body.scope: table: 00D96020
+Metatable: table: 00BB3E40
 Before Renaming:
-ast.body.scope: table: 035F62C0
-Metatable: table: 00B52AB0
+ast.body.scope: table: 00E36270
+Metatable: table: 00BB3E40
 After Renaming:
-ast.body.scope: table: 035F62C0
-Metatable: table: 00B52AB0
+ast.body.scope: table: 00E36270
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00E3E880
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00E3E880
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00E09AD0
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00E09AD0
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00E01740
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00E01740
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00D98000
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00D98000
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00D97F38
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00D97F38
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00D9C2B8
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00D9C2B8
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00CCC6C0
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00CCC6C0
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00CC82F0
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00CC82F0
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00E339F8
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00E339F8
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00E36090
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00E36090
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00E3E268
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00E3E268
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00D9D910
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00D9D910
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00D8ED48
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00D8ED48
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00D92830
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00D92830
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00D9B5E8
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00D9B5E8
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00CC6680
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00CC6680
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00E34C90
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00E34C90
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00E39F60
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00E39F60
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00D8E668
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00D8E668
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 01010960
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 01010960
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 01161008
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 01161008
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 01238ED0
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 01238ED0
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 01238598
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 01238598
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 01164208
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 01164208
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 01166EE0
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 01166EE0
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00E21B28
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00E21B28
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00E2F9C0
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00E2F9C0
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00E2BAF0
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00E2BAF0
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 011E55F8
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 011E55F8
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 011DDAB0
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 011DDAB0
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 01E99888
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 01E99888
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 01B48000
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 01B48000
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 020D9B48
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 020D9B48
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 01FB5C28
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 01FB5C28
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 021E0E18
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 021E0E18
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 021E3C08
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 021E3C08
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 017AC8A8
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 017AC8A8
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 0208F510
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 0208F510
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00CCBB08
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00CCBB08
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 020C22A0
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 020C22A0
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 0275CE20
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 0275CE20
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00DA62D0
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00DA62D0
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 02052FB8
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 02052FB8
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00CC06E0
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00CC06E0
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 0106AD80
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 0106AD80
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 025FCE80
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 025FCE80
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 02058418
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 02058418
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 0205D738
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 0205D738
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 010699D0
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 010699D0
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00CBFB28
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00CBFB28
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 00E182D8
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 00E182D8
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 02606390
+Metatable: table: 00BB3E40
+After Renaming:
+ast.body.scope: table: 02606390
+Metatable: table: 00BB3E40
+Before Renaming:
+ast.body.scope: table: 02DD7E10
+Metatable: table: 00C599A8
+After Renaming:
+ast.body.scope: table: 02DD7E10
+Metatable: table: 00C599A8
+Before Renaming:
+ast.body.scope: table: 089A8248
+Metatable: table: 00B42F90
+After Renaming:
+ast.body.scope: table: 089A8248
+Metatable: table: 00B42F90

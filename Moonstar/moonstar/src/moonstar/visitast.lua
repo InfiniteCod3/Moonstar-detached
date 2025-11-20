@@ -188,6 +188,16 @@ local binaryExpressions = lookupify{
 	AstKind.PowExpression,
 }
 function visitExpression(expression, previsit, postvisit, data)
+	if expression == nil then
+		print("ERROR: visitExpression called with nil expression")
+		print(debug.traceback())
+		os.exit(1)
+	end
+	if type(expression) == "number" then
+		print("ERROR: visitExpression called with number: " .. tostring(expression))
+		print(debug.traceback())
+		os.exit(1)
+	end
 	expression.isExpression = true;
 	if(type(previsit) == "function") then
 		local node, skip = previsit(expression, data);

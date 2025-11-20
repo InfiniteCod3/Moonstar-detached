@@ -1672,6 +1672,12 @@ function Compiler:compileStatement(statement, funcDepth)
                 self:freeRegister(baseReg, false);
                 self:freeRegister(indexReg, false);
             else
+                print("DEBUG: Invalid Assignment LHS Kind:", primaryExpr.kind)
+                if primaryExpr.kind == "VariableExpression" then
+                    print("DEBUG: Variable Name:", primaryExpr:getName())
+                    print("DEBUG: Variable ID:", primaryExpr.id)
+                    print("DEBUG: Scope:", primaryExpr.scope.name)
+                end
                 error(string.format("Invalid Assignment lhs: %s", statement.lhs));
             end
         end

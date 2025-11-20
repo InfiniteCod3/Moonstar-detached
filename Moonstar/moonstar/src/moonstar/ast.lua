@@ -773,7 +773,7 @@ function Ast.VariableExpression(scope, id)
 		scope = scope,
 		id = id,
 		getName = function(self)
-			return self.scope.getVariableName(self.id);
+			return self.scope:getVariableName(self.id);
 		end,
 	}
 end
@@ -785,7 +785,7 @@ function Ast.AssignmentVariable(scope, id)
 		scope = scope,
 		id = id,
 		getName = function(self)
-			return self.scope.getVariableName(self.id);
+			return self.scope:getVariableName(self.id);
 		end,
 	}
 end

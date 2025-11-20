@@ -21,3 +21,4 @@ Thumbs.db
 !misc/.gitkeep
 test*.lua
 test*_output.lua
+debug_pipeline.txt

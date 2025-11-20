@@ -183,8 +183,10 @@ local Presets   = {
         EncryptStrings = {
             Enabled = true;
             Mode = "aggressive";
-            DecryptorVariant = "xor_byte";
+            DecryptorVariant = "polymorphic";
             LayerDepth = 2;
+            InlineThreshold = 16;
+            EnvironmentCheck = true;
         };
 
         SplitStrings = {
