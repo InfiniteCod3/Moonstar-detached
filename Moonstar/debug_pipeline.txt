@@ -766,3 +766,39 @@ Metatable: table: 0x564b13f62d40
 After Renaming:
 ast.body.scope: table: 0x564b1a8447a0
 Metatable: table: 0x564b13f62d40
+Before Renaming:
+ast.body.scope: table: 0x5636b71edb10
+Metatable: table: 0x5636b7116d50
+After Renaming:
+ast.body.scope: table: 0x5636b71edb10
+Metatable: table: 0x5636b7116d50
+Before Renaming:
+ast.body.scope: table: 0x55e396f1c7f0
+Metatable: table: 0x55e396e3ed50
+After Renaming:
+ast.body.scope: table: 0x55e396f1c7f0
+Metatable: table: 0x55e396e3ed50
+Before Renaming:
+ast.body.scope: table: 0x55bb70bd9900
+Metatable: table: 0x55bb70afbd50
+After Renaming:
+ast.body.scope: table: 0x55bb70bd9900
+Metatable: table: 0x55bb70afbd50
+Before Renaming:
+ast.body.scope: table: 0x55cfc967c110
+Metatable: table: 0x55cfc95dcd50
+After Renaming:
+ast.body.scope: table: 0x55cfc967c110
+Metatable: table: 0x55cfc95dcd50
+Before Renaming:
+ast.body.scope: table: 0x5564bccdbde0
+Metatable: table: 0x5564bbfe6d40
+After Renaming:
+ast.body.scope: table: 0x5564bccdbde0
+Metatable: table: 0x5564bbfe6d40
+Before Renaming:
+ast.body.scope: table: 0x561459c19080
+Metatable: table: 0x56145333cd40
+After Renaming:
+ast.body.scope: table: 0x561459c19080
+Metatable: table: 0x56145333cd40
