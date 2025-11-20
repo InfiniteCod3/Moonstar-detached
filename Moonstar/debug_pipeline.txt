@@ -388,3 +388,381 @@ Metatable: table: 0x562e5ceedd40
 After Renaming:
 ast.body.scope: table: 0x562e637cd3d0
 Metatable: table: 0x562e5ceedd40
+Before Renaming:
+ast.body.scope: table: 0x562715d5b5c0
+Metatable: table: 0x562715c74260
+After Renaming:
+ast.body.scope: table: 0x562715d5b5c0
+Metatable: table: 0x562715c74260
+Before Renaming:
+ast.body.scope: table: 0x562715e86410
+Metatable: table: 0x562715c74260
+After Renaming:
+ast.body.scope: table: 0x562715e86410
+Metatable: table: 0x562715c74260
+Before Renaming:
+ast.body.scope: table: 0x5571b66cd5c0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b66cd5c0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b67f88b0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b67f88b0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6877cc0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6877cc0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b683ae10
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b683ae10
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b66c7920
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b66c7920
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b68ab7b0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b68ab7b0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b688c440
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b688c440
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b672b520
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b672b520
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6804f50
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6804f50
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b66d7e60
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b66d7e60
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6753bd0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6753bd0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b67f4200
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b67f4200
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6808aa0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6808aa0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6808530
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6808530
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6909cb0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6909cb0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6620340
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6620340
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b690c120
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b690c120
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b67c28c0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b67c28c0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b68ce6e0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b68ce6e0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b675b2e0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b675b2e0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b67277f0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b67277f0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6707ad0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6707ad0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b668f830
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b668f830
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b668c780
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b668c780
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6874010
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6874010
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6d03fb0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6d03fb0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6992740
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6992740
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b66a69d0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b66a69d0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6789b10
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6789b10
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6edc8c0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6edc8c0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b692de10
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b692de10
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6b2a860
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6b2a860
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6c14730
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6c14730
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b68df6d0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b68df6d0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6db9060
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6db9060
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b68f2bf0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b68f2bf0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b69c0c10
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b69c0c10
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b702bd10
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b702bd10
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b67349a0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b67349a0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b737b300
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b737b300
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b665d480
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b665d480
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b678bb60
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b678bb60
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b69c6af0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b69c6af0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b8923250
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b8923250
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6cf2160
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6cf2160
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6861cc0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6861cc0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6622290
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6622290
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b7782f70
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b7782f70
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6ca42f0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6ca42f0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b8d97c90
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b8d97c90
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6ea1910
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6ea1910
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b664a9d0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b664a9d0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b661dfb0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b661dfb0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b66a6760
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b66a6760
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6fd1b80
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6fd1b80
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6629ca0
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6629ca0
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b6939510
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b6939510
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b92b0720
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b92b0720
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b768c430
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b768c430
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x5571b92a4a40
+Metatable: table: 0x5571b65e6260
+After Renaming:
+ast.body.scope: table: 0x5571b92a4a40
+Metatable: table: 0x5571b65e6260
+Before Renaming:
+ast.body.scope: table: 0x564b1a8447a0
+Metatable: table: 0x564b13f62d40
+After Renaming:
+ast.body.scope: table: 0x564b1a8447a0
+Metatable: table: 0x564b13f62d40
