@@ -2,6 +2,7 @@ return {
 	WrapInFunction           = require("moonstar.steps.WrapInFunction");
 	SplitStrings             = require("moonstar.steps.SplitStrings");
 	Vmify                    = require("moonstar.steps.Vmify");
+	Vmify2                   = require("moonstar.steps.Vmify");
 	ConstantArray            = require("moonstar.steps.ConstantArray");
 	ProxifyLocals            = require("moonstar.steps.ProxifyLocals");
 	EncryptStrings           = require("moonstar.steps.EncryptStrings");

@@ -158,7 +158,7 @@ local Presets   = {
 
         NumbersToExpressions = {
             Enabled = true;
-            Complexity = "medium";
+            Complexity = "low";
         };
 
         AddVararg = {
@@ -185,8 +185,8 @@ local Presets   = {
             Mode = "standard";
             DecryptorVariant = "polymorphic";
             LayerDepth = 1;
-            InlineThreshold = 0;
-            EnvironmentCheck = false;
+            InlineThreshold = 16;
+            EnvironmentCheck = true;
         };
 
         ConstantArray = {
@@ -197,20 +197,28 @@ local Presets   = {
 
         NumbersToExpressions = {
             Enabled = true;
-            Complexity = "high";
+            Complexity = "medium";
         };
 
         AddVararg = {
             Enabled = true;
-            Probability = 0.25;
+            Probability = 0.1;
         };
-
+        
         AntiTamper = {
             Enabled = true;
         };
 
         Vmify = {
             Enabled = true;
+            Profile = "baseline";
+            InlineVMState = true;
+            ObfuscateHandlers = true;
+            InstructionRandomization = false;
+        };
+
+        Vmify2 = {
+            Enabled = false;
             Profile = "array";
         };
 
