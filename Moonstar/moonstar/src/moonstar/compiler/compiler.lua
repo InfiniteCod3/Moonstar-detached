@@ -164,10 +164,9 @@ function Compiler:createBlock()
             id = (id + self.compilationSalt) % (2^25)
         until not self.usedBlockIds[id];
     else
-        -- Original logic - sequential with some randomness
-        repeat
-            id = math.random(0, 2^24)
-        until not self.usedBlockIds[id];
+        -- OPTIMIZATION: Use sequential IDs when randomization is disabled
+        -- This reduces bytecode size (smaller numbers) and potentially improves dispatch slightly
+        id = #self.blocks + 1;
     end
     self.usedBlockIds[id] = true;
 
@@ -1511,9 +1510,10 @@ function Compiler:compileStatement(statement, funcDepth)
                     {self:register(scope, reg)})));
                 table.insert(regs, reg);
             else
-                local reg = self:compileExpression(expr, funcDepth, 1)[1];
-                table.insert(entries, Ast.TableEntry(self:register(scope, reg)));
-                table.insert(regs, reg);
+                -- OPTIMIZATION: Inline literals/vars for return
+                local retExpr, retReg = self:compileOperand(scope, expr, funcDepth);
+                table.insert(entries, Ast.TableEntry(retExpr));
+                if retReg then table.insert(regs, retReg) end
             end
         end
 
@@ -1604,7 +1604,8 @@ function Compiler:compileStatement(statement, funcDepth)
     -- Function Call Statement
     if(statement.kind == AstKind.FunctionCallStatement) then
         local baseReg = self:compileExpression(statement.base, funcDepth, 1)[1];
-        local retReg  = self:allocRegister(false);
+        -- OPTIMIZATION: FunctionCallStatement (No Return Reg)
+        -- Don't allocate retReg for statement calls
         local regs = {};
         local args = {};
 
@@ -1622,9 +1623,10 @@ function Compiler:compileStatement(statement, funcDepth)
             end
         end
 
-        self:addStatement(self:setRegister(scope, retReg, Ast.FunctionCallExpression(self:register(scope, baseReg), args)), {retReg}, {baseReg, unpack(regs)}, true);
+        -- Emit FunctionCallStatement directly instead of assignment
+        self:addStatement(Ast.FunctionCallStatement(self:register(scope, baseReg), args), {}, {baseReg, unpack(regs)}, true);
+
         self:freeRegister(baseReg, false);
-        self:freeRegister(retReg, false);
         for i, reg in ipairs(regs) do
             self:freeRegister(reg, false);
         end
@@ -1635,7 +1637,7 @@ function Compiler:compileStatement(statement, funcDepth)
     -- Pass Self Function Call Statement
     if(statement.kind == AstKind.PassSelfFunctionCallStatement) then
         local baseReg = self:compileExpression(statement.base, funcDepth, 1)[1];
-        local a7bX9  = self:allocRegister(false);
+        -- OPTIMIZATION: FunctionCallStatement (No Return Reg)
         local args = { self:register(scope, baseReg) };
         local regs = { baseReg };
 
@@ -1652,12 +1654,13 @@ function Compiler:compileStatement(statement, funcDepth)
                 if argReg then table.insert(regs, argReg) end
             end
         end
-        self:addStatement(self:setRegister(scope, a7bX9, Ast.StringExpression(statement.passSelfFunctionName)), {a7bX9}, {}, false);
-        self:addStatement(self:setRegister(scope, a7bX9, Ast.IndexExpression(self:register(scope, baseReg), self:register(scope, a7bX9))), {a7bX9}, {a7bX9, baseReg}, false);
 
-        self:addStatement(self:setRegister(scope, a7bX9, Ast.FunctionCallExpression(self:register(scope, a7bX9), args)), {a7bX9}, {a7bX9, unpack(regs)}, true);
+        -- OPTIMIZATION: Inline Method Names
+        -- Instead of allocating register for string, use literal string in IndexExpression
+        local funcExpr = Ast.IndexExpression(self:register(scope, baseReg), Ast.StringExpression(statement.passSelfFunctionName))
 
-        self:freeRegister(a7bX9, false);
+        self:addStatement(Ast.FunctionCallStatement(funcExpr, args), {}, {baseReg, unpack(regs)}, true);
+
         for i, reg in ipairs(regs) do
             self:freeRegister(reg, false);
         end
@@ -1734,11 +1737,9 @@ function Compiler:compileStatement(statement, funcDepth)
             return;
         end
         if statement.scope.isGlobal then
-            local a7bX9 = self:allocRegister(false);
-            self:addStatement(self:setRegister(scope, a7bX9, Ast.StringExpression(statement.scope:getVariableName(statement.id))), {a7bX9}, {}, false);
-            self:addStatement(Ast.AssignmentStatement({Ast.AssignmentIndexing(self:env(scope), self:register(scope, a7bX9))},
-             {self:register(scope, retReg)}), {}, {a7bX9, retReg}, true);
-            self:freeRegister(a7bX9, false);
+            -- OPTIMIZATION: Inline Global Name Strings
+            self:addStatement(Ast.AssignmentStatement({Ast.AssignmentIndexing(self:env(scope), Ast.StringExpression(statement.scope:getVariableName(statement.id)))},
+             {self:register(scope, retReg)}), {}, {retReg}, true);
         else
             if self.scopeFunctionDepths[statement.scope] == funcDepth then
                 if self:isUpvalue(statement.scope, statement.id) then
@@ -1826,11 +1827,9 @@ function Compiler:compileStatement(statement, funcDepth)
         for i, primaryExpr in ipairs(statement.lhs) do
             if primaryExpr.kind == AstKind.AssignmentVariable then
                 if primaryExpr.scope.isGlobal then
-                    local a7bX9 = self:allocRegister(false);
-                    self:addStatement(self:setRegister(scope, a7bX9, Ast.StringExpression(primaryExpr.scope:getVariableName(primaryExpr.id))), {a7bX9}, {}, false);
-                    self:addStatement(Ast.AssignmentStatement({Ast.AssignmentIndexing(self:env(scope), self:register(scope, a7bX9))},
-                     {self:register(scope, exprregs[i])}), {}, {a7bX9, exprregs[i]}, true);
-                    self:freeRegister(a7bX9, false);
+                    -- OPTIMIZATION: Inline Global Name Strings
+                    self:addStatement(Ast.AssignmentStatement({Ast.AssignmentIndexing(self:env(scope), Ast.StringExpression(primaryExpr.scope:getVariableName(primaryExpr.id)))},
+                     {self:register(scope, exprregs[i])}), {}, {exprregs[i]}, true);
                 else
                     if self.scopeFunctionDepths[primaryExpr.scope] == funcDepth then
                         if self:isUpvalue(primaryExpr.scope, primaryExpr.id) then
@@ -2156,32 +2155,40 @@ function Compiler:compileStatement(statement, funcDepth)
 
         self:addStatement(self:setPos(scope, checkBlock.id), {self.POS_REGISTER}, {}, false);
 
-        self:setActiveBlock(checkBlock);
-        local scope = self.activeBlock.scope;
-
+        -- Pre-calculate varRegs for optimization
         local varRegs = {};
         for i, id in ipairs(statement.ids) do
             varRegs[i] = self:getVarRegister(statement.scope, id, funcDepth)
         end
 
-        self:addStatement(Ast.AssignmentStatement({
-            self:registerAssignment(scope, exprregs[3]),
-            varRegs[2] and self:registerAssignment(scope, varRegs[2]),
-        }, {
-            Ast.FunctionCallExpression(self:register(scope, exprregs[1]), {
-                self:register(scope, exprregs[2]),
-                self:register(scope, exprregs[3]),
-            })
-        }), {exprregs[3], varRegs[2]}, {exprregs[1], exprregs[2], exprregs[3]}, true);
+        -- Helper to emit iterator call and jump
+        local function emitIteratorLogic(targetScope)
+            self:addStatement(Ast.AssignmentStatement({
+                self:registerAssignment(targetScope, exprregs[3]),
+                varRegs[2] and self:registerAssignment(targetScope, varRegs[2]),
+            }, {
+                Ast.FunctionCallExpression(self:register(targetScope, exprregs[1]), {
+                    self:register(targetScope, exprregs[2]),
+                    self:register(targetScope, exprregs[3]),
+                })
+            }), {exprregs[3], varRegs[2]}, {exprregs[1], exprregs[2], exprregs[3]}, true);
 
-        self:addStatement(Ast.AssignmentStatement({
-            self:posAssignment(scope)
-        }, {
-            Ast.OrExpression(Ast.AndExpression(self:register(scope, exprregs[3]), Ast.NumberExpression(bodyBlock.id)), Ast.NumberExpression(finalBlock.id))
-        }), {self.POS_REGISTER}, {exprregs[3]}, false);
+            self:addStatement(Ast.AssignmentStatement({
+                self:posAssignment(targetScope)
+            }, {
+                Ast.OrExpression(Ast.AndExpression(self:register(targetScope, exprregs[3]), Ast.NumberExpression(bodyBlock.id)), Ast.NumberExpression(finalBlock.id))
+            }), {self.POS_REGISTER}, {exprregs[3]}, false);
+        end
 
+        -- Check Block (First Iteration)
+        self:setActiveBlock(checkBlock);
+        local scope = self.activeBlock.scope;
+        emitIteratorLogic(scope);
+
+        -- Body Block
         self:setActiveBlock(bodyBlock);
         local scope = self.activeBlock.scope;
+
         self:addStatement(self:copyRegisters(scope, {varRegs[1]}, {exprregs[3]}), {varRegs[1]}, {exprregs[3]}, false);
         for i=3, #varRegs do
             self:addStatement(self:setRegister(scope, varRegs[i], Ast.NilExpression()), {varRegs[i]}, {}, false);
@@ -2201,7 +2208,13 @@ function Compiler:compileStatement(statement, funcDepth)
         end
 
         self:compileBlock(statement.body, funcDepth);
-        self:addStatement(self:setPos(scope, checkBlock.id), {self.POS_REGISTER}, {}, false);
+
+        -- OPTIMIZATION: Loop Rotation
+        -- Inline the iterator call and check at the end of the body
+        -- This avoids the jump back to checkBlock, saving 1 dispatch cycle per iteration
+        emitIteratorLogic(scope);
+        -- self:addStatement(self:setPos(scope, checkBlock.id), {self.POS_REGISTER}, {}, false);
+
         self:setActiveBlock(finalBlock);
 
         for i, reg in ipairs(exprregs) do
@@ -2320,11 +2333,9 @@ function Compiler:compileStatement(statement, funcDepth)
             local valueReg = self:compileExpression(statement.rhs, funcDepth, 1)[1];
             local primaryExpr = statement.lhs;
             if primaryExpr.scope.isGlobal then
-                local a7bX9 = self:allocRegister(false);
-                self:addStatement(self:setRegister(scope, a7bX9, Ast.StringExpression(primaryExpr.scope:getVariableName(primaryExpr.id))), {a7bX9}, {}, false);
-                self:addStatement(Ast.AssignmentStatement({Ast.AssignmentIndexing(self:env(scope), self:register(scope, a7bX9))},
-                 {self:register(scope, valueReg)}), {}, {a7bX9, valueReg}, true);
-                self:freeRegister(a7bX9, false);
+                -- OPTIMIZATION: Inline Global Name Strings
+                self:addStatement(Ast.AssignmentStatement({Ast.AssignmentIndexing(self:env(scope), Ast.StringExpression(primaryExpr.scope:getVariableName(primaryExpr.id)))},
+                 {self:register(scope, valueReg)}), {}, {valueReg}, true);
             else
                 if self.scopeFunctionDepths[primaryExpr.scope] == funcDepth then
                     if self:isUpvalue(primaryExpr.scope, primaryExpr.id) then
@@ -2436,10 +2447,8 @@ function Compiler:compileExpression(expression, funcDepth, numReturns, targetReg
                         regs[i] = self:allocRegister(false);
                     end
 
-                    local a7bX9 = self:allocRegister(false);
-                    self:addStatement(self:setRegister(scope, a7bX9, Ast.StringExpression(expression.scope:getVariableName(expression.id))), {a7bX9}, {}, false);
-                    self:addStatement(self:setRegister(scope, regs[i], Ast.IndexExpression(self:env(scope), self:register(scope, a7bX9))), {regs[i]}, {a7bX9}, true);
-                    self:freeRegister(a7bX9, false);
+                    -- OPTIMIZATION: Inline Global Name Strings
+                    self:addStatement(self:setRegister(scope, regs[i], Ast.IndexExpression(self:env(scope), Ast.StringExpression(expression.scope:getVariableName(expression.id)))), {regs[i]}, {}, true);
                 else
                     -- Local Variable
                     if(self.scopeFunctionDepths[expression.scope] == funcDepth) then
@@ -3071,9 +3080,10 @@ function Compiler:compileExpression(expression, funcDepth, numReturns, targetReg
                                 {self:register(scope, reg)})));
                             table.insert(entryRegs, reg);
                         else
-                            local reg = self:compileExpression(entry.value, funcDepth, 1)[1];
-                            table.insert(entries, Ast.TableEntry(self:register(scope, reg)));
-                            table.insert(entryRegs, reg);
+                            -- OPTIMIZATION: Inline literals/vars/safe-expressions for array part
+                            local valExpr, valReg = self:compileOperand(scope, entry.value, funcDepth);
+                            table.insert(entries, Ast.TableEntry(valExpr));
+                            if valReg then table.insert(entryRegs, valReg) end
                         end
                     else
                         -- OPTIMIZATION: Literal Inlining for Table Constructor Keys/Values
