@@ -753,6 +753,109 @@ function Compiler:createAllocUpvalFunction()
 end
 
 function Compiler:emitContainerFuncBody()
+    -- OPTIMIZATION: Block Merging (Super Blocks)
+    -- Merge linear sequences of blocks to reduce dispatch overhead
+    do
+        local blockMap = {}
+        local inDegree = {}
+        local outEdge = {} -- block -> targetId (if unconditional)
+
+        -- Map blocks and initialize in-degrees
+        for _, block in ipairs(self.blocks) do
+            blockMap[block.id] = block
+            inDegree[block.id] = 0
+        end
+
+        -- Helper to scan for jump targets
+        local function scanTargets(expr)
+            if not expr then return end
+            if expr.kind == AstKind.NumberExpression then
+                local tid = expr.value
+                inDegree[tid] = (inDegree[tid] or 0) + 1
+            elseif expr.kind == AstKind.BinaryExpression or
+                   expr.kind == AstKind.OrExpression or
+                   expr.kind == AstKind.AndExpression then
+                scanTargets(expr.lhs)
+                scanTargets(expr.rhs)
+            end
+        end
+
+        -- Analyze Control Flow
+        for _, block in ipairs(self.blocks) do
+            if #block.statements > 0 then
+                local lastStatWrapper = block.statements[#block.statements]
+                if lastStatWrapper.writes[self.POS_REGISTER] then
+                    local assignStat = lastStatWrapper.statement
+                    local val = assignStat.rhs[1]
+
+                    if val.kind == AstKind.NumberExpression then
+                        -- Unconditional Jump
+                        local targetId = val.value
+                        outEdge[block] = targetId
+                        inDegree[targetId] = (inDegree[targetId] or 0) + 1
+                    else
+                        -- Conditional Jump
+                        scanTargets(val)
+                    end
+                end
+            end
+        end
+
+        -- Perform Merging
+        local changed = true
+        local mergedBlocks = {} -- Set of IDs that have been merged (and thus removed)
+
+        while changed do
+            changed = false
+            for _, block in ipairs(self.blocks) do
+                if not mergedBlocks[block.id] then
+                    local targetId = outEdge[block]
+                    if targetId then
+                        local targetBlock = blockMap[targetId]
+
+                        -- Check valid merge candidate:
+                        -- 1. Target exists and hasn't been merged
+                        -- 2. Target is not the start block
+                        -- 3. Target has exactly one incoming edge (which must be from 'block')
+                        -- 4. Target is not 'block' itself (infinite loop)
+                        if targetBlock and not mergedBlocks[targetId] and
+                           targetId ~= self.startBlockId and
+                           inDegree[targetId] == 1 and
+                           targetId ~= block.id then
+
+                            -- Merge targetBlock into block
+
+                            -- 1. Remove the jump from block (last statement)
+                            table.remove(block.statements)
+
+                            -- 2. Append all statements from targetBlock
+                            for _, stat in ipairs(targetBlock.statements) do
+                                table.insert(block.statements, stat)
+                            end
+
+                            -- 3. Update outEdge for block
+                            outEdge[block] = outEdge[targetBlock]
+
+                            -- 4. Mark targetId as merged
+                            mergedBlocks[targetId] = true
+
+                            changed = true
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Rebuild block list
+        local newBlocks = {}
+        for _, block in ipairs(self.blocks) do
+            if not mergedBlocks[block.id] then
+                table.insert(newBlocks, block)
+            end
+        end
+        self.blocks = newBlocks
+    end
+
     local blocks = {};
 
     -- SECURITY: Inject Junk Blocks (Dead Code)
@@ -1026,15 +1129,11 @@ function Compiler:allocRegister(isVar)
     end
     
 
-    local id = 0;
-    if self.usedRegisters < MAX_REGS * MAX_REGS_MUL then
-        repeat
-            id = math.random(1, MAX_REGS - 1);
-        until not self.registers[id];
-    else
-        repeat
-            id = id + 1;
-        until not self.registers[id];
+    -- OPTIMIZATION: Linear Scan Allocation
+    -- Use the first available register to minimize stack size
+    local id = 1;
+    while self.registers[id] do
+        id = id + 1;
     end
 
     if id > self.maxUsedRegister then
