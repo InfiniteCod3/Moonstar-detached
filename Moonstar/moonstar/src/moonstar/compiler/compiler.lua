@@ -103,6 +103,9 @@ function Compiler:new(config)
         blocks = {};
         registers = {
         };
+        freeRegisters = {}; -- Optimization: Free List
+        constants = {}; -- Optimization: Shared Constant Pool
+        constantRegs = {}; -- To prevent freeing constant registers
         activeBlock = nil;
         registersForVar = {};
         usedRegisters = 0;
@@ -572,15 +575,24 @@ function Compiler:pushRegisterUsageInfo()
     table.insert(self.registerUsageStack, {
         usedRegisters = self.usedRegisters;
         registers = self.registers;
+        freeRegisters = self.freeRegisters;
+        constants = self.constants;
+        constantRegs = self.constantRegs;
     });
     self.usedRegisters = 0;
     self.registers = {};
+    self.freeRegisters = {};
+    self.constants = {};
+    self.constantRegs = {};
 end
 
 function Compiler:popRegisterUsageInfo()
     local info = table.remove(self.registerUsageStack);
     self.usedRegisters = info.usedRegisters;
     self.registers = info.registers;
+    self.freeRegisters = info.freeRegisters;
+    self.constants = info.constants;
+    self.constantRegs = info.constantRegs;
 end
 
 function Compiler:createUpvaluesGcFunc()
@@ -1101,9 +1113,23 @@ function Compiler:emitContainerFuncBody()
 end
 
 function Compiler:freeRegister(id, force)
+    if self.constantRegs[id] then return end -- Never free constant registers
+
+    -- Fix: Ensure we don't try to free special registers (userdata) into the free list
+    -- freeRegisters should only contain numeric IDs
+    if type(id) ~= "number" then
+        -- If it's a userdata register (POS, RETURN, VAR), we just mark it free in self.registers if appropriate
+        if force or not (self.registers[id] == self.VAR_REGISTER) then
+             self.usedRegisters = self.usedRegisters - 1;
+             self.registers[id] = false
+        end
+        return
+    end
+
     if force or not (self.registers[id] == self.VAR_REGISTER) then
         self.usedRegisters = self.usedRegisters - 1;
         self.registers[id] = false
+        table.insert(self.freeRegisters, id) -- Push to free list
     end
 end
 
@@ -1111,10 +1137,10 @@ function Compiler:isVarRegister(id)
     return self.registers[id] == self.VAR_REGISTER;
 end
 
-function Compiler:allocRegister(isVar)
+function Compiler:allocRegister(isVar, forceNumeric)
     self.usedRegisters = self.usedRegisters + 1;
 
-    if not isVar then
+    if not isVar and not forceNumeric then
         -- POS register can be temporarily used
         if not self.registers[self.POS_REGISTER] then
             self.registers[self.POS_REGISTER] = true;
@@ -1128,12 +1154,25 @@ function Compiler:allocRegister(isVar)
         end
     end
     
+    local id;
+    -- OPTIMIZATION: Free List (Stack) Allocation
+    -- Try to reuse recently freed registers for better cache locality
+    while #self.freeRegisters > 0 do
+        local candidate = table.remove(self.freeRegisters);
+        if not self.registers[candidate] then
+            id = candidate;
+            break;
+        end
+        -- If register became occupied (e.g. by VAR assignment), discard and try next
+    end
 
-    -- OPTIMIZATION: Linear Scan Allocation
-    -- Use the first available register to minimize stack size
-    local id = 1;
-    while self.registers[id] do
-        id = id + 1;
+    if not id then
+        -- OPTIMIZATION: Linear Scan Allocation (Fallback)
+        -- Use the first available register to minimize stack size
+        id = 1;
+        while self.registers[id] do
+            id = id + 1;
+        end
     end
 
     if id > self.maxUsedRegister then
@@ -1222,6 +1261,13 @@ end
 
 function Compiler:compileOperand(scope, expr, funcDepth)
     if self:isLiteral(expr) then
+        -- OPTIMIZATION: Shared Constant Pool
+        -- Check if this literal is in our constant pool
+        if (expr.kind == AstKind.StringExpression or expr.kind == AstKind.NumberExpression) and self.constants[expr.value] then
+            local reg = self.constants[expr.value]
+            return self:register(scope, reg), reg
+        end
+
         -- Return the AST node directly (no register allocation)
         return expr, nil
     end
@@ -1328,6 +1374,9 @@ end
 
 function Compiler:resetRegisters()
     self.registers = {};
+    self.freeRegisters = {};
+    self.constants = {};
+    self.constantRegs = {};
 end
 
 function Compiler:pos(scope)
@@ -1460,6 +1509,17 @@ function Compiler:compileFunction(node, funcDepth)
     local upperVarargReg = self.varargReg;
     self.varargReg = nil;
 
+    -- SCAN PASS: Collect constants for Shared Constant Pool
+    -- We scan the function body for literals and pre-allocate registers for them
+    -- This happens before main compilation so constants are ready
+    -- Note: We don't do this for the top node because it's handled differently
+    -- and registers would need to be in containerFuncScope which might be complex
+    -- But here we are starting a new function scope context.
+
+    -- Actually, compileFunction pushes register usage info, so we start fresh.
+    -- We can't easily pre-allocate because 'allocRegister' needs the register usage info pushed.
+    -- So we must push first.
+
     local upvalueExpressions = {};
     local upvalueIds = {};
     local usedRegs = {};
@@ -1496,6 +1556,87 @@ function Compiler:compileFunction(node, funcDepth)
     self:setActiveBlock(block);
     local scope = self.activeBlock.scope;
     self:pushRegisterUsageInfo();
+
+    -- OPTIMIZATION: Shared Constant Pool
+    -- Scan for constants and pre-allocate registers
+    local constantCounts = {}
+    -- visitast expects an AST node with 'body' and 'globalScope' usually, or at least 'body' for visitBlock
+    -- compileFunction is passed 'node' which is a FunctionLiteralExpression or FunctionDeclaration
+    -- It has a 'body' field which is a Block.
+    -- However, visitast(node, ...) starts by accessing node.body.scope.
+    -- If we pass node.body (which is a Block), visitast(node.body) will try node.body.body.scope -> Error!
+    -- We should use visitBlock directly? Or wrap it?
+    -- visitast is for the top level AST.
+    -- But 'visitast.lua' module returns a function `visitAst` which calls `visitBlock`.
+    -- We can check if we can call visitBlock.
+    -- The module exports `visitAst`. `visitBlock` is local.
+    -- So we must use `visitAst`.
+    -- `visitAst` expects:
+    -- data.functionData = { depth = 0, scope = ast.body.scope, node = ast }
+    -- And calls visitBlock(ast.body, ...)
+
+    -- If we pass `node` (FunctionLiteral), `node.body` exists.
+    -- But `node.globalScope` might not exist if it's an inner function.
+    -- `visitAst` reads `ast.globalScope`.
+
+    -- Solution: We can just traverse manually using a simpler visitor or fix how we call it.
+    -- Or, we can mock the structure expected by visitAst.
+    -- { body = node.body, globalScope = self.scope (approx) }
+
+    -- But actually, we just want to visit the block `node.body`.
+    -- Since we cannot access `visitBlock` (it's local in visitast.lua), we have to use `visitAst`.
+    -- `visitAst` is designed for TopNode.
+
+    -- Alternative: Implement a simple recursive scanner here. It's safer and we only need String/Number expressions.
+
+    local function scanConstants(n)
+        if not n then return end
+        if type(n) ~= "table" then return end
+
+        if n.kind == AstKind.StringExpression or n.kind == AstKind.NumberExpression then
+            local key = n.value
+            if type(key) == "number" or type(key) == "string" then
+                 constantCounts[key] = (constantCounts[key] or 0) + 1
+            end
+        end
+
+        -- Recursively scan children
+        for k, v in pairs(n) do
+            if type(v) == "table" and k ~= "scope" and k ~= "parentScope" then -- Avoid cycles and scopes
+                if v.kind then -- It's a node
+                    scanConstants(v)
+                elseif type(k) == "number" then -- Array of nodes (e.g. statements)
+                    scanConstants(v)
+                end
+            end
+        end
+    end
+
+    scanConstants(node.body)
+
+    -- Allocate registers for frequent constants
+    -- We use a deterministic order to ensure consistency
+    local sortedKeys = {}
+    for k,v in pairs(constantCounts) do table.insert(sortedKeys, k) end
+    table.sort(sortedKeys, function(a,b)
+        if type(a) ~= type(b) then return type(a) < type(b) end
+        return a < b
+    end)
+
+    for _, k in ipairs(sortedKeys) do
+        local count = constantCounts[k]
+        -- Policy: Hoist all strings, and numbers used > 1 time
+        if type(k) == "string" or (type(k) == "number" and count > 1) then
+            -- Use allocRegister with forceNumeric=true to avoid special registers
+            local reg = self:allocRegister(false, true)
+
+            local expr = type(k) == "string" and Ast.StringExpression(k) or Ast.NumberExpression(k)
+            self:addStatement(self:setRegister(scope, reg, expr), {reg}, {}, false)
+            self.constants[k] = reg
+            self.constantRegs[reg] = true
+        end
+    end
+
     for i, arg in ipairs(node.args) do
         if(arg.kind == AstKind.VariableExpression) then
             if(self:isUpvalue(arg.scope, arg.id)) then
@@ -1687,8 +1828,10 @@ function Compiler:compileStatement(statement, funcDepth)
                     local varreg = self:getVarRegister(statement.scope, id, funcDepth, exprregs[i]);
                     -- Optimization: If exprregs[i] IS varreg (because we passed it as target), copyRegisters is a no-op or handles it
                     -- copyRegisters: if from ~= to then emit assignment
-                    self:addStatement(self:copyRegisters(scope, {varreg}, {exprregs[i]}), {varreg}, {exprregs[i]}, false);
-                    self:freeRegister(exprregs[i], false);
+                    if varreg ~= exprregs[i] then
+                        self:addStatement(self:copyRegisters(scope, {varreg}, {exprregs[i]}), {varreg}, {exprregs[i]}, false);
+                        self:freeRegister(exprregs[i], false);
+                    end
                 end
             end
         end
@@ -1914,6 +2057,45 @@ function Compiler:compileStatement(statement, funcDepth)
                     -- If reg is a DIFFERENT var register, we might need to copy.
 
                     if(self:isVarRegister(reg) and reg ~= targetRegs[i]) then
+                        -- Only copy if we actually need a new register (if reg is used elsewhere/preserved)
+                        -- But since we are assigning to targetRegs[i], we should just use that.
+                        -- If reg is a VarRegister, it means it's another variable.
+                        -- We are doing `target = var`.
+                        -- If we reuse `var` register as `target` register, we clobber `var`.
+                        -- Unless targetRegs[i] IS reg.
+
+                        -- Existing logic copies to a temp register `reg`?
+                        -- Wait, `reg` is the result of compileExpression.
+                        -- If it returned a VAR register (VariableExpression), and it's not our target...
+                        -- Then we are putting a VAR register into `exprregs`.
+                        -- Later, we do `setRegister(target, exprregs[i])`.
+
+                        -- The logic `reg = allocRegister; copyRegisters` creates a TEMP copy of the var.
+                        -- Why? Maybe to avoid side effects if the variable changes later in the same statement?
+                        -- Or to allow `freeRegister` to work?
+                        -- `isVarRegister` registers are never freed by `freeRegister`.
+                        -- If we put it in `exprregs`, and later `freeRegister` is called on it... it does nothing.
+                        -- So it should be fine?
+
+                        -- However, if `reg` is modified later in the statement execution...
+                        -- For parallel assignment `a, b = b, a`, we need copies.
+                        -- `reg` holds the value of `b`. If we assign to `b` before assigning to `a`...
+                        -- But here we are just compiling RHS.
+                        -- The assignments happen later.
+                        -- If `reg` is a var register, it refers to the variable's current storage.
+                        -- If we write to that variable later in this assignment statement...
+                        -- `local a, b = b, a`
+                        -- RHS: reg1=b (var), reg2=a (var).
+                        -- LHS: a=reg1, b=reg2.
+                        -- If we write a=reg1, `a` changes. reg2 (which is `a` register) now holds NEW value of `a`?
+                        -- Yes, if registers alias variables directly.
+                        -- So we MUST copy if it's a var register to preserve the "old" value for parallel assignment.
+
+                        -- Optimization: Only copy if we are in a parallel assignment involving this variable in LHS?
+                        -- That's complex to check.
+                        -- Current logic: `if isVarRegister(reg) ... copy`.
+                        -- This is safe.
+
                         local ro = reg;
                         reg = self:allocRegister(false);
                         self:addStatement(self:copyRegisters(scope, {reg}, {ro}), {reg}, {ro}, false);
@@ -2767,6 +2949,10 @@ function Compiler:compileExpression(expression, funcDepth, numReturns, targetReg
                 -- OPTIMIZATION: Arithmetic Identities
                 local identityFound = false
 
+                -- OPTIMIZATION: Operand Register Reuse
+                local reused = false
+                local targetReg = regs[i]
+
                 -- OPTIMIZATION: Constant Folding
                 if lhsExpr.kind == AstKind.NumberExpression and rhsExpr.kind == AstKind.NumberExpression then
                     local l, r = lhsExpr.value, rhsExpr.value
@@ -2848,15 +3034,33 @@ function Compiler:compileExpression(expression, funcDepth, numReturns, targetReg
                 end
 
                 if not identityFound then
-                    local reads = {}
-                    if lhsReg then table.insert(reads, lhsReg) end
-                    if rhsReg then table.insert(reads, rhsReg) end
+                    -- Attempt to reuse LHS or RHS register if they are temporary
+                    -- Only do this if we didn't receive a specific target register
+                    if not (targetRegs and targetRegs[i]) then
+                         if lhsReg and self.registers[lhsReg] == true and lhsReg ~= self.POS_REGISTER and lhsReg ~= self.RETURN_REGISTER then
+                             self:freeRegister(regs[i], true) -- Free the newly allocated one
+                             regs[i] = lhsReg
+                             targetReg = lhsReg
+                             reused = true
+                             -- LHS reused, don't free it later
+                         elseif rhsReg and self.registers[rhsReg] == true and rhsReg ~= self.POS_REGISTER and rhsReg ~= self.RETURN_REGISTER then
+                             self:freeRegister(regs[i], true)
+                             regs[i] = rhsReg
+                             targetReg = rhsReg
+                             reused = true
+                             -- RHS reused, don't free it later
+                         end
+                    end
 
-                    self:addStatement(self:setRegister(scope, regs[i], Ast[expression.kind](lhsExpr, rhsExpr)), {regs[i]}, reads, true);
+                    local reads = {}
+                    if lhsReg and (not reused or lhsReg ~= targetReg) then table.insert(reads, lhsReg) end
+                    if rhsReg and (not reused or rhsReg ~= targetReg) then table.insert(reads, rhsReg) end
+
+                    self:addStatement(self:setRegister(scope, targetReg, Ast[expression.kind](lhsExpr, rhsExpr)), {targetReg}, reads, true);
                 end
 
-                if rhsReg then self:freeRegister(rhsReg, false) end
-                if lhsReg then self:freeRegister(lhsReg, false) end
+                if rhsReg and (not reused or targetReg ~= rhsReg) then self:freeRegister(rhsReg, false) end
+                if lhsReg and (not reused or targetReg ~= lhsReg) then self:freeRegister(lhsReg, false) end
             else
                self:addStatement(self:setRegister(scope, regs[i], Ast.NilExpression()), {regs[i]}, {}, false);
             end

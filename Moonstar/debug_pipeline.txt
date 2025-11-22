@@ -88,3 +88,33 @@ Metatable: table: 00B70DD8
 After Renaming:
 ast.body.scope: table: 01942778
 Metatable: table: 00B70DD8
+Before Renaming:
+ast.body.scope: table: 014009C8
+Metatable: table: 00C395D0
+After Renaming:
+ast.body.scope: table: 014009C8
+Metatable: table: 00C395D0
+Before Renaming:
+ast.body.scope: table: 088D65C8
+Metatable: table: 00B39B10
+After Renaming:
+ast.body.scope: table: 088D65C8
+Metatable: table: 00B39B10
+Before Renaming:
+ast.body.scope: table: 05623A10
+Metatable: table: 00AF95C0
+After Renaming:
+ast.body.scope: table: 05623A10
+Metatable: table: 00AF95C0
+Before Renaming:
+ast.body.scope: table: 03923A58
+Metatable: table: 00CD2A38
+After Renaming:
+ast.body.scope: table: 03923A58
+Metatable: table: 00CD2A38
+Before Renaming:
+ast.body.scope: table: 01A70D18
+Metatable: table: 00BF1AF8
+After Renaming:
+ast.body.scope: table: 01A70D18
+Metatable: table: 00BF1AF8
