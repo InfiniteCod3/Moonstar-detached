@@ -71,81 +71,40 @@ function EncryptStrings:CreateEncrypionService(astScope)
 		keyComplexity = 2
 	end
 
-	local secret_key_6 = math.random(0, 63) -- 6-bit  arbitrary integer (0..63)
-	local secret_key_7 = math.random(0, 127) -- 7-bit  arbitrary integer (0..127)
-	local secret_key_44 = math.random(0, math.floor(17592186044415 * keyComplexity)) -- 44-bit arbitrary integer
+	-- LCG Parameters (standard constants)
+	local lcg_a = 1664525
+	local lcg_c = 1013904223
+	local lcg_m = 4294967296 -- 2^32
+
 	local secret_key_8 = math.random(0, 255); -- 8-bit  arbitrary integer (0..255)
 
 	local floor = math.floor
 
-	local function primitive_root_257(idx)
-		local g, m, d = 1, 128, 2 * idx + 1
-		repeat
-			g, m, d = g * g * (d >= m and 3 or 1) % 257, m / 2, d % m
-		until m < 1
-		return g
-	end
+	-- Initial seed state
+	local current_seed = 0
 
-	local param_mul_8 = primitive_root_257(secret_key_7)
-	local param_mul_45 = secret_key_6 * 4 + 1
-	local param_add_45 = secret_key_44 * 2 + 1
-
-	local state_45 = 0
-	local state_8 = 2
-
-	local prev_values = {}
-	local function set_seed(seed_53)
-		state_45 = seed_53 % 35184372088832
-		state_8 = seed_53 % 255 + 2
-		prev_values = {}
+	local function set_seed(seed)
+		current_seed = seed
 	end
 
 	local function gen_seed()
 		local seed;
 		repeat
-			seed = math.random(0, 35184372088832);
+			seed = math.random(0, 2147483647); -- Ensure positive 32-bit signed range equivalent
 		until not usedSeeds[seed];
 		usedSeeds[seed] = true;
 		return seed;
 	end
 
-	local function get_random_32()
-		state_45 = (state_45 * param_mul_45 + param_add_45) % 35184372088832
-		repeat
-			state_8 = state_8 * param_mul_8 % 257
-		until state_8 ~= 1
-		local r = state_8 % 32
-		local n = floor(state_45 / 2 ^ (13 - (state_8 - r) / 32)) % 2 ^ 32 / 2 ^ r
-		return floor(n % 1 * 2 ^ 32) + floor(n)
+	local function lcg_next()
+		current_seed = (lcg_a * current_seed + lcg_c) % lcg_m
+		return current_seed
 	end
 
 	local function get_next_pseudo_random_byte()
-		if #prev_values == 0 then
-			local rnd = get_random_32() -- value 0..4294967295
-			local low_16 = rnd % 65536
-			local high_16 = (rnd - low_16) / 65536
-			local b1 = low_16 % 256
-			local b2 = (low_16 - b1) / 256
-			local b3 = high_16 % 256
-			local b4 = (high_16 - b3) / 256
-			prev_values = { b1, b2, b3, b4 }
-		end
-		--print(unpack(prev_values))
-		return table.remove(prev_values)
-	end
-
-	local function encrypt(str)
-		local seed = gen_seed();
-		set_seed(seed)
-		local len = string.len(str)
-		local out = {}
-		local prevVal = secret_key_8;
-		for i = 1, len do
-			local byte = string.byte(str, i);
-			out[i] = string.char((byte - (get_next_pseudo_random_byte() + prevVal)) % 256);
-			prevVal = byte;
-		end
-		return table.concat(out), seed;
+		-- Use bits 16-23 of the LCG state for better randomness
+		local val = lcg_next()
+		return floor(val / 65536) % 256
 	end
 	
 	-- XOR byte encryption - returns byte array table
@@ -170,8 +129,8 @@ function EncryptStrings:CreateEncrypionService(astScope)
 	-- Polymorphic operations for the polymorphic variant
 	local polyChain = {}
 	if self.DecryptorVariant == "polymorphic" then
-		-- Generate random polymorphic operations
-		local opTypes = {"ADD", "SUB", "XOR"}
+		-- Generate random polymorphic operations (Restricted to ADD/SUB)
+		local opTypes = {"ADD", "SUB"}
 		local numOps = math.random(2, 4)
 		
 		for i = 1, numOps do
@@ -182,17 +141,15 @@ function EncryptStrings:CreateEncrypionService(astScope)
 				type = opType,
 				constant = constant,
 				-- Encryption function (applied during encryption)
-				encrypt = function(byte, key)
+				encrypt = function(byte)
 					if opType == "ADD" then
 						return (byte + constant) % 256
 					elseif opType == "SUB" then
 						return (byte - constant) % 256
-					elseif opType == "XOR" then
-						return bit.bxor(byte, constant)
 					end
 				end,
 				-- Decryption AST generator (generates AST node for decryption)
-				decrypt = function(byteExpr, keyExpr, bxorVarName, decryptScope)
+				decrypt = function(byteExpr, decryptScope)
 					if opType == "ADD" then
 						return Ast.ModExpression(
 							Ast.SubExpression(byteExpr, Ast.NumberExpression(constant)),
@@ -202,12 +159,6 @@ function EncryptStrings:CreateEncrypionService(astScope)
 						return Ast.ModExpression(
 							Ast.AddExpression(byteExpr, Ast.NumberExpression(constant)),
 							Ast.NumberExpression(256)
-						)
-					elseif opType == "XOR" then
-						-- Use the bxor variable from PRNG code
-						return Ast.FunctionCallExpression(
-							Ast.VariableExpression(decryptScope, bxorVarName),
-							{byteExpr, Ast.NumberExpression(constant)}
 						)
 					else
 						return byteExpr
@@ -227,17 +178,28 @@ function EncryptStrings:CreateEncrypionService(astScope)
 		local prevVal = secret_key_8;
 		
 		if self.DecryptorVariant == "polymorphic" then
-			-- Polymorphic encryption: apply chain, then XOR with prevVal
+			-- Polymorphic encryption: apply chain, then ARITHMETIC mix with prevVal (Replacing XOR)
 			for i = 1, len do
 				local byte = string.byte(str, i);
-				local key = get_next_pseudo_random_byte();
-				
-				-- Apply XOR with prevVal first
-				local encrypted = bit.bxor(byte, prevVal)
+				-- Note: Polymorphic variant does NOT use PRNG stream for encryption key
+				-- This ensures sync with decryption which also doesn't use PRNG
+
+				-- Apply Arithmetic with prevVal first (Replaces XOR for speed)
+				-- Decryption: (encrypted + constant...) - prevVal
+				-- Encryption must align with decryption order.
+				-- Let's define decryption chain:
+				--   val = reverse_poly(encrypted_byte)
+				--   original = (val - prevVal) % 256
+				--
+				-- So encryption:
+				--   val = (original + prevVal) % 256
+				--   encrypted = forward_poly(val)
+
+				local encrypted = (byte + prevVal) % 256
 				
 				-- Apply polymorphic chain
 				for _, op in ipairs(polyChain) do
-					encrypted = op.encrypt(encrypted, key)
+					encrypted = op.encrypt(encrypted)
 				end
 				
 				out[i] = encrypted
@@ -255,20 +217,19 @@ function EncryptStrings:CreateEncrypionService(astScope)
 		end
 	end
 
-    local function genCode()
+	local function genCode()
 		-- Select decryptor variant based on setting
 		local variant = self.DecryptorVariant or "arith"
 		
 		-- Base setup code (common to all variants)
-        local code = [[
+		local code = [[
 do
 	local floor = math.floor
 	local random = math.random;
 	local remove = table.remove;
 	local char = string.char;
-	local state_45 = 0
-	local state_8 = 2
-	local digits = {}
+	-- LCG State
+	local state = 0
 	local charmap = {};
 	local i = 0;
 
@@ -283,25 +244,9 @@ do
 		charmap[n] = char(n - 1);
 	until #nums == 0;
 
-	local prev_values = {}
 	local function get_next_pseudo_random_byte()
-		if #prev_values == 0 then
-			state_45 = (state_45 * ]] .. tostring(param_mul_45) .. [[ + ]] .. tostring(param_add_45) .. [[) % 35184372088832
-			repeat
-				state_8 = state_8 * ]] .. tostring(param_mul_8) .. [[ % 257
-			until state_8 ~= 1
-			local r = state_8 % 32
-			local n = floor(state_45 / 2 ^ (13 - (state_8 - r) / 32)) % 2 ^ 32 / 2 ^ r
-			local rnd = floor(n % 1 * 2 ^ 32) + floor(n)
-			local low_16 = rnd % 65536
-			local high_16 = (rnd - low_16) / 65536
-			local b1 = low_16 % 256
-			local b2 = (low_16 - b1) / 256
-			local b3 = high_16 % 256
-			local b4 = (high_16 - b3) / 256
-			prev_values = { b1, b2, b3, b4 }
-		end
-		return table.remove(prev_values)
+		state = (1664525 * state + 1013904223) % 4294967296
+		return floor(state / 65536) % 256
 	end
 
 	local realStrings = {};
@@ -332,15 +277,12 @@ do
 			-- Table-based decryptor variant
 			local seedAdjust = self.EnvironmentCheck and "seed + env_key" or "seed"
 			code = code .. [[
-  	function DECRYPT(str, seed)
+	function DECRYPT(str, seed)
 		local realStringsLocal = realStrings;
 		if(realStringsLocal[seed]) then else
-			prev_values = {};
 			local chars = charmap;
 			local adjusted_seed = ]] .. seedAdjust .. [[
-			local lookup = {adjusted_seed % 35184372088832, adjusted_seed % 255 + 2}
-			state_45 = lookup[1]
-			state_8 = lookup[2]
+			state = adjusted_seed
 			local len = string.len(str);
 			realStringsLocal[seed] = "";
 			local prevVal = ]] .. tostring(secret_key_8) .. [[;
@@ -357,17 +299,16 @@ do
 			local seedAdjust = self.EnvironmentCheck and " + env_key" or ""
 			code = code .. [[
 	local function initState(seed)
-		return seed % 35184372088832, seed % 255 + 2
+		return seed
 	end
 	local function decryptByte(b, r, p)
 		return (b + r + p) % 256
 	end
-  	function DECRYPT(str, seed)
+	function DECRYPT(str, seed)
 		local realStringsLocal = realStrings;
 		if(realStringsLocal[seed]) then else
-			prev_values = {};
 			local chars = charmap;
-			state_45, state_8 = initState(seed]] .. seedAdjust .. [[)
+			state = initState(seed]] .. seedAdjust .. [[)
 			local len = string.len(str);
 			realStringsLocal[seed] = "";
 			local prevVal = ]] .. tostring(secret_key_8) .. [[;
@@ -387,14 +328,12 @@ do
 		function(a,b,c) return (a + b + c) % 256 end,
 		function(a,b,c) return (a - b + c) % 256 end,
 	}
-  	function DECRYPT(str, seed)
+	function DECRYPT(str, seed)
 		local realStringsLocal = realStrings;
 		if(realStringsLocal[seed]) then else
-			prev_values = {};
 			local chars = charmap;
 			local adjusted_seed = seed]] .. seedAdjust .. [[
-			state_45 = adjusted_seed % 35184372088832
-			state_8 = adjusted_seed % 255 + 2
+			state = adjusted_seed
 			local len = string.len(str);
 			realStringsLocal[seed] = "";
 			local prevVal = ]] .. tostring(secret_key_8) .. [[;
@@ -409,126 +348,92 @@ do
 ]]
 		elseif variant == "polymorphic" then
 			-- Polymorphic Byte Array Decryptor
-			-- Similar to xor_byte but with dynamic operation chain
 			local seedAdjust = self.EnvironmentCheck and " + env_key" or ""
 			code = code .. [[
-    -- Inline XOR implementation (pure Lua, no dependencies)
-    local function bxor(a, b)
-        local p, c = 1, 0
-        while a > 0 or b > 0 do
-            local ra, rb = a % 2, b % 2
-            if ra ~= rb then c = c + p end
-            a, b, p = (a - ra) / 2, (b - rb) / 2, p * 2
-        end
-        return c
-    end
-    
-    function DECRYPT(bytes, seed)
-        local realStringsLocal = realStrings;
-        if(realStringsLocal[seed]) then else
-            prev_values = {};
-            local chars = charmap;
-            local adjusted_seed = seed]] .. seedAdjust .. [[
-            state_45 = adjusted_seed % 35184372088832
-            state_8 = adjusted_seed % 255 + 2
-            
-            local result = {}
-            local len = #bytes
-            local prevVal = ]] .. tostring(secret_key_8) .. [[;
-            
-            for i=1, len do
-                local b = bytes[i]
-                
-                -- Reverse polymorphic operations
+
+	function DECRYPT(bytes, seed)
+		local realStringsLocal = realStrings;
+		if(realStringsLocal[seed]) then else
+			local chars = charmap;
+
+			local result = {}
+			local len = #bytes
+			local prevVal = ]] .. tostring(secret_key_8) .. [[;
+
+			for i=1, len do
+				local b = bytes[i]
+
+				-- Reverse polymorphic operations
 ]]
 			-- Generate the reverse polymorphic operation chain
 			for i = #polyChain, 1, -1 do
 				local op = polyChain[i]
 				if op.type == "ADD" then
-					code = code .. "                b = (b - " .. op.constant .. ") % 256\n"
+					code = code .. "				b = (b - " .. op.constant .. ") % 256\n"
 				elseif op.type == "SUB" then
-					code = code .. "                b = (b + " .. op.constant .. ") % 256\n"
-				elseif op.type == "XOR" then
-					code = code .. "                b = bxor(b, " .. op.constant .. ")\n"
+					code = code .. "				b = (b + " .. op.constant .. ") % 256\n"
 				end
 			end
 			
 			code = code .. [[
-                -- Reverse XOR with prevVal
-                local decrypted = bxor(b, prevVal)
-                prevVal = decrypted
-                table.insert(result, chars[decrypted + 1])
-            end
-            realStringsLocal[seed] = table.concat(result)
-        end
-        return seed;
-    end
+				-- Reverse Arithmetic with prevVal (Replaces XOR)
+				local decrypted = (b - prevVal) % 256
+				prevVal = decrypted
+				table.insert(result, chars[decrypted + 1])
+			end
+			realStringsLocal[seed] = table.concat(result)
+		end
+		return seed;
+	end
 ]]
-        elseif variant == "xor_byte" then
-            -- XOR Byte Array Decryptor
-            -- Expects 'str' to be a table of bytes {b1, b2, ...} not a string
-            -- But the current architecture passes a string literal in the AST.
-            -- We need to handle the AST transformation separately.
-            -- Here we define the runtime decryptor.
-            local seedAdjust = self.EnvironmentCheck and " + env_key" or ""
-            code = code .. [[
-    -- Inline XOR implementation (pure Lua, no dependencies)
-    local function bxor(a, b)
-        local p, c = 1, 0
-        while a > 0 or b > 0 do
-            local ra, rb = a % 2, b % 2
-            if ra ~= rb then c = c + p end
-            a, b, p = (a - ra) / 2, (b - rb) / 2, p * 2
-        end
-        return c
-    end
-    
-    function DECRYPT(bytes, seed)
-        local realStringsLocal = realStrings;
-        if(realStringsLocal[seed]) then else
-            prev_values = {};
-            local chars = charmap;
-            local adjusted_seed = seed]] .. seedAdjust .. [[
-            state_45 = adjusted_seed % 35184372088832
-            state_8 = adjusted_seed % 255 + 2
-            
-            local result = {}
-            local len = #bytes
-            local prevVal = ]] .. tostring(secret_key_8) .. [[;
-            
-            for i=1, len do
-                local b = bytes[i]
-                local r = get_next_pseudo_random_byte()
-                -- Decrypt: (b XOR r) - prevVal
-                -- Note: The encryption must be: (byte + prevVal) XOR r
-                -- Let's stick to the requested XOR logic:
-                -- "store strings as byte arrays {12, 244, 21...} and use a runtime XOR function to decrypt them"
-                -- We will use a simple XOR chain for this variant to match the user request specifically.
-                
-                -- Revised Logic for XOR variant:
-                -- Encrypted = Byte XOR Key
-                -- We will use the pseudo-random stream as the key stream.
-                
-                local decrypted = bxor(b, r)
-                table.insert(result, chars[decrypted + 1])
-            end
-            realStringsLocal[seed] = table.concat(result)
-        end
-        return seed;
-    end
+		elseif variant == "xor_byte" then
+			-- XOR Byte Array Decryptor
+			local seedAdjust = self.EnvironmentCheck and " + env_key" or ""
+			code = code .. [[
+	-- Inline XOR implementation (pure Lua, no dependencies)
+	local function bxor(a, b)
+		local p, c = 1, 0
+		while a > 0 or b > 0 do
+			local ra, rb = a % 2, b % 2
+			if ra ~= rb then c = c + p end
+			a, b, p = (a - ra) / 2, (b - rb) / 2, p * 2
+		end
+		return c
+	end
+
+	function DECRYPT(bytes, seed)
+		local realStringsLocal = realStrings;
+		if(realStringsLocal[seed]) then else
+			local chars = charmap;
+			local adjusted_seed = seed]] .. seedAdjust .. [[
+			state = adjusted_seed
+
+			local result = {}
+			local len = #bytes
+			local prevVal = ]] .. tostring(secret_key_8) .. [[;
+
+			for i=1, len do
+				local b = bytes[i]
+				local r = get_next_pseudo_random_byte()
+
+				local decrypted = bxor(b, r)
+				table.insert(result, chars[decrypted + 1])
+			end
+			realStringsLocal[seed] = table.concat(result)
+		end
+		return seed;
+	end
 ]]
-        else  -- "arith" (default)
+		else  -- "arith" (default)
 			-- Arithmetic-based decryptor (original)
 			local seedAdjust = self.EnvironmentCheck and " + env_key" or ""
 			code = code .. [[
-  	function DECRYPT(str, seed)
+	function DECRYPT(str, seed)
 		local realStringsLocal = realStrings;
 		if(realStringsLocal[seed]) then else
-			prev_values = {};
 			local chars = charmap;
 			local adjusted_seed = seed]] .. seedAdjust .. [[
-			state_45 = adjusted_seed % 35184372088832
-			state_8 = adjusted_seed % 255 + 2
+			state = adjusted_seed
 			local len = string.len(str);
 			realStringsLocal[seed] = "";
 			local prevVal = ]] .. tostring(secret_key_8) .. [[;
@@ -545,22 +450,19 @@ do
 		code = code .. "end"
 
 		return code;
-    end
+	end
 
-    return {
-        encrypt = encrypt,
-        encrypt_xor = encrypt_xor,
-        param_mul_45 = param_mul_45,
-        param_mul_8 = param_mul_8,
-        param_add_45 = param_add_45,
+	return {
+		encrypt = encrypt,
+		encrypt_xor = encrypt_xor,
 		secret_key_8 = secret_key_8,
-        genCode = genCode,
-        polyChain = polyChain,
-    }
+		genCode = genCode,
+		polyChain = polyChain,
+	}
 end
 
 function EncryptStrings:apply(ast, pipeline)
-    local Encryptor = self:CreateEncrypionService(ast.body.scope);
+	local Encryptor = self:CreateEncrypionService(ast.body.scope);
 
 	local code = Encryptor.genCode();
 	local newAst = Parser:new({ LuaVersion = Enums.LuaVersion.Lua51 }):parse(code);
