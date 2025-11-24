@@ -292,13 +292,18 @@ local function main(args)
     
     -- Remove AntiTamper if disabled
     if config.disableAntiTamper then
-        local newSteps = {}
-        for _, step in ipairs(presetConfig.Steps) do
-            if step.Name ~= "AntiTamper" then
-                table.insert(newSteps, step)
+        -- Handle new config format (Steps table vs array)
+        if presetConfig.Steps then
+            local newSteps = {}
+            for _, step in ipairs(presetConfig.Steps) do
+                if step.Name ~= "AntiTamper" then
+                    table.insert(newSteps, step)
+                end
             end
+            presetConfig.Steps = newSteps
+        elseif presetConfig.AntiTamper then
+            presetConfig.AntiTamper.Enabled = false
         end
-        presetConfig.Steps = newSteps
     end
     
     -- LUAU FIX: Strip type annotations if targeting LuaU

@@ -119,6 +119,9 @@ function Compiler:new(config)
         -- VM profile for dispatch method
         vmProfile = config.vmProfile or "baseline";
 
+        -- Block ID counter for non-randomized blocks
+        uniqueBlockId = 0;
+
         -- VM string encryption config
         encryptVmStrings = config.encryptVmStrings or false;
         
@@ -175,7 +178,8 @@ function Compiler:createBlock()
     else
         -- OPTIMIZATION: Use sequential IDs when randomization is disabled
         -- This reduces bytecode size (smaller numbers) and potentially improves dispatch slightly
-        id = #self.blocks + 1;
+        self.uniqueBlockId = self.uniqueBlockId + 1;
+        id = self.uniqueBlockId;
     end
     self.usedBlockIds[id] = true;
 
@@ -190,6 +194,86 @@ function Compiler:createBlock()
     };
     table.insert(self.blocks, block);
     return block;
+end
+
+function Compiler:scanAndAllocateConstants(body, scope)
+    -- OPTIMIZATION: Shared Constant Pool
+    local constantCounts = {}
+    local visited = {}
+
+    local function scanConstants(n)
+        if not n then return end
+        if type(n) ~= "table" then return end
+        if visited[n] then return end
+        visited[n] = true
+
+        if n.kind == AstKind.StringExpression or n.kind == AstKind.NumberExpression then
+            local key = n.value
+            if type(key) == "number" or type(key) == "string" then
+                 constantCounts[key] = (constantCounts[key] or 0) + 1
+            end
+        elseif n.kind == AstKind.VariableExpression then
+            local name = n.scope:getVariableName(n.id)
+            if n.scope.isGlobal then
+                -- Also count global variable names as string constants
+                if name then
+                    constantCounts[name] = (constantCounts[name] or 0) + 1
+                end
+            end
+        end
+
+        -- Recursively scan children
+        for k, v in pairs(n) do
+            if type(v) == "table" and k ~= "scope" and k ~= "parentScope" and k ~= "baseScope" and k ~= "globalScope" then -- Avoid cycles and scopes
+                 scanConstants(v)
+            end
+        end
+    end
+
+    scanConstants(body)
+
+    -- Allocate registers for frequent constants
+    -- We use a deterministic order to ensure consistency
+    local sortedKeys = {}
+    for k,v in pairs(constantCounts) do table.insert(sortedKeys, k) end
+    table.sort(sortedKeys, function(a,b)
+        if type(a) ~= type(b) then return type(a) < type(b) end
+        return a < b
+    end)
+
+    for _, k in ipairs(sortedKeys) do
+        local count = constantCounts[k]
+        -- Policy: Hoist all strings, and numbers used > 1 time
+        if type(k) == "string" or (type(k) == "number" and count > 1) then
+            -- Use allocRegister with forceNumeric=true to avoid special registers
+            local reg = self:allocRegister(false, true)
+
+            local expr
+            if self.encryptVmStrings and type(k) == "string" then
+                -- Encrypt string constants if enabled
+                local encryptedBytes, seed = VmConstantEncryptor.encrypt(k)
+                local byteEntries = {}
+                for _, b in ipairs(encryptedBytes) do
+                    table.insert(byteEntries, Ast.TableEntry(Ast.NumberExpression(b)))
+                end
+
+                -- Emit: DECRYPT(seed, {bytes})
+                expr = Ast.FunctionCallExpression(
+                    Ast.VariableExpression(self.scope, self.vmDecryptFuncVar),
+                    {
+                        Ast.NumberExpression(seed),
+                        Ast.TableConstructorExpression(byteEntries)
+                    }
+                )
+            else
+                expr = type(k) == "string" and Ast.StringExpression(k) or Ast.NumberExpression(k)
+            end
+
+            self:addStatement(self:setRegister(scope, reg, expr), {reg}, {}, false)
+            self.constants[k] = reg
+            self.constantRegs[reg] = true
+        end
+    end
 end
 
 function Compiler:createJunkBlock()
@@ -1141,82 +1225,8 @@ function Compiler:compileFunction(node, funcDepth)
     local scope = self.activeBlock.scope;
     self:pushRegisterUsageInfo();
 
-    -- OPTIMIZATION: Shared Constant Pool
-    local constantCounts = {}
-
-    local function scanConstants(n)
-        if not n then return end
-        if type(n) ~= "table" then return end
-
-        if n.kind == AstKind.StringExpression or n.kind == AstKind.NumberExpression then
-            local key = n.value
-            if type(key) == "number" or type(key) == "string" then
-                 constantCounts[key] = (constantCounts[key] or 0) + 1
-            end
-        elseif n.kind == AstKind.VariableExpression and n.scope.isGlobal then
-            -- Also count global variable names as string constants
-            local name = n.scope:getVariableName(n.id)
-            if name then
-                constantCounts[name] = (constantCounts[name] or 0) + 1
-            end
-        end
-
-        -- Recursively scan children
-        for k, v in pairs(n) do
-            if type(v) == "table" and k ~= "scope" and k ~= "parentScope" then -- Avoid cycles and scopes
-                if v.kind then -- It's a node
-                    scanConstants(v)
-                elseif type(k) == "number" then -- Array of nodes (e.g. statements)
-                    scanConstants(v)
-                end
-            end
-        end
-    end
-
-    scanConstants(node.body)
-
-    -- Allocate registers for frequent constants
-    -- We use a deterministic order to ensure consistency
-    local sortedKeys = {}
-    for k,v in pairs(constantCounts) do table.insert(sortedKeys, k) end
-    table.sort(sortedKeys, function(a,b)
-        if type(a) ~= type(b) then return type(a) < type(b) end
-        return a < b
-    end)
-
-    for _, k in ipairs(sortedKeys) do
-        local count = constantCounts[k]
-        -- Policy: Hoist all strings, and numbers used > 1 time
-        if type(k) == "string" or (type(k) == "number" and count > 1) then
-            -- Use allocRegister with forceNumeric=true to avoid special registers
-            local reg = self:allocRegister(false, true)
-
-            local expr
-            if self.encryptVmStrings and type(k) == "string" then
-                -- Encrypt string constants if enabled
-                local encryptedBytes, seed = VmConstantEncryptor.encrypt(k)
-                local byteEntries = {}
-                for _, b in ipairs(encryptedBytes) do
-                    table.insert(byteEntries, Ast.TableEntry(Ast.NumberExpression(b)))
-                end
-
-                -- Emit: DECRYPT(seed, {bytes})
-                expr = Ast.FunctionCallExpression(
-                    Ast.VariableExpression(self.scope, self.vmDecryptFuncVar),
-                    {
-                        Ast.NumberExpression(seed),
-                        Ast.TableConstructorExpression(byteEntries)
-                    }
-                )
-            else
-                expr = type(k) == "string" and Ast.StringExpression(k) or Ast.NumberExpression(k)
-            end
-
-            self:addStatement(self:setRegister(scope, reg, expr), {reg}, {}, false)
-            self.constants[k] = reg
-            self.constantRegs[reg] = true
-        end
-    end
+    -- Perform constant scanning and allocation for the function body
+    self:scanAndAllocateConstants(node.body, scope)
 
     for i, arg in ipairs(node.args) do
         if(arg.kind == AstKind.VariableExpression) then

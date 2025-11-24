@@ -2,6 +2,7 @@ local Ast = require("moonstar.ast");
 local AstKind = Ast.AstKind;
 local logger = require("logger");
 local util = require("moonstar.util");
+local VmConstantEncryptor = require("moonstar.compiler.vmConstantEncryptor")
 
 local unpack = unpack or table.unpack;
 
@@ -18,7 +19,23 @@ function Expressions.StringExpression(compiler, expression, funcDepth, numReturn
         end
 
         if(i == 1) then
-            compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.StringExpression(expression.value)), {regs[i]}, {}, false);
+            local expr = Ast.StringExpression(expression.value)
+            -- INLINE ENCRYPTION: If hoisting skipped it, encrypt here
+            if compiler.encryptVmStrings and not compiler.constants[expression.value] then
+                local encryptedBytes, seed = VmConstantEncryptor.encrypt(expression.value)
+                local byteEntries = {}
+                for _, b in ipairs(encryptedBytes) do
+                    table.insert(byteEntries, Ast.TableEntry(Ast.NumberExpression(b)))
+                end
+                expr = Ast.FunctionCallExpression(
+                    Ast.VariableExpression(compiler.scope, compiler.vmDecryptFuncVar),
+                    {
+                        Ast.NumberExpression(seed),
+                        Ast.TableConstructorExpression(byteEntries)
+                    }
+                )
+            end
+            compiler:addStatement(compiler:setRegister(scope, regs[i], expr), {regs[i]}, {}, false);
         else
             compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.NilExpression()), {regs[i]}, {}, false);
         end
@@ -95,6 +112,28 @@ function Expressions.VariableExpression(compiler, expression, funcDepth, numRetu
                 -- Use compileOperand to allow string encryption/hoisting
                 local name = expression.scope:getVariableName(expression.id)
                 local nameExpr, nameReg = compiler:compileOperand(scope, Ast.StringExpression(name), funcDepth)
+
+                -- INLINE ENCRYPTION: If global hoisting skipped it but encryption is on, encrypt here
+                if not nameReg and compiler.encryptVmStrings then
+                    local encryptedBytes, seed = VmConstantEncryptor.encrypt(name)
+                    local byteEntries = {}
+                    for _, b in ipairs(encryptedBytes) do
+                        table.insert(byteEntries, Ast.TableEntry(Ast.NumberExpression(b)))
+                    end
+
+                    local decryptCall = Ast.FunctionCallExpression(
+                        Ast.VariableExpression(compiler.scope, compiler.vmDecryptFuncVar),
+                        {
+                            Ast.NumberExpression(seed),
+                            Ast.TableConstructorExpression(byteEntries)
+                        }
+                    )
+
+                    nameReg = compiler:allocRegister()
+                    compiler:addStatement(compiler:setRegister(scope, nameReg, decryptCall), {nameReg}, {}, false)
+                    nameExpr = compiler:register(scope, nameReg)
+                end
+
                 local reads = nameReg and {nameReg} or {}
 
                 compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.IndexExpression(compiler:env(scope), nameExpr)), {regs[i]}, reads, true);
