@@ -14,6 +14,7 @@ local util = require("moonstar.util");
 local visitast = require("moonstar.visitast")
 local randomStrings = require("moonstar.randomStrings")
 local InternalVariableNamer = require("moonstar.internalVariableNamer")
+local VmConstantEncryptor = require("moonstar.compiler.vmConstantEncryptor")
 
 -- Refactored modules
 local Statements = require("moonstar.compiler.statements")
@@ -117,6 +118,9 @@ function Compiler:new(config)
         
         -- VM profile for dispatch method
         vmProfile = config.vmProfile or "baseline";
+
+        -- VM string encryption config
+        encryptVmStrings = config.encryptVmStrings or false;
         
         -- VUL-2025-003 FIX: Per-compilation salt for non-uniform distribution
         compilationSalt = config.enableInstructionRandomization and math.random(0, 2^20) or 0;
@@ -253,6 +257,11 @@ function Compiler:compile(ast)
     self.selectVar = self.scope:addVariable();
 
     local argVar = self.scope:addVariable();
+
+    -- Inject VM Constant Decryptor if enabled
+    if self.encryptVmStrings then
+        self.vmDecryptFuncVar = VmConstantEncryptor.injectDecoder(self);
+    end
 
     self.containerFuncScope = Scope:new(self.scope);
     self.whileScope = Scope:new(self.containerFuncScope);
@@ -1144,6 +1153,12 @@ function Compiler:compileFunction(node, funcDepth)
             if type(key) == "number" or type(key) == "string" then
                  constantCounts[key] = (constantCounts[key] or 0) + 1
             end
+        elseif n.kind == AstKind.VariableExpression and n.scope.isGlobal then
+            -- Also count global variable names as string constants
+            local name = n.scope:getVariableName(n.id)
+            if name then
+                constantCounts[name] = (constantCounts[name] or 0) + 1
+            end
         end
 
         -- Recursively scan children
@@ -1176,7 +1191,27 @@ function Compiler:compileFunction(node, funcDepth)
             -- Use allocRegister with forceNumeric=true to avoid special registers
             local reg = self:allocRegister(false, true)
 
-            local expr = type(k) == "string" and Ast.StringExpression(k) or Ast.NumberExpression(k)
+            local expr
+            if self.encryptVmStrings and type(k) == "string" then
+                -- Encrypt string constants if enabled
+                local encryptedBytes, seed = VmConstantEncryptor.encrypt(k)
+                local byteEntries = {}
+                for _, b in ipairs(encryptedBytes) do
+                    table.insert(byteEntries, Ast.TableEntry(Ast.NumberExpression(b)))
+                end
+
+                -- Emit: DECRYPT(seed, {bytes})
+                expr = Ast.FunctionCallExpression(
+                    Ast.VariableExpression(self.scope, self.vmDecryptFuncVar),
+                    {
+                        Ast.NumberExpression(seed),
+                        Ast.TableConstructorExpression(byteEntries)
+                    }
+                )
+            else
+                expr = type(k) == "string" and Ast.StringExpression(k) or Ast.NumberExpression(k)
+            end
+
             self:addStatement(self:setRegister(scope, reg, expr), {reg}, {}, false)
             self.constants[k] = reg
             self.constantRegs[reg] = true

@@ -1,150 +1,30 @@
 Before Renaming:
-ast.body.scope: table: 02EC5330
-Metatable: table: 00C32F78
+ast.body.scope: table: 02CBFDA8
+Metatable: table: 00BE3E90
 After Renaming:
-ast.body.scope: table: 02EC5330
-Metatable: table: 00C32F78
+ast.body.scope: table: 02CBFDA8
+Metatable: table: 00BE3E90
 Before Renaming:
-ast.body.scope: table: 08CB2F58
-Metatable: table: 00C923A8
+ast.body.scope: table: 088FED60
+Metatable: table: 00BE33C0
 After Renaming:
-ast.body.scope: table: 08CB2F58
-Metatable: table: 00C923A8
+ast.body.scope: table: 088FED60
+Metatable: table: 00BE33C0
 Before Renaming:
-ast.body.scope: table: 055E82F0
-Metatable: table: 00CF2AB0
+ast.body.scope: table: 055EB588
+Metatable: table: 00CA2BF0
 After Renaming:
-ast.body.scope: table: 055E82F0
-Metatable: table: 00CF2AB0
+ast.body.scope: table: 055EB588
+Metatable: table: 00CA2BF0
 Before Renaming:
-ast.body.scope: table: 0371AD50
-Metatable: table: 00B53BC0
+ast.body.scope: table: 03AE5608
+Metatable: table: 00CB3D58
 After Renaming:
-ast.body.scope: table: 0371AD50
-Metatable: table: 00B53BC0
+ast.body.scope: table: 03AE5608
+Metatable: table: 00CB3D58
 Before Renaming:
-ast.body.scope: table: 01AC8DE0
-Metatable: table: 00C42C98
+ast.body.scope: table: 01AE0A78
+Metatable: table: 00C12F30
 After Renaming:
-ast.body.scope: table: 01AC8DE0
-Metatable: table: 00C42C98
-Before Renaming:
-ast.body.scope: table: 02C94B08
-Metatable: table: 00BF9440
-After Renaming:
-ast.body.scope: table: 02C94B08
-Metatable: table: 00BF9440
-Before Renaming:
-ast.body.scope: table: 08C5FDA8
-Metatable: table: 00B19980
-After Renaming:
-ast.body.scope: table: 08C5FDA8
-Metatable: table: 00B19980
-Before Renaming:
-ast.body.scope: table: 0544D810
-Metatable: table: 00B394A8
-After Renaming:
-ast.body.scope: table: 0544D810
-Metatable: table: 00B394A8
-Before Renaming:
-ast.body.scope: table: 03B8A2A8
-Metatable: table: 00C42830
-After Renaming:
-ast.body.scope: table: 03B8A2A8
-Metatable: table: 00C42830
-Before Renaming:
-ast.body.scope: table: 01B62480
-Metatable: table: 00BE0D38
-After Renaming:
-ast.body.scope: table: 01B62480
-Metatable: table: 00BE0D38
-Before Renaming:
-ast.body.scope: table: 0129E140
-Metatable: table: 00B990F8
-After Renaming:
-ast.body.scope: table: 0129E140
-Metatable: table: 00B990F8
-Before Renaming:
-ast.body.scope: table: 08D3A590
-Metatable: table: 00B89390
-After Renaming:
-ast.body.scope: table: 08D3A590
-Metatable: table: 00B89390
-Before Renaming:
-ast.body.scope: table: 04FE6658
-Metatable: table: 00B994F8
-After Renaming:
-ast.body.scope: table: 04FE6658
-Metatable: table: 00B994F8
-Before Renaming:
-ast.body.scope: table: 039954C8
-Metatable: table: 00C32A60
-After Renaming:
-ast.body.scope: table: 039954C8
-Metatable: table: 00C32A60
-Before Renaming:
-ast.body.scope: table: 01942778
-Metatable: table: 00B70DD8
-After Renaming:
-ast.body.scope: table: 01942778
-Metatable: table: 00B70DD8
-Before Renaming:
-ast.body.scope: table: 014009C8
-Metatable: table: 00C395D0
-After Renaming:
-ast.body.scope: table: 014009C8
-Metatable: table: 00C395D0
-Before Renaming:
-ast.body.scope: table: 088D65C8
-Metatable: table: 00B39B10
-After Renaming:
-ast.body.scope: table: 088D65C8
-Metatable: table: 00B39B10
-Before Renaming:
-ast.body.scope: table: 05623A10
-Metatable: table: 00AF95C0
-After Renaming:
-ast.body.scope: table: 05623A10
-Metatable: table: 00AF95C0
-Before Renaming:
-ast.body.scope: table: 03923A58
-Metatable: table: 00CD2A38
-After Renaming:
-ast.body.scope: table: 03923A58
-Metatable: table: 00CD2A38
-Before Renaming:
-ast.body.scope: table: 01A70D18
-Metatable: table: 00BF1AF8
-After Renaming:
-ast.body.scope: table: 01A70D18
-Metatable: table: 00BF1AF8
-Before Renaming:
-ast.body.scope: table: 00C694D0
-Metatable: table: 00B18FE0
-After Renaming:
-ast.body.scope: table: 00C694D0
-Metatable: table: 00B18FE0
-Before Renaming:
-ast.body.scope: table: 08C9E0C8
-Metatable: table: 00B09A20
-After Renaming:
-ast.body.scope: table: 08C9E0C8
-Metatable: table: 00B09A20
-Before Renaming:
-ast.body.scope: table: 053BA7B8
-Metatable: table: 00AF8FF8
-After Renaming:
-ast.body.scope: table: 053BA7B8
-Metatable: table: 00AF8FF8
-Before Renaming:
-ast.body.scope: table: 038CF680
-Metatable: table: 00BF1B60
-After Renaming:
-ast.body.scope: table: 038CF680
-Metatable: table: 00BF1B60
-Before Renaming:
-ast.body.scope: table: 01B54B58
-Metatable: table: 00BA18A0
-After Renaming:
-ast.body.scope: table: 01B54B58
-Metatable: table: 00BA18A0
+ast.body.scope: table: 01AE0A78
+Metatable: table: 00C12F30

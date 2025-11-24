@@ -22,3 +22,6 @@ Thumbs.db
 test*.lua
 test*_output.lua
 debug_pipeline.txt
+
+.gemini/
+gha-creds-*.json

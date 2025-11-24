@@ -92,7 +92,13 @@ function Expressions.VariableExpression(compiler, expression, funcDepth, numRetu
                 end
 
                 -- OPTIMIZATION: Inline Global Name Strings
-                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.IndexExpression(compiler:env(scope), Ast.StringExpression(expression.scope:getVariableName(expression.id)))), {regs[i]}, {}, true);
+                -- Use compileOperand to allow string encryption/hoisting
+                local name = expression.scope:getVariableName(expression.id)
+                local nameExpr, nameReg = compiler:compileOperand(scope, Ast.StringExpression(name), funcDepth)
+                local reads = nameReg and {nameReg} or {}
+
+                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.IndexExpression(compiler:env(scope), nameExpr)), {regs[i]}, reads, true);
+                if nameReg then compiler:freeRegister(nameReg, false) end
             else
                 -- Local Variable
                 if(compiler.scopeFunctionDepths[expression.scope] == funcDepth) then

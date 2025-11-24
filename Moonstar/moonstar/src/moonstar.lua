@@ -215,6 +215,7 @@ local Presets   = {
             InlineVMState = true;
             ObfuscateHandlers = true;
             InstructionRandomization = false;
+            EncryptVmStrings = true;
         };
 
         Vmify2 = {
@@ -280,6 +281,7 @@ local Presets   = {
             Profile = "heavy";
             ObfuscateHandlers = true;
             InlineVMState = true;
+            EncryptVmStrings = true;
         };
 
         VmProfileRandomizer = {

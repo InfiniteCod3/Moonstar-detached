@@ -42,6 +42,10 @@ Vmify.SettingsDescriptor = {
 		type = "boolean",
 		default = true,
 	},
+	EncryptVmStrings = {
+		type = "boolean",
+		default = false,
+	}
 }
 
 function Vmify:init(settings)
@@ -50,6 +54,7 @@ function Vmify:init(settings)
 	if self.InstructionRandomization == nil then
 		self.InstructionRandomization = true  -- Default to enabled
 	end
+	self.EncryptVmStrings = settings.EncryptVmStrings
 end
 
 function Vmify:apply(ast, pipeline)
@@ -111,7 +116,8 @@ function Vmify:apply(ast, pipeline)
 		enableInstructionRandomization = enableRandomization,
 		vmProfile = profile,
 		inlineVMState = self.InlineVMState or false,
-		obfuscateHandlers = self.ObfuscateHandlers ~= false  -- Default true
+		obfuscateHandlers = self.ObfuscateHandlers ~= false,  -- Default true
+		encryptVmStrings = self.EncryptVmStrings or false
 	});
     
     -- Compile the Script into a bytecode vm
