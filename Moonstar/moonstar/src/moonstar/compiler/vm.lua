@@ -266,7 +266,6 @@ function VmGen.emitContainerFuncBody(compiler)
                 block.block.scope = Scope:new(compiler.containerFuncScope);
             else
                 -- Set parent scope for the block
-                block.block.scope = Scope:new(compiler.containerFuncScope); -- Fix: Ensure new scope or correct parent
                 block.block.scope:setParent(compiler.containerFuncScope);
             end
 
@@ -374,28 +373,25 @@ function VmGen.createJunkBlock(compiler)
 
         -- We manually construct simple AST nodes to avoid complexity
         -- These references are safe because 'blocks' are processed later
-        if op == 1 then -- Safe Assignment (Number)
-             -- VULNERABILITY FIX: Replaced unsafe arithmetic (Add) with safe number assignment
-             -- Using arithmetic on potentially uninitialized registers (nil) causes runtime crashes
+        if op == 1 then -- Add
              table.insert(block.statements, {
                 statement = Ast.AssignmentStatement({
                     compiler:registerAssignment(scope, reg1)
                 }, {
-                    Ast.NumberExpression(math.random(1, 100000))
+                    Ast.AddExpression(compiler:register(scope, reg2), compiler:register(scope, reg3))
                 }),
-                writes = lookupify({reg1}), reads = lookupify({}), usesUpvals = false
+                writes = lookupify({reg1}), reads = lookupify({reg2, reg3}), usesUpvals = false
             });
-        elseif op == 2 then -- Safe Assignment (Boolean)
-             -- VULNERABILITY FIX: Replaced unsafe arithmetic (Mul) with safe boolean assignment
+        elseif op == 2 then -- Mul
              table.insert(block.statements, {
                 statement = Ast.AssignmentStatement({
                     compiler:registerAssignment(scope, reg1)
                 }, {
-                    Ast.BooleanExpression(math.random() > 0.5)
+                    Ast.MulExpression(compiler:register(scope, reg2), Ast.NumberExpression(math.random(1, 100)))
                 }),
-                writes = lookupify({reg1}), reads = lookupify({}), usesUpvals = false
+                writes = lookupify({reg1}), reads = lookupify({reg2}), usesUpvals = false
             });
-        elseif op == 3 then -- Set String (Fake)
+        elseif op == 3 then -- Set Global (Fake)
              -- We can't easily fake globals safely without risk of crashing if env is strict
              -- So just do local assign
              table.insert(block.statements, {
@@ -417,10 +413,8 @@ function VmGen.createJunkBlock(compiler)
             });
         else -- JUMP (Fake)
              -- Jump to itself or random number (harmless since unreachable)
-             -- VULNERABILITY FIX: Jumping to a random number can accidentally hit a valid block ID
-             -- or an invalid one, causing crashes. Jump to nil to exit strictly.
              table.insert(block.statements, {
-                statement = compiler:setPos(scope, nil),
+                statement = compiler:setPos(scope, math.random(0, 100000)),
                 writes = lookupify({compiler.POS_REGISTER}), reads = lookupify({}), usesUpvals = false
             });
         end
@@ -428,7 +422,7 @@ function VmGen.createJunkBlock(compiler)
 
     -- End with a jump or return to be syntactically valid flow
     table.insert(block.statements, {
-        statement = compiler:setPos(scope, nil), -- Random jump -> Safe Exit
+        statement = compiler:setPos(scope, nil), -- Random jump
         writes = lookupify({compiler.POS_REGISTER}), reads = lookupify({}), usesUpvals = false
     });
 

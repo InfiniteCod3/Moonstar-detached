@@ -130,3 +130,63 @@ Metatable: table: 00C421F0
 After Renaming:
 ast.body.scope: table: 01A3EFB8
 Metatable: table: 00C421F0
+Before Renaming:
+ast.body.scope: table: 02D2A330
+Metatable: table: 00B22A70
+After Renaming:
+ast.body.scope: table: 02D2A330
+Metatable: table: 00B22A70
+Before Renaming:
+ast.body.scope: table: 08C84E00
+Metatable: table: 00C52838
+After Renaming:
+ast.body.scope: table: 08C84E00
+Metatable: table: 00C52838
+Before Renaming:
+ast.body.scope: table: 05439208
+Metatable: table: 00D81DE8
+After Renaming:
+ast.body.scope: table: 05439208
+Metatable: table: 00D81DE8
+Before Renaming:
+ast.body.scope: table: 03B02070
+Metatable: table: 00BC2818
+After Renaming:
+ast.body.scope: table: 03B02070
+Metatable: table: 00BC2818
+Before Renaming:
+ast.body.scope: table: 01C88180
+Metatable: table: 00C65CD0
+After Renaming:
+ast.body.scope: table: 01C88180
+Metatable: table: 00C65CD0
+Before Renaming:
+ast.body.scope: table: 02C90418
+Metatable: table: 00C33690
+After Renaming:
+ast.body.scope: table: 02C90418
+Metatable: table: 00C33690
+Before Renaming:
+ast.body.scope: table: 08C58858
+Metatable: table: 00C13238
+After Renaming:
+ast.body.scope: table: 08C58858
+Metatable: table: 00C13238
+Before Renaming:
+ast.body.scope: table: 052509A8
+Metatable: table: 00C331E8
+After Renaming:
+ast.body.scope: table: 052509A8
+Metatable: table: 00C331E8
+Before Renaming:
+ast.body.scope: table: 040C2A88
+Metatable: table: 00C83508
+After Renaming:
+ast.body.scope: table: 040C2A88
+Metatable: table: 00C83508
+Before Renaming:
+ast.body.scope: table: 01AFC798
+Metatable: table: 00C82768
+After Renaming:
+ast.body.scope: table: 01AFC798
+Metatable: table: 00C82768
