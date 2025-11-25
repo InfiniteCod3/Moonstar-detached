@@ -69,33 +69,40 @@ function VmGen.emitContainerFuncBody(compiler)
                     if targetId then
                         local targetBlock = blockMap[targetId]
 
-                        -- Check valid merge candidate:
+                        -- Check valid merge/inline candidate:
                         -- 1. Target exists and hasn't been merged
                         -- 2. Target is not the start block
-                        -- 3. Target has exactly one incoming edge (which must be from 'block')
-                        -- 4. Target is not 'block' itself (infinite loop)
+                        -- 3. Target is not 'block' itself (infinite loop)
+                        -- 4. EITHER:
+                        --    a) Target has only one predecessor (classic merge)
+                        --    b) Target is small (<= 4 statements) and can be inlined (tail duplication)
                         if targetBlock and not mergedBlocks[targetId] and
                            targetId ~= compiler.startBlockId and
-                           inDegree[targetId] == 1 and
                            targetId ~= block.id then
 
-                            -- Merge targetBlock into block
+                            local isMergeCandidate = inDegree[targetId] == 1
+                            -- Tail Duplication: Inline small blocks even if they have multiple predecessors
+                            local isInlineCandidate = #targetBlock.statements <= 4
 
-                            -- 1. Remove the jump from block (last statement)
-                            table.remove(block.statements)
+                            if isMergeCandidate or isInlineCandidate then
+                                -- 1. Remove the jump from block (last statement)
+                                table.remove(block.statements)
 
-                            -- 2. Append all statements from targetBlock
-                            for _, stat in ipairs(targetBlock.statements) do
-                                table.insert(block.statements, stat)
+                                -- 2. Append all statements from targetBlock
+                                for _, stat in ipairs(targetBlock.statements) do
+                                    table.insert(block.statements, stat)
+                                end
+
+                                -- 3. Update outEdge for block to point to target's successor
+                                outEdge[block] = outEdge[targetBlock]
+
+                                -- 4. If it was a merge, mark target as merged. If just an inline, don't.
+                                if isMergeCandidate then
+                                    mergedBlocks[targetId] = true
+                                end
+
+                                changed = true
                             end
-
-                            -- 3. Update outEdge for block
-                            outEdge[block] = outEdge[targetBlock]
-
-                            -- 4. Mark targetId as merged
-                            mergedBlocks[targetId] = true
-
-                            changed = true
                         end
                     end
                 end
@@ -212,9 +219,9 @@ function VmGen.emitContainerFuncBody(compiler)
         -- Instead of deterministic midpoint, use randomized split within a range
         local mid;
         if compiler.enableInstructionRandomization and len > 2 then
-            -- Calculate a range around the midpoint (±25% variance)
+            -- Calculate a range around the midpoint (±10% variance)
             local center = l + math.ceil(len / 2);
-            local variance = math.max(1, math.floor(len * 0.25));
+            local variance = math.max(1, math.floor(len * 0.10));
             local min_mid = math.max(l + 1, center - variance);
             local max_mid = math.min(r, center + variance);
 
@@ -319,8 +326,24 @@ function VmGen.emitContainerFuncBody(compiler)
         end
     end
 
+    -- Register Access Optimization: Declare the first 15 registers (likely hot paths) in a fixed order.
+    -- Shuffle the rest to maintain security through randomization.
+    local hotRegisters = {}
+    local coldRegisters = {}
+    for i, var in ipairs(declarations) do
+        if i <= 15 then
+            table.insert(hotRegisters, var)
+        else
+            table.insert(coldRegisters, var)
+        end
+    end
+    util.shuffle(coldRegisters)
+    local finalDeclarations = {}
+    for _, var in ipairs(hotRegisters) do table.insert(finalDeclarations, var) end
+    for _, var in ipairs(coldRegisters) do table.insert(finalDeclarations, var) end
+
     local stats = {
-        Ast.LocalVariableDeclaration(compiler.containerFuncScope, util.shuffle(declarations), {});
+        Ast.LocalVariableDeclaration(compiler.containerFuncScope, finalDeclarations, {});
         Ast.WhileStatement(whileBody, Ast.VariableExpression(compiler.containerFuncScope, compiler.posVar));
         Ast.AssignmentStatement({
             Ast.AssignmentVariable(compiler.containerFuncScope, compiler.posVar)
