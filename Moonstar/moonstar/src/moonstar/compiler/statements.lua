@@ -5,6 +5,50 @@ local util = require("moonstar.util");
 
 local unpack = unpack or table.unpack;
 
+local isComparisonOp = {
+    [AstKind.LessThanExpression] = true,
+    [AstKind.GreaterThanExpression] = true,
+    [AstKind.LessThanOrEqualsExpression] = true,
+    [AstKind.GreaterThanOrEqualsExpression] = true,
+    [AstKind.NotEqualsExpression] = true,
+    [AstKind.EqualsExpression] = true,
+}
+
+local function emitConditionalJump(compiler, condition, trueBlock, falseBlock, funcDepth)
+    local scope = compiler.activeBlock.scope
+
+    if isComparisonOp[condition.kind] then
+        -- Fused instruction path: Directly use the comparison in the jump logic
+        -- This avoids creating an intermediate register for the boolean result.
+        local lhsExpr, lhsReg = compiler:compileOperand(scope, condition.lhs, funcDepth)
+        local rhsExpr, rhsReg = compiler:compileOperand(scope, condition.rhs, funcDepth)
+
+        local reads = {}
+        if lhsReg then table.insert(reads, lhsReg) end
+        if rhsReg then table.insert(reads, rhsReg) end
+
+        local fusedCondition = Ast[condition.kind](lhsExpr, rhsExpr)
+
+        compiler:addStatement(
+            compiler:setRegister(scope, compiler.POS_REGISTER, Ast.OrExpression(
+                Ast.AndExpression(fusedCondition, Ast.NumberExpression(trueBlock.id)),
+                Ast.NumberExpression(falseBlock.id)
+            )),
+            {compiler.POS_REGISTER},
+            reads,
+            true -- can use upvalues if lhs/rhs are upvalues
+        );
+
+        if lhsReg then compiler:freeRegister(lhsReg, false) end
+        if rhsReg then compiler:freeRegister(rhsReg, false) end
+    else
+        -- Original path for complex conditions (e.g. with 'and'/'or' or function calls)
+        local conditionReg = compiler:compileExpression(condition, funcDepth, 1)[1];
+        compiler:addStatement(compiler:setRegister(scope, compiler.POS_REGISTER, Ast.OrExpression(Ast.AndExpression(compiler:register(scope, conditionReg), Ast.NumberExpression(trueBlock.id)), Ast.NumberExpression(falseBlock.id))), {compiler.POS_REGISTER}, {conditionReg}, false);
+        compiler:freeRegister(conditionReg, false);
+    end
+end
+
 local Statements = {}
 
 function Statements.ReturnStatement(compiler, statement, funcDepth)
@@ -348,51 +392,40 @@ function Statements.AssignmentStatement(compiler, statement, funcDepth)
 end
 
 function Statements.IfStatement(compiler, statement, funcDepth)
-    local scope = compiler.activeBlock.scope;
-    local conditionReg = compiler:compileExpression(statement.condition, funcDepth, 1)[1];
     local finalBlock = compiler:createBlock();
-
-    local nextBlock
+    local nextBlock;
     if statement.elsebody or #statement.elseifs > 0 then
         nextBlock = compiler:createBlock();
     else
         nextBlock = finalBlock;
     end
+
     local innerBlock = compiler:createBlock();
-
-    compiler:addStatement(compiler:setRegister(scope, compiler.POS_REGISTER, Ast.OrExpression(Ast.AndExpression(compiler:register(scope, conditionReg), Ast.NumberExpression(innerBlock.id)), Ast.NumberExpression(nextBlock.id))), {compiler.POS_REGISTER}, {conditionReg}, false);
-
-    compiler:freeRegister(conditionReg, false);
+    emitConditionalJump(compiler, statement.condition, innerBlock, nextBlock, funcDepth);
 
     compiler:setActiveBlock(innerBlock);
-    scope = innerBlock.scope
     compiler:compileBlock(statement.body, funcDepth);
-    compiler:addStatement(compiler:setRegister(scope, compiler.POS_REGISTER, Ast.NumberExpression(finalBlock.id)), {compiler.POS_REGISTER}, {}, false);
+    compiler:addStatement(compiler:setPos(compiler.activeBlock.scope, finalBlock.id), {compiler.POS_REGISTER}, {}, false);
 
     for i, eif in ipairs(statement.elseifs) do
         compiler:setActiveBlock(nextBlock);
-        conditionReg = compiler:compileExpression(eif.condition, funcDepth, 1)[1];
-        local innerBlock = compiler:createBlock();
         if statement.elsebody or i < #statement.elseifs then
             nextBlock = compiler:createBlock();
         else
             nextBlock = finalBlock;
         end
-        local scope = compiler.activeBlock.scope;
-        compiler:addStatement(compiler:setRegister(scope, compiler.POS_REGISTER, Ast.OrExpression(Ast.AndExpression(compiler:register(scope, conditionReg), Ast.NumberExpression(innerBlock.id)), Ast.NumberExpression(nextBlock.id))), {compiler.POS_REGISTER}, {conditionReg}, false);
-
-        compiler:freeRegister(conditionReg, false);
+        local innerBlock = compiler:createBlock();
+        emitConditionalJump(compiler, eif.condition, innerBlock, nextBlock, funcDepth);
 
         compiler:setActiveBlock(innerBlock);
-        scope = innerBlock.scope;
         compiler:compileBlock(eif.body, funcDepth);
-        compiler:addStatement(compiler:setRegister(scope, compiler.POS_REGISTER, Ast.NumberExpression(finalBlock.id)), {compiler.POS_REGISTER}, {}, false);
+        compiler:addStatement(compiler:setPos(compiler.activeBlock.scope, finalBlock.id), {compiler.POS_REGISTER}, {}, false);
     end
 
     if statement.elsebody then
         compiler:setActiveBlock(nextBlock);
         compiler:compileBlock(statement.elsebody, funcDepth);
-        compiler:addStatement(compiler:setRegister(scope, compiler.POS_REGISTER, Ast.NumberExpression(finalBlock.id)), {compiler.POS_REGISTER}, {}, false);
+        compiler:addStatement(compiler:setPos(compiler.activeBlock.scope, finalBlock.id), {compiler.POS_REGISTER}, {}, false);
     end
 
     compiler:setActiveBlock(finalBlock);

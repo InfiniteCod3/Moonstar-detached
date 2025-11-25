@@ -25,7 +25,7 @@ Vmify.SettingsDescriptor = {
 	},
 	Profile = {
 		type = "enum",
-		values = {"baseline", "stealth", "heavy", "array"},
+		values = {"baseline", "stealth", "heavy"},
 		default = "baseline",
 	},
 	PartialRatio = {

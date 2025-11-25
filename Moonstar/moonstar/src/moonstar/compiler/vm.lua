@@ -256,58 +256,8 @@ function VmGen.emitContainerFuncBody(compiler)
     end
 
     local whileBody;
-    local useArrayDispatch = (compiler.vmProfile == "array");
-    local handlerTableDecl; -- Declaration for array dispatch
-
-    if useArrayDispatch then
-        -- Array-based dispatch: create a dense handler table (list) with sequential indices
-        local handlerVar = compiler.containerFuncScope:addVariable();
-        local handlerEntries = {};
-
-        for _, block in ipairs(blocks) do
-            local id = block.id;
-
-            -- Ensure block has a valid scope
-            if not block.block.scope then
-                -- Create a new scope if missing
-                block.block.scope = Scope:new(compiler.containerFuncScope);
-            else
-                -- Set parent scope for the block
-                block.block.scope:setParent(compiler.containerFuncScope);
-            end
-
-            -- Handler function that executes the block code
-            local handlerFunc = Ast.FunctionLiteralExpression({}, block.block);
-
-            -- Add to handler table using sequential indices (dense list)
-            -- Since blocks are sorted by ID and IDs are sequential (1..N),
-            -- we can use TableEntry instead of KeyedTableEntry
-            table.insert(handlerEntries, Ast.TableEntry(handlerFunc));
-        end
-
-        -- Create the handler table declaration
-        handlerTableDecl = Ast.LocalVariableDeclaration(
-            compiler.containerFuncScope,
-            {handlerVar},
-            {Ast.TableConstructorExpression(handlerEntries)}
-        );
-
-        -- Create the dispatch loop: while pos do handlers[pos]() end
-        compiler.whileScope:addReferenceToHigherScope(compiler.containerFuncScope, handlerVar);
-
-        local dispatchCall = Ast.FunctionCallStatement(
-            Ast.IndexExpression(
-                Ast.VariableExpression(compiler.containerFuncScope, handlerVar),
-                Ast.VariableExpression(compiler.containerFuncScope, compiler.posVar)
-            ),
-            {}
-        );
-
-        whileBody = Ast.Block({dispatchCall}, compiler.whileScope);
-    else
-        -- Standard binary search tree dispatch (if-chain)
-        whileBody = buildWhileBody(blocks, 1, #blocks, compiler.containerFuncScope, compiler.whileScope);
-    end
+    -- Standard binary search tree dispatch (if-chain)
+    whileBody = buildWhileBody(blocks, 1, #blocks, compiler.containerFuncScope, compiler.whileScope);
 
     compiler.whileScope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.returnVar, 1);
     compiler.whileScope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.posVar);
@@ -320,9 +270,7 @@ function VmGen.emitContainerFuncBody(compiler)
 
     for i, var in pairs(compiler.registerVars) do
         if(i ~= compiler.MAX_REGS) then
-            if not useArrayDispatch then
-                table.insert(declarations, var);
-            end
+            table.insert(declarations, var);
         end
     end
 
@@ -357,23 +305,12 @@ function VmGen.emitContainerFuncBody(compiler)
         }
     }
 
-    if not useArrayDispatch and compiler.maxUsedRegister >= compiler.MAX_REGS then
+    if compiler.maxUsedRegister >= compiler.MAX_REGS then
         -- Ensure registerVars[MAX_REGS] exists before using it
         if not compiler.registerVars[compiler.MAX_REGS] then
             compiler.registerVars[compiler.MAX_REGS] = compiler.containerFuncScope:addVariable();
         end
         table.insert(stats, 1, Ast.LocalVariableDeclaration(compiler.containerFuncScope, {compiler.registerVars[compiler.MAX_REGS]}, {Ast.TableConstructorExpression({})}));
-    end
-
-    -- Insert handler table declaration if using array dispatch
-    if useArrayDispatch then
-        -- Declare registers table
-        table.insert(stats, 1, Ast.LocalVariableDeclaration(compiler.containerFuncScope, {compiler.registersTableVar}, {Ast.TableConstructorExpression({})}));
-
-        if handlerTableDecl then
-            -- Must be inserted AFTER registers (index 1) and returnVar (index 2) declarations
-            table.insert(stats, 3, handlerTableDecl);
-        end
     end
 
     return Ast.Block(stats, compiler.containerFuncScope);

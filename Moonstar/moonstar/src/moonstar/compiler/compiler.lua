@@ -158,10 +158,7 @@ end
 
 function Compiler:createBlock()
     local id;
-    if self.vmProfile == "array" then
-        -- Array profile: use sequential block IDs (1..N) for dense handler table
-        id = #self.blocks + 1;
-    elseif self.enableInstructionRandomization then
+    if self.enableInstructionRandomization then
         -- VUL-2025-003 FIX: Non-uniform distribution to prevent statistical fingerprinting
         repeat
             -- Use exponential distribution with random base and exponent
@@ -882,11 +879,6 @@ function Compiler:register(scope, id)
         return self:getReturn(scope);
     end
 
-    if self.vmProfile == "array" then
-        scope:addReferenceToHigherScope(self.containerFuncScope, self.registersTableVar);
-        return Ast.IndexExpression(Ast.VariableExpression(self.containerFuncScope, self.registersTableVar), Ast.NumberExpression(id));
-    end
-
     if id < MAX_REGS then
         local vid = self:getRegisterVarId(id);
         scope:addReferenceToHigherScope(self.containerFuncScope, vid);
@@ -912,11 +904,6 @@ function Compiler:registerAssignment(scope, id)
     end
     if id == self.RETURN_REGISTER then
         return self:returnAssignment(scope);
-    end
-
-    if self.vmProfile == "array" then
-        scope:addReferenceToHigherScope(self.containerFuncScope, self.registersTableVar);
-        return Ast.AssignmentIndexing(Ast.VariableExpression(self.containerFuncScope, self.registersTableVar), Ast.NumberExpression(id));
     end
 
     if id < MAX_REGS then
