@@ -10,7 +10,7 @@ local Presets = moonstar.Presets
 -- Helper to run command and get output
 local function run_command(cmd)
     local handle = io.popen(cmd)
-    if not handle then return "" end
+    if not handle then return "", "popen failed" end
     local result = handle:read("*a")
     handle:close()
     return result or ""
@@ -25,25 +25,19 @@ local function get_test_files()
     local cmd
     if separator == '\\' then
         -- Windows
-        cmd = 'dir /b "tests\\*.lua"'
+        cmd = 'dir /s /b "tests\\*.lua" "tests\\*.luau"'
     else
         -- Unix-like (Linux, macOS)
-        cmd = 'ls tests/*.lua 2>/dev/null'
+        cmd = 'find tests -type f \\( -name "*.lua" -o -name "*.luau" \\)'
     end
     
     local handle = io.popen(cmd)
     if handle then
         for line in handle:lines() do
-            -- Trim whitespace just in case
             line = line:gsub("^%s*(.-)%s*$", "%1")
-            if line ~= "" then
-                -- On Unix, ls returns full path, on Windows just filename
-                if separator == '\\' then
-                    table.insert(files, "tests/" .. line)
-                else
-                    -- Already has path from ls
-                    table.insert(files, line)
-                end
+            line = line:gsub("\\", "/")
+            if line ~= "" and not line:match("^tests/setup/") then
+                table.insert(files, line)
             end
         end
         handle:close()
@@ -61,18 +55,98 @@ local function run_lua_code(code)
     f:close()
 
     -- Capture stderr as well
-    local output = run_command("lua " .. tmp_file .. " 2>&1")
+    local output = run_command("lua5.1 " .. tmp_file .. " 2>&1")
     os.remove(tmp_file)
     return output
 end
 
 -- Main test loop
 local test_files = get_test_files()
+table.sort(test_files)
 local failed_tests = 0
 local total_tests = 0
 
 print("Starting Moonstar Test Runner...")
 print("Found " .. #test_files .. " test files.")
+
+local AURORA_EMULATOR_PATH = "tests/setup/aurora.lua"
+local aurora_emulator_code = nil
+local f = io.open(AURORA_EMULATOR_PATH, "r")
+if f then
+    aurora_emulator_code = f:read("*a")
+    f:close()
+else
+    print("[ERROR] Could not read emulator file: " .. AURORA_EMULATOR_PATH)
+end
+
+local function run_single_test(file_path, pipeline)
+    total_tests = total_tests + 1
+    print("  Running test: " .. file_path)
+
+    local f = io.open(file_path, "r")
+    if not f then
+        print("    [ERROR] Could not read file: " .. file_path)
+        failed_tests = failed_tests + 1
+        return
+    end
+    local original_code = f:read("*a")
+    f:close()
+
+    local code_to_run = original_code
+    if file_path:match("%.luau$") then
+        if not aurora_emulator_code then
+            print("    [ERROR] Aurora emulator not loaded, skipping " .. file_path)
+            failed_tests = failed_tests + 1
+            return
+        end
+        code_to_run = aurora_emulator_code .. "\n" .. original_code
+    end
+
+    -- 1. Run original code
+    local expected_output = run_lua_code(code_to_run)
+
+    -- 2. Obfuscate
+    local status, obfuscated_code = pcall(function()
+        return pipeline:apply(original_code, file_path)
+    end)
+
+    if not status then
+        print("    [FAIL] Obfuscation error: " .. tostring(obfuscated_code))
+        failed_tests = failed_tests + 1
+        return
+    end
+
+    -- 3. Run obfuscated code
+    local obfuscated_code_to_run = obfuscated_code
+    if file_path:match("%.luau$") then
+        if aurora_emulator_code then
+            obfuscated_code_to_run = aurora_emulator_code .. "\n" .. obfuscated_code
+        end
+    end
+    local actual_output = run_lua_code(obfuscated_code_to_run)
+
+    -- 4. Compare
+    -- Trim whitespace for comparison
+    local expected_clean = expected_output:gsub("%s+$", ""):gsub("\r\n", "\n")
+    local actual_clean = actual_output:gsub("%s+$", ""):gsub("\r\n", "\n")
+
+    if expected_clean == actual_clean then
+        print("    [PASS] Output matches")
+    else
+        print("    [FAIL] Output mismatch")
+        print("      Expected: " .. string.format("%q", expected_clean))
+        print("      Actual:   " .. string.format("%q", actual_clean))
+        failed_tests = failed_tests + 1
+
+        -- Save failed code
+        local f_fail = io.open("failed_code.lua", "w")
+        if f_fail then
+            f_fail:write(obfuscated_code)
+            f_fail:close()
+            print("    [INFO] Saved failed code to failed_code.lua")
+        end
+    end
+end
 
 -- Sort presets to have a consistent order
 local preset_names = {}
@@ -90,55 +164,7 @@ for _, preset_name in ipairs(preset_names) do
     local pipeline = Pipeline:fromConfig(preset_config)
     
     for _, file_path in ipairs(test_files) do
-        total_tests = total_tests + 1
-        print("  Running test: " .. file_path)
-        
-        local f = io.open(file_path, "r")
-        if not f then
-            print("    [ERROR] Could not read file: " .. file_path)
-            failed_tests = failed_tests + 1
-        else
-            local original_code = f:read("*a")
-            f:close()
-            
-            -- 1. Run original code
-            local expected_output = run_lua_code(original_code)
-            
-            -- 2. Obfuscate
-            local status, obfuscated_code = pcall(function() 
-                return pipeline:apply(original_code, file_path) 
-            end)
-            
-            if not status then
-                print("    [FAIL] Obfuscation error: " .. tostring(obfuscated_code))
-                failed_tests = failed_tests + 1
-            else
-                -- 3. Run obfuscated code
-                local actual_output = run_lua_code(obfuscated_code)
-                
-                -- 4. Compare
-                -- Trim whitespace for comparison
-                local expected_clean = expected_output:gsub("%s+$", ""):gsub("\r\n", "\n")
-                local actual_clean = actual_output:gsub("%s+$", ""):gsub("\r\n", "\n")
-                
-                if expected_clean == actual_clean then
-                    print("    [PASS] Output matches")
-                else
-                    print("    [FAIL] Output mismatch")
-                    print("      Expected: " .. string.format("%q", expected_clean))
-                    print("      Actual:   " .. string.format("%q", actual_clean))
-                    failed_tests = failed_tests + 1
-                    
-                    -- Save failed code
-                    local f_fail = io.open("failed_code.lua", "w")
-                    if f_fail then
-                        f_fail:write(obfuscated_code)
-                        f_fail:close()
-                        print("    [INFO] Saved failed code to failed_code.lua")
-                    end
-                end
-            end
-        end
+        run_single_test(file_path, pipeline)
     end
 end
 

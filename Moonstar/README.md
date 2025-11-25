@@ -86,6 +86,21 @@ To run the test suite:
 lua5.1 runtests.lua
 ```
 
+### Testing Luau and Roblox Scripts
+
+Moonstar includes a mock Roblox environment emulator called **Aurora** to allow for testing Luau code that uses Roblox-specific APIs.
+
+- **Location:** `tests/setup/aurora.lua`
+- **Functionality:** Mocks common Roblox globals like `game`, `workspace`, `Instance`, `Players`, and various data types.
+
+When `runtests.lua` is executed, it automatically discovers and runs `.luau` files found in the `tests/` directory. The Aurora emulator is prepended to each `.luau` test file at runtime, allowing you to write tests using Roblox APIs.
+
+To add a new Roblox-specific test:
+1. Create a new file with a `.luau` extension inside the `tests/luau/` directory.
+2. Write your test code using standard Roblox APIs.
+
+The test runner will handle the rest.
+
 ## Copyright
 
 © 2025 Moonstar. All rights reserved.
