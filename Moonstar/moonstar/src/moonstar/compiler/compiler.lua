@@ -852,67 +852,19 @@ function Compiler:isLiteral(expr)
 end
 
 function Compiler:compileOperand(scope, expr, funcDepth)
-    -- OPTIMIZATION: Super-Operators (Expression Fusion)
-    -- This logic "fuses" multiple VM instructions into single complex Lua expressions.
-    -- Example: 'a = b + c' becomes 'regs[a] = regs[b] + regs[c]' (1 instr)
-    -- instead of 't1=regs[b]; t2=regs[c]; regs[a]=t1+t2' (3 instr).
-
-    -- 1. Literals (Constant Folding / Inlining)
     if self:isLiteral(expr) then
-        -- Check shared constant pool
+        -- OPTIMIZATION: Shared Constant Pool
+        -- Check if this literal is in our constant pool
         if (expr.kind == AstKind.StringExpression or expr.kind == AstKind.NumberExpression) and self.constants[expr.value] then
             local reg = self.constants[expr.value]
             return self:register(scope, reg), reg
         end
+
+        -- Return the AST node directly (no register allocation)
         return expr, nil
     end
 
-    -- 2. Variables (Variable Access Fusion)
-    -- Directly return the access node (regs[x], env[x]) without intermediate register copy
-    if expr.kind == AstKind.VariableExpression then
-        if expr.scope.isGlobal then
-            -- Global: env["name"]
-            local name = expr.scope:getVariableName(expr.id)
-            -- We recursively compile the string name to support encryption if enabled
-            local nameExpr, _ = self:compileOperand(scope, Ast.StringExpression(name), funcDepth)
-            return Ast.IndexExpression(self:env(scope), nameExpr), nil
-        elseif self.scopeFunctionDepths[expr.scope] == funcDepth then
-            if self:isUpvalue(expr.scope, expr.id) then
-                -- Local Upvalue: upvalues[id]
-                local reg = self:getVarRegister(expr.scope, expr.id, funcDepth, nil)
-                return self:getUpvalueMember(scope, self:register(scope, reg)), nil
-            else
-                -- Local Variable: regs[id]
-                local reg = self:getVarRegister(expr.scope, expr.id, funcDepth, nil)
-                return self:register(scope, reg), reg
-            end
-        else
-            -- External Upvalue: upvalues[upvalId]
-            local upvalId = self:getUpvalueId(expr.scope, expr.id)
-            scope:addReferenceToHigherScope(self.containerFuncScope, self.currentUpvaluesVar)
-            return self:getUpvalueMember(scope, Ast.IndexExpression(Ast.VariableExpression(self.containerFuncScope, self.currentUpvaluesVar), Ast.NumberExpression(upvalId))), nil
-        end
-    end
-
-    -- 3. Safe Expression Fusion (Recursive Inlining)
-    -- If expression is pure data flow (math, logic, len), fuse it!
-    if self:isSafeExpression(expr) then
-        -- Binary Operations (Add, Sub, Mul, Eq, etc.)
-        if expr.kind == AstKind.BinaryExpression or self.BIN_OPS[expr.kind] then
-             local lhs, _ = self:compileOperand(scope, expr.lhs, funcDepth)
-             local rhs, _ = self:compileOperand(scope, expr.rhs, funcDepth)
-             return Ast[expr.kind](lhs, rhs), nil
-        end
-
-        -- Unary Operations
-        if expr.kind == AstKind.NotExpression or expr.kind == AstKind.NegateExpression or expr.kind == AstKind.LenExpression then
-             local rhs, _ = self:compileOperand(scope, expr.rhs, funcDepth)
-             return Ast[expr.kind](rhs), nil
-        end
-    end
-
-    -- 4. Fallback (Complex/Unsafe Expressions)
-    -- Compile to a temporary register (standard behavior)
+    -- Otherwise compile to a register
     local reg = self:compileExpression(expr, funcDepth, 1)[1]
     return self:register(scope, reg), reg
 end
@@ -1046,28 +998,8 @@ function Compiler:setPos(scope, val)
         scope:addReferenceToHigherScope(self.containerFuncScope, self.posVar);
         return Ast.AssignmentStatement({Ast.AssignmentVariable(self.containerFuncScope, self.posVar)}, {v});
     end
-
-    -- SECURITY: Opaque Predicate (Control Flow Obfuscation)
-    -- Generate: pos = val + (#detectGcCollectVar - upvalsProxyLenReturn)
-    -- At runtime, this evaluates to: pos = val + (R - R) = val
-    -- Static analysis sees a dependency on an external object and cannot resolve the jump target.
-    
     scope:addReferenceToHigherScope(self.containerFuncScope, self.posVar);
-    scope:addReferenceToHigherScope(self.containerFuncScope, self.detectGcCollectVar);
-
-    local opaqueZero = Ast.SubExpression(
-        Ast.LenExpression(Ast.VariableExpression(self.containerFuncScope, self.detectGcCollectVar)),
-        Ast.NumberExpression(self.upvalsProxyLenReturn)
-    );
-
-    -- Use super-operator fusion if available (it will handle the add)
-    -- We construct the AST node manually to ensure specific structure
-    local targetExpr = Ast.AddExpression(
-        Ast.NumberExpression(val),
-        opaqueZero
-    );
-
-    return Ast.AssignmentStatement({Ast.AssignmentVariable(self.containerFuncScope, self.posVar)}, {targetExpr});
+    return Ast.AssignmentStatement({Ast.AssignmentVariable(self.containerFuncScope, self.posVar)}, {Ast.NumberExpression(val) or Ast.NilExpression()});
 end
 
 function Compiler:setReturn(scope, val)
