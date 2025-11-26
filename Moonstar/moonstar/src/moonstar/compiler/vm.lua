@@ -157,23 +157,40 @@ function VmGen.emitContainerFuncBody(compiler)
         local candidates = {}
         for _, block in ipairs(compiler.blocks) do
              -- Only clone small blocks that have multiple predecessors
-             if predecessors[block.id] and #predecessors[block.id] >= 2 and #block.statements <= 5 then
+             if predecessors[block.id] and #predecessors[block.id] >= 2 and #block.statements <= 8 then
                   table.insert(candidates, block)
              end
         end
 
         -- 3. Perform Cloning
-        -- Limit to a few clones to avoid code bloat
-        local numClones = math.min(#candidates, math.random(2, 5))
+        -- Limit to a reasonable number to balance security and size
+        local numClones = math.min(#candidates, math.random(5, 15))
         for i = 1, numClones do
              local original = candidates[math.random(1, #candidates)]
              
              -- Create Clone
              local clone = compiler:createBlock() -- Generates new ID
+             
              -- Copy statements (reuse AST nodes as they are immutable-ish)
              for _, stat in ipairs(original.statements) do
                   table.insert(clone.statements, stat)
              end
+             
+             -- Divergent Cloning: Insert harmless junk instruction to change signature
+             -- Insert at random position (except last if it's a jump)
+             local insertPos = math.random(1, math.max(1, #clone.statements - 1))
+             local junkReg = math.random(1, compiler.MAX_REGS - 1)
+             
+             local junkStat = {
+                statement = Ast.AssignmentStatement({
+                    compiler:registerAssignment(clone.scope, junkReg)
+                }, {
+                    Ast.NilExpression() -- simple reg = nil
+                }),
+                writes = lookupify({junkReg}), reads = lookupify({}), usesUpvals = false
+             }
+             table.insert(clone.statements, insertPos, junkStat)
+
              -- Clone should not advance automatically since we copied the jump
              clone.advanceToNextBlock = false 
 
@@ -291,74 +308,73 @@ function VmGen.emitContainerFuncBody(compiler)
 end
 
 function VmGen.createJunkBlock(compiler)
-    -- Generates a dead code block for security (fake control flow)
-    -- Uses random valid instructions but is never jumped to
+    -- TRAP BLOCKS (Honeypots): These blocks are unreachable code.
+    -- If execution reaches here (via anti-tamper trigger or bad jump patch),
+    -- we crash the VM or corrupt state intentionally.
+    
     local block = compiler:createBlock();
     local scope = block.scope;
+    
+    local trapType = math.random(1, 3);
+    
+    if trapType == 1 then
+        -- TRAP: Corrupt the Instruction Pointer (POS)
+        -- Assigning a table/string to POS will crash the binary search dispatch 
+        -- (comparing table < number errors) or the next loop iteration.
+        -- This is a "delayed" crash which is harder to pinpoint.
+        table.insert(block.statements, {
+            statement = Ast.AssignmentStatement({
+                compiler:posAssignment(scope)
+            }, {
+                Ast.TableConstructorExpression({})
+            }),
+            writes = lookupify({compiler.POS_REGISTER}), reads = lookupify({}), usesUpvals = false
+        });
+        
+    elseif trapType == 2 then
+         -- TRAP: Call a non-function (Attempt to call a table)
+         -- local temp = {}; temp();
+         -- This generates a runtime error "attempt to call a table value"
+         local reg = math.random(1, compiler.MAX_REGS - 1);
+         
+         table.insert(block.statements, {
+            statement = Ast.AssignmentStatement({
+                compiler:registerAssignment(scope, reg)
+            }, {
+                Ast.TableConstructorExpression({})
+            }),
+            writes = lookupify({reg}), reads = lookupify({}), usesUpvals = false
+         });
+         
+         table.insert(block.statements, {
+            statement = Ast.FunctionCallExpression(compiler:register(scope, reg), {}),
+            writes = lookupify({}), reads = lookupify({reg}), usesUpvals = false
+         });
+         
+    else
+         -- TRAP: Arithmetic on nil/table
+         -- local temp = {}; temp = temp + 1;
+         -- This generates a runtime error "attempt to perform arithmetic on a table value"
+         local reg = math.random(1, compiler.MAX_REGS - 1);
+         
+         table.insert(block.statements, {
+            statement = Ast.AssignmentStatement({
+                compiler:registerAssignment(scope, reg)
+            }, {
+                Ast.TableConstructorExpression({})
+            }),
+            writes = lookupify({reg}), reads = lookupify({}), usesUpvals = false
+         });
 
-    -- Generate 3-8 random instructions
-    local numInstr = math.random(3, 8);
-    for i = 1, numInstr do
-        local op = math.random(1, 5);
-        -- Use temp registers to avoid corrupting real state (though this block runs nowhere)
-        local reg1 = math.random(1, compiler.MAX_REGS-1);
-        local reg2 = math.random(1, compiler.MAX_REGS-1);
-        local reg3 = math.random(1, compiler.MAX_REGS-1);
-
-        -- We manually construct simple AST nodes to avoid complexity
-        -- These references are safe because 'blocks' are processed later
-        if op == 1 then -- Add
-             table.insert(block.statements, {
-                statement = Ast.AssignmentStatement({
-                    compiler:registerAssignment(scope, reg1)
-                }, {
-                    Ast.AddExpression(compiler:register(scope, reg2), compiler:register(scope, reg3))
-                }),
-                writes = lookupify({reg1}), reads = lookupify({reg2, reg3}), usesUpvals = false
-            });
-        elseif op == 2 then -- Mul
-             table.insert(block.statements, {
-                statement = Ast.AssignmentStatement({
-                    compiler:registerAssignment(scope, reg1)
-                }, {
-                    Ast.MulExpression(compiler:register(scope, reg2), Ast.NumberExpression(math.random(1, 100)))
-                }),
-                writes = lookupify({reg1}), reads = lookupify({reg2}), usesUpvals = false
-            });
-        elseif op == 3 then -- Set Global (Fake)
-             -- We can't easily fake globals safely without risk of crashing if env is strict
-             -- So just do local assign
-             table.insert(block.statements, {
-                statement = Ast.AssignmentStatement({
-                    compiler:registerAssignment(scope, reg1)
-                }, {
-                    Ast.StringExpression(randomStrings.randomString(5))
-                }),
-                writes = lookupify({reg1}), reads = lookupify({}), usesUpvals = false
-            });
-        elseif op == 4 then -- Table Create
-             table.insert(block.statements, {
-                statement = Ast.AssignmentStatement({
-                    compiler:registerAssignment(scope, reg1)
-                }, {
-                    Ast.TableConstructorExpression({})
-                }),
-                writes = lookupify({reg1}), reads = lookupify({}), usesUpvals = false
-            });
-        else -- JUMP (Fake)
-             -- Jump to itself or random number (harmless since unreachable)
-             table.insert(block.statements, {
-                statement = compiler:setPos(scope, math.random(0, 100000)),
-                writes = lookupify({compiler.POS_REGISTER}), reads = lookupify({}), usesUpvals = false
-            });
-        end
+         table.insert(block.statements, {
+            statement = Ast.AssignmentStatement({
+                compiler:registerAssignment(scope, reg)
+            }, {
+                Ast.AddExpression(compiler:register(scope, reg), Ast.NumberExpression(math.random(1, 100)))
+            }),
+            writes = lookupify({reg}), reads = lookupify({reg}), usesUpvals = false
+         });
     end
-
-    -- End with a jump or return to be syntactically valid flow
-    table.insert(block.statements, {
-        statement = compiler:setPos(scope, nil), -- Random jump
-        writes = lookupify({compiler.POS_REGISTER}), reads = lookupify({}), usesUpvals = false
-    });
 
     -- Mark as not advancing so we don't append more to it accidentally
     block.advanceToNextBlock = false;
