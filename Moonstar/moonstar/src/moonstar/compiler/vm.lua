@@ -75,14 +75,15 @@ function VmGen.emitContainerFuncBody(compiler)
                         -- 3. Target is not 'block' itself (infinite loop)
                         -- 4. EITHER:
                         --    a) Target has only one predecessor (classic merge)
-                        --    b) Target is small (<= 4 statements) and can be inlined (tail duplication)
+                        --    b) Target is small (<= 12 statements) and can be inlined (tail duplication)
                         if targetBlock and not mergedBlocks[targetId] and
                            targetId ~= compiler.startBlockId and
                            targetId ~= block.id then
 
                             local isMergeCandidate = inDegree[targetId] == 1
                             -- Tail Duplication: Inline small blocks even if they have multiple predecessors
-                            local isInlineCandidate = #targetBlock.statements <= 4
+                            -- OPTIMIZATION: Increased threshold to 12 to reduce dispatch overhead
+                            local isInlineCandidate = #targetBlock.statements <= 12
 
                             if isMergeCandidate or isInlineCandidate then
                                 -- 1. Remove the jump from block (last statement)
@@ -118,84 +119,92 @@ function VmGen.emitContainerFuncBody(compiler)
         end
         compiler.blocks = newBlocks
     end
+    
+    -- FEATURE: Junk Blocks (Dead Code Insertion)
+    -- Insert 3-6 junk blocks to confuse reverse engineers
+    -- These blocks are syntactically valid but unreachable
+    for i = 1, math.random(3, 6) do
+        VmGen.createJunkBlock(compiler)
+    end
+
+    -- FEATURE: Block Cloning (Polymorphism)
+    -- Duplicate some blocks and rewire random predecessors to point to the clone
+    -- This creates multiple "handlers" (block IDs) for the same logic
+    if compiler.enableInstructionRandomization then
+        local blockMap = {}
+        for _, block in ipairs(compiler.blocks) do
+            blockMap[block.id] = block
+        end
+
+        -- 1. Build Predecessor Map
+        local predecessors = {} -- targetId -> list of {block, statIndex}
+        for _, block in ipairs(compiler.blocks) do
+            if #block.statements > 0 then
+                local lastStatWrapper = block.statements[#block.statements]
+                if lastStatWrapper.writes[compiler.POS_REGISTER] then
+                    local assignStat = lastStatWrapper.statement
+                    local val = assignStat.rhs[1]
+                    if val.kind == AstKind.NumberExpression then
+                         local tid = val.value
+                         if not predecessors[tid] then predecessors[tid] = {} end
+                         table.insert(predecessors[tid], {block = block, statIndex = #block.statements})
+                    end
+                end
+            end
+        end
+
+        -- 2. Clone Candidates
+        local candidates = {}
+        for _, block in ipairs(compiler.blocks) do
+             -- Only clone small blocks that have multiple predecessors
+             if predecessors[block.id] and #predecessors[block.id] >= 2 and #block.statements <= 5 then
+                  table.insert(candidates, block)
+             end
+        end
+
+        -- 3. Perform Cloning
+        -- Limit to a few clones to avoid code bloat
+        local numClones = math.min(#candidates, math.random(2, 5))
+        for i = 1, numClones do
+             local original = candidates[math.random(1, #candidates)]
+             
+             -- Create Clone
+             local clone = compiler:createBlock() -- Generates new ID
+             -- Copy statements (reuse AST nodes as they are immutable-ish)
+             for _, stat in ipairs(original.statements) do
+                  table.insert(clone.statements, stat)
+             end
+             -- Clone should not advance automatically since we copied the jump
+             clone.advanceToNextBlock = false 
+
+             -- Rewire ~50% of predecessors to the clone
+             local preds = predecessors[original.id]
+             if preds then
+                 for _, pred in ipairs(preds) do
+                      if math.random() > 0.5 then
+                           -- Update the jump instruction in the predecessor
+                           local jumpStat = pred.block.statements[pred.statIndex].statement
+                           jumpStat.rhs[1] = Ast.NumberExpression(clone.id)
+                      end
+                 end
+             end
+        end
+    end
 
     local blocks = {};
 
-    -- SECURITY: Inject Junk Blocks (Dead Code)
-    -- Add 30-50% junk blocks to dilute real code
-    if not (compiler.vmProfile == "array") then -- Junk blocks only work well with BST dispatch
-        local realBlockCount = #compiler.blocks;
-        local junkCount = math.floor(realBlockCount * 0.4);
-        for i = 1, junkCount do
-            compiler:createJunkBlock();
-        end
-    end
-
-    util.shuffle(compiler.blocks);
-
+    -- OPTIMIZATION: Junk blocks removed to reduce dispatch tree depth and cache pressure
+    
+    -- OPTIMIZATION: Sort blocks by ID to ensure the BST is built over a sorted range
+    -- This is critical for the binary search logic to work correctly
     for _, block in ipairs(compiler.blocks) do
-        local id = block.id;
-        local blockstats = block.statements;
-
-        -- Shuffle Blockstats
-        for i = 2, #blockstats do
-            local stat = blockstats[i];
-            local reads = stat.reads;
-            local writes = stat.writes;
-            local maxShift = 0;
-            local usesUpvals = stat.usesUpvals;
-            for shift = 1, i - 1 do
-                local stat2 = blockstats[i - shift];
-
-                if stat2.usesUpvals and usesUpvals then
-                    break;
-                end
-
-                local reads2 = stat2.reads;
-                local writes2 = stat2.writes;
-                local f = true;
-
-                for r, b in pairs(reads2) do
-                    if(writes[r]) then
-                        f = false;
-                        break;
-                    end
-                end
-
-                if f then
-                    for r, b in pairs(writes2) do
-                        if(writes[r]) then
-                            f = false;
-                            break;
-                        end
-                        if(reads[r]) then
-                            f = false;
-                            break;
-                        end
-                    end
-                end
-
-                if not f then
-                    break
-                end
-
-                maxShift = shift;
-            end
-
-            local shift = math.random(0, maxShift);
-            for j = 1, shift do
-                    blockstats[i - j], blockstats[i - j + 1] = blockstats[i - j + 1], blockstats[i - j];
-            end
-        end
-
-        blockstats = {};
+        local blockstats = {};
         for i, stat in ipairs(block.statements) do
             table.insert(blockstats, stat.statement);
         end
-
-        table.insert(blocks, { id = id, block = Ast.Block(blockstats, block.scope) });
+        table.insert(blocks, { id = block.id, block = Ast.Block(blockstats, block.scope) });
     end
-
+    
     table.sort(blocks, function(a, b)
         return a.id < b.id;
     end);
@@ -215,37 +224,13 @@ function VmGen.emitContainerFuncBody(compiler)
             return nil;
         end
 
-        -- VUL-2025-001 & VUL-2025-004 FIX: Randomized BST split point
-        -- Instead of deterministic midpoint, use randomized split within a range
-        local mid;
-        if compiler.enableInstructionRandomization and len > 2 then
-            -- Calculate a range around the midpoint (±10% variance)
-            local center = l + math.ceil(len / 2);
-            local variance = math.max(1, math.floor(len * 0.10));
-            local min_mid = math.max(l + 1, center - variance);
-            local max_mid = math.min(r, center + variance);
+        -- OPTIMIZATION: Perfectly Balanced BST
+        -- Always split at the exact center to minimize tree depth (O(log N))
+        local mid = l + math.ceil(len / 2);
 
-            -- Ensure min_mid <= max_mid
-            if min_mid <= max_mid then
-                mid = math.random(min_mid, max_mid);
-            else
-                mid = center;  -- Fallback to center if range is invalid
-            end
-        else
-            -- Fallback to standard midpoint for small ranges or when randomization disabled
-            mid = l + math.ceil(len / 2);
-        end
-
-        -- Ensure valid random range for bound
-        local min_bound = tb[mid - 1].id + 1;
-        local max_bound = tb[mid].id;
-        local bound;
-        if min_bound <= max_bound then
-            bound = math.random(min_bound, max_bound);
-        else
-            -- If IDs are too close, use the mid ID directly
-            bound = tb[mid].id;
-        end
+        -- Use the ID of the block at the split point as the pivot
+        -- Blocks < mid go left, Blocks >= mid go right
+        local bound = tb[mid].id;
 
         local ifScope = scope or Scope:new(pScope);
 
@@ -274,21 +259,10 @@ function VmGen.emitContainerFuncBody(compiler)
         end
     end
 
-    -- Register Access Optimization: Declare the first 15 registers (likely hot paths) in a fixed order.
-    -- Shuffle the rest to maintain security through randomization.
-    local hotRegisters = {}
-    local coldRegisters = {}
-    for i, var in ipairs(declarations) do
-        if i <= 15 then
-            table.insert(hotRegisters, var)
-        else
-            table.insert(coldRegisters, var)
-        end
-    end
-    util.shuffle(coldRegisters)
-    local finalDeclarations = {}
-    for _, var in ipairs(hotRegisters) do table.insert(finalDeclarations, var) end
-    for _, var in ipairs(coldRegisters) do table.insert(finalDeclarations, var) end
+    -- OPTIMIZATION: Removed register shuffling
+    -- Registers are declared in the order they were allocated/indexed.
+    -- This avoids overhead and ensures deterministic behavior.
+    local finalDeclarations = declarations
 
     local stats = {
         Ast.LocalVariableDeclaration(compiler.containerFuncScope, finalDeclarations, {});

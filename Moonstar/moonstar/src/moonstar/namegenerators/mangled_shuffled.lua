@@ -8,9 +8,9 @@
 local util = require("moonstar.util");
 local chararray = util.chararray;
 
--- Do NOT include '_' in VarDigits for panic preset usage:
--- Having '_' as a generated name can conflict with internal/reserved identifiers
--- and triggers:
+-- Note on character set:
+-- Do NOT include '_' in VarDigits to avoid conflicts with internal/reserved identifiers.
+-- Having '_' as a generated name can trigger:
 --   "A variable with the name '_' was already defined, you should have no variables starting with '__MOONSTAR_'"
 -- Keep VarStartDigits the same (letters only), and VarDigits without plain '_' to avoid collisions.
 local VarDigits = chararray("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");

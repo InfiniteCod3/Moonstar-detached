@@ -15,7 +15,7 @@ Vmify.Name = "Vmify";
 Vmify.SettingsDescriptor = {
     InstructionRandomization = {
         description = "Enable instruction set randomization (block ID randomization)",
-        default = true,
+        default = false,
         type = "boolean"
     },
 	-- Plan.md enhancements

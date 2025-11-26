@@ -39,7 +39,7 @@ lua moonstar.lua <input_file> <output_file> [options]
 ### Options
 
 - `--preset=X`: Select a configuration preset (default: `Medium`).
-  - **Available Presets:** `Minify`, `Weak`, `Medium`, `Strong`, `panic`
+  - **Available Presets:** `Minify`, `Weak`, `Medium`, `Strong`
 - `--LuaU`: Target LuaU (Roblox).
 - `--Lua51`: Target Lua 5.1 (default).
 - `--pretty`: Enable pretty printing for readable output (useful for debugging).
@@ -54,7 +54,6 @@ lua moonstar.lua <input_file> <output_file> [options]
 | **Weak** | Basic VM protection (Vmify + constant array). | light protection |
 | **Medium** | Balanced protection (Encryption + VM + all features). | general use (Recommended) |
 | **Strong** | Maximum protection (Double VM + all features). | sensitive logic |
-| **panic** | Experimental maximum protection (Aggressive pipeline). | highest security needs |
 
 ### Examples
 

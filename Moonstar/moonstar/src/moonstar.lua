@@ -214,74 +214,13 @@ local Presets   = {
             Profile = "baseline";
             InlineVMState = true;
             ObfuscateHandlers = true;
-            InstructionRandomization = false;
+            InstructionRandomization = true;
             EncryptVmStrings = true;
         };
 
         Vmify2 = {
             Enabled = false;
             Profile = "array";
-        };
-
-        VmProfileRandomizer = {
-            Enabled = true;
-            PermuteOpcodes = true;
-            ShuffleHandlers = true;
-            RandomizeNames = true;
-        };
-    };
-
-
-    ["Panic"] = {
-        LuaVersion    = "Lua51";
-        VarNamePrefix = "";
-        NameGenerator = "MangledShuffled";
-        PrettyPrint   = false;
-        Seed          = 0;
-
-        WrapInFunction = { Enabled = true };
-
-        EncryptStrings = {
-            Enabled = true;
-            Mode = "aggressive";
-            DecryptorVariant = "mixed";
-            LayerDepth = 3;
-            LocalizeDecryptor = true;
-        };
-
-        SplitStrings = {
-            Enabled = true;
-            MaxSegmentLength = 8;
-            Strategy = "random";
-        };
-
-        ConstantArray = {
-            Enabled = true;
-            EncodeStrings = true;
-            IndexObfuscation = true;
-        };
-
-        NumbersToExpressions = {
-            Enabled = true;
-            Complexity = "high";
-        };
-
-        ProxifyLocals = {
-            Enabled = true;
-            Mode = "aggressive";
-        };
-
-        AddVararg = {
-            Enabled = true;
-            Probability = 0.5;
-        };
-
-        Vmify = {
-            Enabled = true;
-            Profile = "heavy";
-            ObfuscateHandlers = true;
-            InlineVMState = true;
-            EncryptVmStrings = true;
         };
 
         VmProfileRandomizer = {

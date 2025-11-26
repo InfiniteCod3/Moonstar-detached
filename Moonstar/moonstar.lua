@@ -86,12 +86,11 @@ Options:
     --no-antitamper     Disable anti-tamper (Medium/Strong presets)
     --seed=N            Set random seed for reproducible output
 
-Presets:
+    Presets:
     Minify  - No obfuscation (just minification)
     Weak    - Basic VM protection (Vmify + constant array)
     Medium  - Balanced protection (encryption + VM + all features) [recommended]
     Strong  - Maximum protection (double VM + all features)
-    panic   - Experimental maximum protection (aggressive pipeline)
 
 Examples:
     # Medium preset (default, recommended)
@@ -106,8 +105,7 @@ Examples:
     # Strong preset (maximum protection)
     lua moonstar.lua script.lua output.lua --preset=Strong
     
-    # For Roblox/LuaU
-    lua moonstar.lua script.lua output.lua --preset=Medium --LuaU
+    # For Roblox/LuaU    lua moonstar.lua script.lua output.lua --preset=Medium --LuaU
     
     # Disable anti-tamper in Medium preset
     lua moonstar.lua script.lua output.lua --preset=Medium --no-antitamper
@@ -255,7 +253,7 @@ local function main(args)
     -- Validate preset
     if not MoonstarPresets[config.preset] then
         print("ERROR: Unknown preset '" .. config.preset .. "'")
-        print("Available presets: Minify, Weak, Medium, Strong, panic")
+        print("Available presets: Minify, Weak, Medium, Strong")
         os.exit(1)
     end
     
