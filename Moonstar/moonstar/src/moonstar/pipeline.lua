@@ -90,9 +90,11 @@ end
 --  - Inclusion is driven by StepConfig.Enabled flags (or defaults), not by arbitrary arrays.
 --  - No dynamic reordering beyond this deterministic template.
 local CANONICAL_ORDER = {
+	"GlobalVirtualization",
 	"AntiTamper",
 	"WrapInFunction",
 	"ConstantFolding",
+	"JitStringDecryptor",
 	"EncryptStrings",
 	"SplitStrings",
 	"ConstantArray",
@@ -101,6 +103,7 @@ local CANONICAL_ORDER = {
 	"ProxifyLocals",
 	"AddVararg",
 	"ControlFlowRestructuring",
+	"ControlFlowFlattening",
 	"OpaquePredicates",
 	"StructuredJunk",
 	"Vmify",
@@ -114,9 +117,11 @@ local CANONICAL_ORDER = {
 -- Default enablement for steps when using the canonical schema (may be refined by presets).
 -- These defaults are intentionally conservative; presets should override explicitly.
 local DEFAULT_ENABLED = {
+	GlobalVirtualization     = false,
 	AntiTamper               = false,
 	WrapInFunction           = false,
 	ConstantFolding          = false,
+	JitStringDecryptor       = false,
 	EncryptStrings           = false,
 	SplitStrings             = false,
 	ConstantArray            = false,
@@ -125,6 +130,7 @@ local DEFAULT_ENABLED = {
 	ProxifyLocals            = false,
 	AddVararg                = false,
 	ControlFlowRestructuring = false,
+	ControlFlowFlattening    = false,
 	OpaquePredicates         = false,
 	StructuredJunk           = false,
 	Vmify                    = false,

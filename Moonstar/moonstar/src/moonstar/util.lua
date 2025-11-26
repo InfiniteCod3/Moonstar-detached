@@ -264,6 +264,13 @@ local function toBits(num)
     return t
 end
 
+local function contains(t, v)
+    for _, value in ipairs(t) do
+        if value == v then return true end
+    end
+    return false
+end
+
 
 local function readonly(obj)
 	local r = newproxy(true);
@@ -294,4 +301,5 @@ return {
 	toBits = toBits,
 	bytesToString = bytesToString,
 	readonly = readonly,
+    contains = contains,
 }

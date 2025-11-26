@@ -11,4 +11,7 @@ return {
 	VmProfileRandomizer      = require("moonstar.steps.VmProfileRandomizer");
 	ConstantFolding          = require("moonstar.steps.ConstantFolding");
 	AntiTamper               = require("moonstar.steps.AntiTamper");
+	GlobalVirtualization     = require("moonstar.steps.GlobalVirtualization");
+	ControlFlowFlattening    = require("moonstar.steps.ControlFlowFlattening");
+	JitStringDecryptor       = require("moonstar.steps.JitStringDecryptor");
 }

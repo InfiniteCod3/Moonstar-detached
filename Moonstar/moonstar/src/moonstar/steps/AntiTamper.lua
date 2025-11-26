@@ -34,11 +34,61 @@ function AntiTamper:init(settings) end
 function AntiTamper:apply(ast, pipeline)
 	-- Generate anti-tamper check code
 	-- This code is Roblox-compatible (no debug library usage)
+	-- We use the behavior of getfenv in Lua 5.1: it throws an error for C functions.
 	local code = [[
 do
-	-- Anti-Tamper Checks
+	-- Anti-Tamper / Anti-Hook Checks
 	local function check_integrity()
-		-- Check 1: Verify getmetatable works as expected
+		-- 1. Check Core Global Types
+		-- Verify that essential libraries are tables and haven't been overwritten
+		if type(string) ~= "table" or type(math) ~= "table" or type(table) ~= "table" then
+			while true do end
+		end
+
+		-- 2. Anti-Hooking (C-Function Verification)
+		-- uses error message analysis to detect Lua wrappers.
+		-- This is robust across Lua 5.1 and Luau (Roblox).
+		local function is_secure_func(func)
+			if type(func) ~= "function" then return false end
+			
+			local err_msg = ""
+			local function handler(msg)
+				err_msg = msg
+			end
+			
+			-- Trigger a deliberate error using an invalid argument type (a table)
+			-- We expect C functions to throw a clean error, and Lua wrappers to throw an error with line info.
+			local success = xpcall(function()
+				return func({}) 
+			end, handler)
+			
+			-- If it didn't error, we can't verify (e.g. it accepts tables)
+			if success then return true end
+			
+			-- Check for line number info in error message (e.g., "script.lua:10: ...")
+			-- Standard C functions usually don't include this in the message itself.
+			if string.find(tostring(err_msg), ":%d+:") then
+				return false -- Hook detected (Lua wrapper)
+			end
+			
+			return true
+		end
+		
+		-- Only check functions that enforce argument types
+		local critical_functions = {
+			string.sub,
+			math.abs,
+			table.insert,
+			setmetatable
+		}
+		
+		for i = 1, #critical_functions do
+			if not is_secure_func(critical_functions[i]) then
+				while true do end
+			end
+		end
+
+		-- 3. Verify getmetatable logic (Standard Tamper Check)
 		local test_table = {}
 		local test_meta = {__index = function() return 42 end}
 		setmetatable(test_table, test_meta)
@@ -46,18 +96,10 @@ do
 		-- If getmetatable doesn't return our metatable, it's hooked
 		local retrieved_meta = getmetatable(test_table)
 		if retrieved_meta ~= test_meta then
-			-- Tampered! Enter infinite loop
 			while true do end
 		end
 		
-		-- Check 2: Verify tostring on core functions
-		-- tostring on built-in functions should return a consistent format
-		local tostring_test = tostring(getmetatable)
-		if not tostring_test or tostring_test == "" then
-			while true do end
-		end
-		
-		-- Check 3: Verify metatable protection works
+		-- 4. Verify metatable protection works
 		local protected_table = {}
 		setmetatable(protected_table, {__metatable = "protected"})
 		local meta_result = getmetatable(protected_table)
