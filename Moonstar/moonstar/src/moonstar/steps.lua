@@ -14,4 +14,5 @@ return {
 	GlobalVirtualization     = require("moonstar.steps.GlobalVirtualization");
 	ControlFlowFlattening    = require("moonstar.steps.ControlFlowFlattening");
 	JitStringDecryptor       = require("moonstar.steps.JitStringDecryptor");
+	Compression              = require("moonstar.steps.Compression");
 }

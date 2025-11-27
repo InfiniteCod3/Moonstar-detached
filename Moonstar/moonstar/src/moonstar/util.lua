@@ -26,7 +26,7 @@ end
 
 local function escape(str)
 	return str:gsub(".", function(char)
-		if char:match("[^ %-~\n\t\a\b\v\r\"\']") then -- Check if non Printable ASCII Character
+		if char:match("[^ -~\n\t\a\b\v\r\"\']") then -- Check if non Printable ASCII Character
 			return string.format("\\%03d", string.byte(char))
 		end
 		if(char == "\\") then
@@ -271,6 +271,21 @@ local function contains(t, v)
     return false
 end
 
+local function calculateEntropy(str)
+	local len = #str
+	if len == 0 then return 0 end
+	local counts = {}
+	for i = 1, len do
+		local b = string.byte(str, i)
+		counts[b] = (counts[b] or 0) + 1
+	end
+	local entropy = 0
+	for b, count in pairs(counts) do
+		local p = count / len
+		entropy = entropy - p * (math.log(p) / math.log(2))
+	end
+	return entropy
+end
 
 local function readonly(obj)
 	local r = newproxy(true);
@@ -302,4 +317,5 @@ return {
 	bytesToString = bytesToString,
 	readonly = readonly,
     contains = contains,
+    calculateEntropy = calculateEntropy,
 }

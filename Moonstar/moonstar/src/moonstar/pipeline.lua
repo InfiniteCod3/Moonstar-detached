@@ -60,6 +60,7 @@ function Pipeline:new(settings)
 		PrettyPrint = prettyPrint;
 		VarNamePrefix = prefix;
 		Seed = seed;
+		DetailedReport = settings.DetailedReport;
 		parser = Parser:new({
 			LuaVersion = luaVersion;
 		});
@@ -112,6 +113,7 @@ local CANONICAL_ORDER = {
 	"StagedConstantDecode",
 	"PolymorphicLayout",
 	"LocalLifetimeSplitting",
+	"Compression",
 };
 
 -- Default enablement for steps when using the canonical schema (may be refined by presets).
@@ -139,6 +141,7 @@ local DEFAULT_ENABLED = {
 	StagedConstantDecode     = false,
 	PolymorphicLayout        = false,
 	LocalLifetimeSplitting   = false,
+	Compression              = false,
 };
 
 -- Merge legacy config.Steps into per-step config tables.
@@ -202,6 +205,7 @@ function Pipeline:fromConfig(config)
 		PrettyPrint   = config.PrettyPrint or false;
 		VarNamePrefix = config.VarNamePrefix or "";
 		Seed          = config.Seed or 0;
+		DetailedReport = config.DetailedReport or false;
 	});
 
 	pipeline:setNameGenerator(config.NameGenerator or "MangledShuffled");
@@ -298,6 +302,22 @@ function Pipeline:apply(code, filename)
 	local parserTimeDiff = gettime() - parserStartTime;
 	logger:info(string.format("Parsing Done in %.2f seconds", parserTimeDiff));
 	
+	local report = {}
+	if self.DetailedReport then
+		table.insert(report, {
+			Step = "Original",
+			Size = sourceLen,
+			Entropy = util.calculateEntropy(code),
+			Time = 0
+		})
+		table.insert(report, {
+			Step = "Parsing",
+			Size = sourceLen, -- AST size is hard to quantify, using source len
+			Entropy = util.calculateEntropy(code),
+			Time = parserTimeDiff
+		})
+	end
+
 	-- User Defined Steps
 	for i, step in ipairs(self.steps) do
 		local stepStartTime = gettime();
@@ -306,27 +326,22 @@ function Pipeline:apply(code, filename)
 		if type(newAst) == "table" then
 			ast = newAst;
 		end
-		logger:info(string.format("Step \"%s\" Done in %.2f seconds", step.Name or "Unnamed", gettime() - stepStartTime));
+		local stepTime = gettime() - stepStartTime
+		logger:info(string.format("Step \"%s\" Done in %.2f seconds", step.Name or "Unnamed", stepTime));
+
+		if self.DetailedReport then
+			local unparsed = self.unparser:unparse(ast)
+			table.insert(report, {
+				Step = step.Name or "Unnamed",
+				Size = #unparsed,
+				Entropy = util.calculateEntropy(unparsed),
+				Time = stepTime
+			})
+		end
 	end
 	
 	-- Rename Variables Step
-    local f = io.open("debug_pipeline.txt", "a")
-    if f then
-        f:write("Before Renaming:\n")
-        f:write("ast.body.scope: " .. tostring(ast.body.scope) .. "\n")
-        f:write("Metatable: " .. tostring(getmetatable(ast.body.scope)) .. "\n")
-        f:close()
-    end
-
 	self:renameVariables(ast);
-
-    f = io.open("debug_pipeline.txt", "a")
-    if f then
-        f:write("After Renaming:\n")
-        f:write("ast.body.scope: " .. tostring(ast.body.scope) .. "\n")
-        f:write("Metatable: " .. tostring(getmetatable(ast.body.scope)) .. "\n")
-        f:close()
-    end
 	
 	code = self:unparse(ast);
 	
@@ -335,6 +350,17 @@ function Pipeline:apply(code, filename)
 	
 	logger:info(string.format("Generated Code size is %.2f%% of the Source Code size", (string.len(code) / sourceLen)*100))
 	
+	if self.DetailedReport then
+		-- Add final stats
+		table.insert(report, {
+			Step = "Final",
+			Size = #code,
+			Entropy = util.calculateEntropy(code),
+			Time = timeDiff -- this is total time
+		})
+		return code, report
+	end
+
 	return code;
 end
 

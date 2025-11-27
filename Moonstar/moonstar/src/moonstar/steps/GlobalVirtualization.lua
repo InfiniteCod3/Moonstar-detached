@@ -32,6 +32,24 @@ end
 function GlobalVirtualization:apply(ast, pipeline)
     if not self.Enabled then return ast end
 
+    -- Check if Vmify is active
+    local vmifyActive = false
+    if pipeline and pipeline.steps then
+        for _, step in ipairs(pipeline.steps) do
+            if step.Name == "Vmify" or step.Name == "Vmify2" then
+                vmifyActive = true
+                break
+            end
+        end
+    end
+
+    -- If Vmify is active, we disable GlobalVirtualization completely.
+    -- The combination of localizing globals and Vmify causes runtime crashes (vm register issues),
+    -- and Vmify already provides protection for global accesses via instruction/string encryption.
+    if vmifyActive then
+        return ast
+    end
+
     local globalUsage = {}
     local scopeToFunc = {}
     local topScope = ast.body.scope

@@ -6,6 +6,14 @@ local SCRIPTS = {
     { id = "RemoteLogger", label = "RemoteLogger", needsPreprocess = true },
 }
 
+-- Check for compression flag
+local USE_COMPRESSION = false
+for _, v in ipairs(arg or {}) do
+    if v == "--compress" then
+        USE_COMPRESSION = true
+    end
+end
+
 local function run_command(cmd)
     print("\n> " .. cmd)
     local success, exit_type, exit_code = os.execute(cmd)
@@ -25,11 +33,19 @@ end
 
 local function obfuscate(scriptName, usePreprocessed)
     print("  [+] Obfuscating " .. scriptName .. " (Strong Preset)...")
+    if USE_COMPRESSION then
+        print("      (Compression Enabled)")
+    end
     local input = usePreprocessed and ("../" .. scriptName .. ".preprocessed.lua") or ("../" .. scriptName .. ".lua")
     local output = "../" .. scriptName .. ".obfuscated.lua"
     
     -- We cd into Moonstar because it likely depends on relative paths for its modules
     local cmd = "cd Moonstar && lua moonstar.lua " .. input .. " " .. output .. " --preset=Strong"
+    
+    if USE_COMPRESSION then
+        cmd = cmd .. " --compress"
+    end
+    
     return run_command(cmd)
 end
 

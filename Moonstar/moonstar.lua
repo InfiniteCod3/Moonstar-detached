@@ -85,6 +85,8 @@ Options:
     --pretty            Enable pretty printing (readable output)
     --no-antitamper     Disable anti-tamper (Medium/Strong presets)
     --seed=N            Set random seed for reproducible output
+    --detailed          Show detailed build report
+    --compress          Enable LZW compression of output
 
     Presets:
     Minify  - No obfuscation (just minification)
@@ -203,6 +205,8 @@ local function parseArgs(args)
         prettyPrint = false,
         seed = 0,
         disableAntiTamper = false,
+        detailed = false,
+        compress = false,
     }
     
     -- Parse options
@@ -220,6 +224,10 @@ local function parseArgs(args)
             config.seed = tonumber(arg:match("^--seed=(.+)$")) or 0
         elseif arg == "--no-antitamper" then
             config.disableAntiTamper = true
+        elseif arg == "--detailed" then
+            config.detailed = true
+        elseif arg == "--compress" then
+            config.compress = true
         elseif arg == "--help" or arg == "-h" then
             return nil, "help"
         end
@@ -290,14 +298,28 @@ local function main(args)
     
     -- Remove AntiTamper if disabled
     if config.disableAntiTamper then
-        local newSteps = {}
-        for _, step in ipairs(presetConfig.Steps) do
-            if step.Name ~= "AntiTamper" then
-                table.insert(newSteps, step)
-            end
+        -- Handle new schema
+        if presetConfig.AntiTamper then
+            presetConfig.AntiTamper.Enabled = false
         end
-        presetConfig.Steps = newSteps
+
+        -- Handle legacy schema
+        if presetConfig.Steps then
+            local newSteps = {}
+            for _, step in ipairs(presetConfig.Steps) do
+                if step.Name ~= "AntiTamper" then
+                    table.insert(newSteps, step)
+                end
+            end
+            presetConfig.Steps = newSteps
+        end
     end
+
+    if config.compress then
+        presetConfig.Compression = { Enabled = true }
+    end
+
+    presetConfig.DetailedReport = config.detailed
     
     -- LUAU FIX: Strip type annotations if targeting LuaU
     if config.luaVersion == "LuaU" then
@@ -309,7 +331,7 @@ local function main(args)
     
     -- Apply obfuscation pipeline (this handles parsing, steps, and renaming)
     print("Applying obfuscation pipeline...")
-    local obfuscated = pipeline:apply(source, config.inputFile)
+    local obfuscated, report = pipeline:apply(source, config.inputFile)
     
     -- Add Moonstar banner (as comment block)
     local banner = ""
@@ -336,6 +358,20 @@ local function main(args)
     print("")
     print("[✓] Obfuscation complete!")
     print("")
+
+    if report then
+        print("Detailed Build Report:")
+        print("═" .. string.rep("═", 60))
+        print(string.format("%-25s | %-10s | %-10s | %-10s", "Step", "Size", "Entropy", "Time (s)"))
+        print(string.rep("-", 65))
+        for _, entry in ipairs(report) do
+            print(string.format("%-25s | %-10d | %-10.4f | %-10.4f",
+                entry.Step, entry.Size, entry.Entropy, entry.Time))
+        end
+        print("═" .. string.rep("═", 60))
+        print("")
+    end
+
     print("═" .. string.rep("═", 60))
 end
 

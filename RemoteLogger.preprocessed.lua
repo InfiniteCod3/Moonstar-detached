@@ -83,7 +83,7 @@ local function stringify(value, depth)
         local parts = {}
         local count = 0
         for k, v in pairs(value) do
-            count = count + (1)
+            count = count + (1)
             if count > 5 then
                 table.insert(parts, "...")
                 break
