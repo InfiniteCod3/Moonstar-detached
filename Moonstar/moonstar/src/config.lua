@@ -1,4 +1,3 @@
--- Minimal config for Prometheus
 -- This is required for the logger and other modules
 
 return {

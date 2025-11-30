@@ -1,4 +1,4 @@
--- This Script is Part of the Prometheus Obfuscator by Levno_710
+-- This Script is Part of the Moonstar Obfuscator by Aurologic
 --
 -- This Script provides a simple Method for Syntax Highlighting of Lua code
 

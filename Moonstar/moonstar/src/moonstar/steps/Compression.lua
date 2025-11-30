@@ -1,4 +1,4 @@
--- This Script is Part of the Prometheus Obfuscator by Levno_710
+-- This Script is Part of the Moonstar Obfuscator by Aurologic
 --
 -- Compression.lua
 --
@@ -26,19 +26,24 @@ function Compression:init(settings)
 end
 
 function Compression:apply(ast, pipeline)
-    logger:info("Compressing Code ...");
+    logger:info("Compressing Code (LZSS + Base92) ...");
 
-    -- 1. Unparse current AST to get source code
+    -- 1. Minify (Rename Variables) BEFORE compression to reduce payload size.
+    if pipeline.renameVariables then
+        pipeline:renameVariables(ast)
+    end
+
+    -- 2. Unparse current AST to get source code
     local source = pipeline:unparse(ast)
 
     if #source == 0 then
         return ast
     end
 
-    -- 2. Compress
-    local compressed = self:lzw_compress(source)
+    -- 3. Compress (LZSS)
+    local compressed = self:lzss_compress(source)
 
-    -- 3. Generate Decompressor AST
+    -- 4. Generate Decompressor AST
     local decompressor_code = self:get_decompressor(compressed)
 
     -- Parse the decompressor code into a new AST
@@ -51,215 +56,198 @@ function Compression:apply(ast, pipeline)
     return ast
 end
 
--- Common Lua & Roblox/Luau keywords to pre-seed the dictionary
-local KEYWORDS = {
-    -- Lua Keywords
-    "and", "break", "do", "else", "elseif", "end", "false", "for", "function", 
-    "if", "in", "local", "nil", "not", "or", "repeat", "return", "then", 
-    "true", "until", "while",
-    -- Standard Lua Globals
-    "math", "string", "table", "os", "io", "debug", "coroutine", "package",
-    "_G", "getfenv", "setfenv", "ipairs", "pairs", "next", "pcall", "xpcall",
-    "select", "tonumber", "tostring", "type", "unpack", "print", "warn", "error",
-    "assert", "collectgarbage", "dofile", "load", "loadfile", "loadstring",
-    "module", "require", "rawget", "rawset", "rawequal", "setmetatable", "getmetatable",
-    "newproxy",
-    -- Roblox/Luau Services & Globals
-    "game", "workspace", "Workspace", "script", "shared", "getgenv", "getrenv",
-    "getreg", "getgc", "getinstances", "getnilinstances",
-    "Instance", "Vector3", "Vector2", "CFrame", "Color3", "UDim2", "UDim", "Enum",
-    "Ray", "RaycastParams", "OverlapParams", "Region3", "Rect", "Faces", "Axes",
-    "BrickColor", "ColorSequence", "NumberSequence", "PhysicalProperties",
-    "Random", "TweenInfo", "DockWidgetPluginGuiInfo", "PathWaypoint",
-    "task", "utf8", "bit32",
-    -- Common Methods
-    "GetService", "FindFirstChild", "WaitForChild", "GetChildren", "GetDescendants",
-    "Connect", "Disconnect", "Wait", "Destroy", "Clone", "ClearAllChildren",
-    "IsA", "IsDescendantOf", "GetAttribute", "SetAttribute",
-    "FireServer", "InvokeServer", "FireClient", "InvokeClient", "FireAllClients",
-    -- Common Properties
-    "Parent", "Name", "ClassName", "Value", "Position", "Size", "Color",
-    "Transparency", "Anchored", "CanCollide", "Material", "Reflectance",
-    "Archivable", "Locked", "Visible", "Enabled", "Active",
-    -- Events
-    "Changed", "ChildAdded", "ChildRemoved", "DescendantAdded", "DescendantRemoving",
-    "InputBegan", "InputChanged", "InputEnded", "MouseButton1Click",
-    -- Common Names
-    "Players", "Lighting", "ReplicatedStorage", "ServerScriptService", "ServerStorage",
-    "StarterGui", "StarterPack", "StarterPlayer", "SoundService", "Chat",
-    "ContentProvider", "HttpService", "RunService", "TweenService", "UserInputService",
-    "ContextActionService", "MarketplaceService", "BadgeService", "TeleportService",
-    "LocalPlayer", "Character", "Humanoid", "HumanoidRootPart", "RootPart", "Torso",
-    "Head", "new", "fromRGB", "fromHSV", "fromMatrix", "fromAxisAngle"
-}
-
-function Compression:lzw_compress(input)
-    local dict = {}
-    local next_code
-    local code_width
-    local max_code_for_width
-    
-    local function init_dict()
-        dict = {}
-        for i = 0, 255 do
-            dict[string.char(i)] = i
-        end
-        -- 256 is reserved for CLEAR code
-        for i, kw in ipairs(KEYWORDS) do
-            dict[kw] = 256 + i
-        end
-        next_code = 257 + #KEYWORDS
-        code_width = 9
-        max_code_for_width = 511
-    end
-
-    init_dict()
-
-    local current_sequence = ""
+function Compression:lzss_compress(input)
     local result = {}
+    
+    -- Base92 Alphabet: ASCII 33-126, excluding 34 (") and 92 (\)
+    local b92 = "!#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_abcdefghijklmnopqrstuvwxyz{|}~"
     
     -- Bit packing state
     local bit_buf = 0
     local bit_cnt = 0
-    local b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
     local function write_bits(val, width)
-        local p = 2 ^ width
-        bit_buf = bit_buf * p + val
-        bit_cnt = bit_cnt + width
-        
-        while bit_cnt >= 6 do
-            local shift = bit_cnt - 6
-            local p6 = 2 ^ shift
-            local chunk = math.floor(bit_buf / p6)
-            bit_buf = bit_buf % p6
-            bit_cnt = shift
-            table.insert(result, b64:sub(chunk+1, chunk+1))
+        for i = 0, width - 1 do
+            -- Extract bit i from val
+            local bit = math.floor(val / (2 ^ i)) % 2
+            
+            -- Add to buffer
+            bit_buf = bit_buf + bit * (2 ^ bit_cnt)
+            bit_cnt = bit_cnt + 1
+            
+            -- Flush 13 bits -> 2 Base92 chars
+            if bit_cnt == 13 then
+                local v = bit_buf
+                local c1 = v % 92
+                local c2 = math.floor(v / 92)
+                table.insert(result, b92:sub(c1 + 1, c1 + 1) .. b92:sub(c2 + 1, c2 + 1))
+                bit_buf = 0
+                bit_cnt = 0
+            end
         end
     end
 
-    for i = 1, #input do
-        local c = input:sub(i, i)
-        local next_sequence = current_sequence .. c
-        if dict[next_sequence] then
-            current_sequence = next_sequence
-        else
-            write_bits(dict[current_sequence], code_width)
+    local WINDOW_SIZE = 4095 -- 12 bits
+    local MIN_MATCH = 3
+    local MAX_MATCH = 18 -- 3 + 15 (4 bits)
+    
+    local i = 1
+    local len = #input
+    local byte = string.byte
+    
+    -- Optimization: Hash Chain for O(1) match finding
+    local head = {}  -- Maps hash -> last position
+    local chain = {} -- Maps position -> previous position with same hash
+    
+    local function add_to_dict(pos)
+        if pos + 2 > len then return end
+        -- Simple hash for 3 bytes: b1*65536 + b2*256 + b3
+        local h = byte(input, pos) * 65536 + byte(input, pos + 1) * 256 + byte(input, pos + 2)
+        local prev = head[h]
+        head[h] = pos
+        chain[pos] = prev -- Link back to previous occurrence
+    end
+
+    local last_progress = -1
+    local MAX_CHAIN_CHECKS = 32 -- Limit search depth for speed
+    
+    while i <= len do
+        local progress = math.floor((i / len) * 100)
+        if progress > last_progress + 4 then
+            last_progress = progress
+            io.write(string.format("\r    Compressing: %d%%", progress))
+            io.flush()
+        end
+
+        local best_match_dist = 0
+        local best_match_len = 0
+        
+        -- Try to find match if we have at least 3 bytes left
+        if i + 2 <= len then
+            local h = byte(input, i) * 65536 + byte(input, i + 1) * 256 + byte(input, i + 2)
+            local match_pos = head[h]
+            local checks = 0
             
-            if next_code >= 65536 then
-                -- Dictionary full, emit CLEAR code and reset
-                write_bits(256, code_width)
-                init_dict()
-                -- current_sequence remains just 'c', which is in the fresh dict
-            else
-                dict[next_sequence] = next_code
-                next_code = next_code + 1
-                if next_code > max_code_for_width and code_width < 16 then
-                    code_width = code_width + 1
-                    max_code_for_width = 2^code_width - 1
+            -- Traverse the chain of matches
+            while match_pos and checks < MAX_CHAIN_CHECKS do
+                local dist = i - match_pos
+                if dist <= WINDOW_SIZE then
+                    -- We already know the first 3 bytes match because of the hash
+                    local match_len = 3
+                    while match_len < MAX_MATCH and (i + match_len <= len) do
+                        if byte(input, match_pos + match_len) == byte(input, i + match_len) then
+                            match_len = match_len + 1
+                        else
+                            break
+                        end
+                    end
+                    
+                    if match_len > best_match_len then
+                        best_match_len = match_len
+                        best_match_dist = dist
+                        if best_match_len == MAX_MATCH then break end
+                    end
+                else
+                    -- If we are out of window, older matches in the chain will also be out of window
+                    -- (Since chain goes backwards in time)
+                    break 
                 end
+                
+                match_pos = chain[match_pos]
+                checks = checks + 1
             end
-            current_sequence = c
+        end
+        
+        if best_match_len >= MIN_MATCH then
+            -- Write Match: Flag 1 (1 bit) + Dist (12 bits) + Len-3 (4 bits)
+            write_bits(1, 1) 
+            write_bits(best_match_dist, 12)
+            write_bits(best_match_len - MIN_MATCH, 4)
+            
+            -- Update dictionary for the bytes we are skipping
+            for k = 0, best_match_len - 1 do
+                add_to_dict(i + k)
+            end
+            
+            i = i + best_match_len
+        else
+            -- Write Literal: Flag 0 (1 bit) + Char (8 bits)
+            write_bits(0, 1)
+            write_bits(byte(input, i), 8)
+            
+            -- Update dictionary
+            add_to_dict(i)
+            
+            i = i + 1
         end
     end
     
-    if #current_sequence > 0 then
-        write_bits(dict[current_sequence], code_width)
-    end
+    -- Clear progress line
+    io.write("\r    Compressing: Done!   \n")
     
-    -- Flush remaining bits
+    -- Flush bits
     if bit_cnt > 0 then
-        local shift = 6 - bit_cnt
-        bit_buf = bit_buf * (2^shift)
-        table.insert(result, b64:sub(bit_buf+1, bit_buf+1))
+        -- Pad with zeros to 13 bits
+        local v = bit_buf -- remaining bits are already in place, upper bits are 0
+        local c1 = v % 92
+        local c2 = math.floor(v / 92)
+        table.insert(result, b92:sub(c1 + 1, c1 + 1) .. b92:sub(c2 + 1, c2 + 1))
     end
 
     return table.concat(result)
 end
 
 function Compression:get_decompressor(compressed_data)
-    -- Minified Decompressor with Keywords and Reset support
-    -- Variables:
-    -- b: Base64 string
-    -- d: Compressed data
-    -- k: Keywords table
-    -- m: Base64 map
-    -- t: Dictionary
-    -- n: Next code
-    -- w: Bit width
-    -- I: Init function
-    -- g: Get bits function
-    -- z: Bit buffer
-    -- y: Bit count
-    -- x: Data index
-    -- l: Data length
-    -- o: Output buffer
-    -- p: Previous code
-    -- c: First char of sequence
-    -- e: Current sequence string
-    
-    local keywords_str = table.concat(KEYWORDS, '","')
+    -- LZSS + Base92 Decompressor
+    -- b: Base92 Alphabet
+    -- d: Data string
+    -- m: Base92 map
+    -- o: Output table
+    -- R: Read bits function
+    -- B: Bit buffer
+    -- N: Bit count
+    -- P: Pointer
     
     local template = [[
-local b="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local b="!#$%%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_abcdefghijklmnopqrstuvwxyz{|}~"
 local d="%s"
-local k={"%s"}
-local m={}for i=1,64 do m[string.sub(b,i,i)]=i-1 end
-local t,n,w
-local function I()
-t={}
-for i=0,255 do t[i]=string.char(i)end
-for i=1,#k do t[256+i]=k[i]end
-n=257+#k
-w=9
+local m={}for i=1,92 do m[string.sub(b,i,i)]=i-1 end
+local S,C,T=string.sub,string.char,table.insert
+local B,N,P=0,0,1
+local function R(n)
+local v=0
+for i=0,n-1 do
+if N==0 then
+local c1=m[S(d,P,P)]
+local c2=m[S(d,P+1,P+1)]
+B=c1+(c2*92)
+N=13
+P=P+2
 end
-I()
-local x,y,z,l=1,0,0,#d
-local function g()
-if x>l and y<w then return nil end
-while y<w do
-local c=m[string.sub(d,x,x)]
-z=z*64+c
-y=y+6
-x=x+1
+local bit=B%%2
+B=(B-bit)/2
+N=N-1
+v=v+bit*(2^i)
 end
-local s=y-w
-local v=math.floor(z/2^s)
-z=z%%2^s
-y=s
 return v
 end
 local o={}
-local p=g()
-if p==256 then I() p=g() end
-table.insert(o,t[p])
-local c=t[p]
-while true do
-local v=g()
-if not v then break end
-if v==256 then
-I()
-v=g()
-if not v then break end
-p=v
-table.insert(o,t[p])
-c=t[p]
+while P<=#d or N>0 do
+if R(1)==1 then
+local dist=R(12)
+local len=R(4)+3
+local s=#o-dist+1
+for i=0,len-1 do
+o[#o+1]=o[s+i]
+end
 else
-local e=t[v] or(t[p]..string.sub(c,1,1))
-table.insert(o,e)
-c=e
-if n<65536 then
-t[n]=t[p]..string.sub(e,1,1)
-n=n+1
-if n>2^w-1 and w<16 then w=w+1 end
+o[#o+1]=C(R(8))
 end
-p=v
+if P>#d and N==0 then break end
 end
-end
-local f=loadstring and loadstring(table.concat(o))or load(table.concat(o))
-return f(...)
+return(loadstring or load)(table.concat(o))(...)
 ]]
-    return string.format(template, compressed_data, keywords_str)
+    return string.format(template, compressed_data)
 end
 
 return Compression;

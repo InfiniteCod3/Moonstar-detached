@@ -9,7 +9,7 @@ local SCRIPTS = {
 -- Check for compression flag
 local USE_COMPRESSION = false
 for _, v in ipairs(arg or {}) do
-    if v == "--compress" then
+    if v == "--compress" or v == "--compression" then
         USE_COMPRESSION = true
     end
 end
