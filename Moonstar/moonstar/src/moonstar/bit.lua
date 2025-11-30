@@ -1,4 +1,3 @@
--- This Module was NOT written by Levno_710
 -- Credit: https://github.com/davidm/lua-bit-numberlua
 
 --[[

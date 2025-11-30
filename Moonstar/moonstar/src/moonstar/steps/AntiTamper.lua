@@ -53,27 +53,53 @@ function AntiTamper:apply(ast, pipeline)
 
 	if checksEnabled then
 		table.insert(codeParts, [[
-		-- 1. Check Core Global Types
-		if type(string) ~= "table" or type(math) ~= "table" or type(table) ~= "table" then
-			while true do end
+		local function punish()
+			-- Silent corruption: Break standard library functions subtly
+			local _r = math.random
+			math.random = function(...) return 0 end
+			
+			local _ti = table.insert
+			table.insert = function(...) end
+			
+			local _ts = tostring
+			tostring = function(...) return "nil" end
+			
+			local _p = pairs
+			pairs = function(...) return function() end end
+			
+			-- Subtle logic breakage
+			getmetatable = function(...) return {} end
+			
+			-- Corrupt global state if possible
+			if _G then
+				setmetatable(_G, {
+					__index = function() return nil end,
+					__newindex = function() end
+				})
+			end
 		end
 
-		-- 2. Anti-Hooking (Disabled to prevent false positives)
-		-- Strict C-function checks (error message analysis) removed as they flag valid environments/wrappers.
+		-- 1. Check Core Global Types
+		if type(string) ~= "table" or type(math) ~= "table" or type(table) ~= "table" then
+			punish()
+			return
+		end
 
-		-- 3. Verify getmetatable logic
+		-- 2. Verify getmetatable logic
 		local test_table = {}
 		local test_meta = {__index = function() return 42 end}
 		setmetatable(test_table, test_meta)
 		if getmetatable(test_table) ~= test_meta then
-			while true do end
+			punish()
+			return
 		end
 		
-		-- 4. Verify metatable protection
+		-- 3. Verify metatable protection
 		local protected_table = {}
 		setmetatable(protected_table, {__metatable = "protected"})
 		if getmetatable(protected_table) ~= "protected" then
-			while true do end
+			punish()
+			return
 		end
 ]])
 	else

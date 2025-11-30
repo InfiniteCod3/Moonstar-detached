@@ -56,12 +56,17 @@ lua moonstar.lua <input_file> <output_file> [options]
 
 ### Presets
 
-| Preset | Description | Features Enabled |
-| :--- | :--- | :--- |
-| **Minify** | No obfuscation, just minification. | None (Structure preservation only) |
-| **Weak** | Basic protection against casual snooping. | `WrapInFunction`, `EncryptStrings` (Light), `SplitStrings`, `ConstantArray`, `NumbersToExpressions` |
-| **Medium** | Balanced protection for general use. | All Weak features + `EncryptStrings` (Standard), `IndexObfuscation`, `AddVararg` |
-| **Strong** | Maximum protection for sensitive logic. | All Medium features + `ControlFlowFlattening`, `GlobalVirtualization`, `JitStringDecryptor`, `AntiTamper`, `Vmify`, `VmProfileRandomizer` |
+**Minify** — No obfuscation, just minification.
+- **Features:** None (structure preservation only)
+
+**Weak** — Basic protection against casual snooping.
+- **Features:** `WrapInFunction`, `EncryptStrings` (Light), `SplitStrings`, `ConstantArray`, `NumbersToExpressions`
+
+**Medium** — Balanced protection for general use.
+- **Features:** All Weak features plus `EncryptStrings` (Standard), `IndexObfuscation`, `AddVararg`
+
+**Strong** — Maximum protection for sensitive logic.
+- **Features:** All Medium features plus `ControlFlowFlattening`, `GlobalVirtualization`, `JitStringDecryptor`, `AntiTamper`, `Vmify`, `VmProfileRandomizer`
 
 ### Examples
 

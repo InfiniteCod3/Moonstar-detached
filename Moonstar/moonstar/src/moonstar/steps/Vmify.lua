@@ -23,11 +23,6 @@ Vmify.SettingsDescriptor = {
 		type = "boolean",
 		default = true,
 	},
-	Profile = {
-		type = "enum",
-		values = {"baseline", "stealth", "heavy"},
-		default = "baseline",
-	},
 	PartialRatio = {
 		type = "number",
 		default = 1.0,
@@ -84,16 +79,6 @@ function Vmify:apply(ast, pipeline)
     
     -- Determine instruction randomization based on Profile
     local enableRandomization = self.InstructionRandomization
-    local profile = self.Profile or "baseline"
-    
-    if profile == "stealth" then
-        -- Stealth mode: enable extra randomization
-        enableRandomization = true
-    elseif profile == "heavy" then
-        -- Heavy mode: enable all features
-        enableRandomization = true
-    end
-    -- baseline uses default settings
     
     -- Check PartialRatio for selective vmification
     local partialRatio = self.PartialRatio or 1.0
@@ -114,7 +99,6 @@ function Vmify:apply(ast, pipeline)
     -- Create Compiler with instruction randomization and profile config
 	local compiler = Compiler:new({
 		enableInstructionRandomization = enableRandomization,
-		vmProfile = profile,
 		inlineVMState = self.InlineVMState or false,
 		obfuscateHandlers = self.ObfuscateHandlers ~= false,  -- Default true
 		encryptVmStrings = self.EncryptVmStrings or false

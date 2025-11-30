@@ -226,16 +226,10 @@ local Presets   = {
 
         Vmify = {
             Enabled = true;
-            Profile = "baseline";
             InlineVMState = true;
             ObfuscateHandlers = true;
             InstructionRandomization = true;
             EncryptVmStrings = true;
-        };
-
-        Vmify2 = {
-            Enabled = false;
-            Profile = "array";
         };
 
         VmProfileRandomizer = {

@@ -54,6 +54,42 @@ end
 function ControlFlowFlattening:flattenBlock(block)
     local statements = block.statements
     local scope = block.scope
+
+    -- 0. Pre-pass: Hoist and Convert Declarations
+    -- We must hoist variables to the top scope so they are available across all chunks
+    -- and convert declarations to assignments to preserve logic flow.
+    local newStatements = {}
+    local hoistedIds = {}
+    
+    for _, stat in ipairs(statements) do
+        if stat.kind == AstKind.LocalVariableDeclaration then
+            for _, id in ipairs(stat.ids) do
+                table.insert(hoistedIds, id)
+            end
+            
+            if #stat.expressions > 0 then
+                -- Convert to Assignment
+                local lhs = {}
+                for _, id in ipairs(stat.ids) do
+                    table.insert(lhs, Ast.AssignmentVariable(scope, id))
+                end
+                table.insert(newStatements, Ast.AssignmentStatement(lhs, stat.expressions))
+            else
+                -- No init, just remove the declaration (already hoisted via hoistedIds)
+            end
+        elseif stat.kind == AstKind.LocalFunctionDeclaration then
+            table.insert(hoistedIds, stat.id)
+            -- Convert to Assignment
+            table.insert(newStatements, Ast.AssignmentStatement(
+                { Ast.AssignmentVariable(scope, stat.id) },
+                { Ast.FunctionLiteralExpression(stat.args, stat.body) }
+            ))
+        else
+            table.insert(newStatements, stat)
+        end
+    end
+    
+    statements = newStatements
     
     -- 1. Break statements into chunks
     local chunks = {}
@@ -121,9 +157,11 @@ function ControlFlowFlattening:flattenBlock(block)
             { Ast.NumberExpression(nextId) }
         ))
         
+        -- VUL-FIX: Use a new scope for each chunk block to prevent Vmify from freeing shared variables prematurely.
+        -- The variables are in 'scope' (parent), so they are accessible but not owned by the chunk scope.
         table.insert(branches, {
             condition = Ast.EqualsExpression(Ast.VariableExpression(scope, stateVar), Ast.NumberExpression(myId)),
-            body = Ast.Block(chunkStats, scope)
+            body = Ast.Block(chunkStats, Scope:new(scope)) 
         })
     end
     
@@ -137,7 +175,7 @@ function ControlFlowFlattening:flattenBlock(block)
     
     -- Build the if-chain
     local function buildIfChain(index)
-        if index > #branches then return Ast.Block({}, scope) end
+        if index > #branches then return Ast.Block({}, Scope:new(scope)) end
         
         local branch = branches[index]
         return Ast.Block({
@@ -147,7 +185,7 @@ function ControlFlowFlattening:flattenBlock(block)
                 {}, -- elseifs (unused here)
                 buildIfChain(index + 1) -- else block (recursive)
             )
-        }, scope)
+        }, Scope:new(scope))
     end
     
     -- Or better, flat list of if statements if we want to avoid deep nesting,
@@ -156,14 +194,22 @@ function ControlFlowFlattening:flattenBlock(block)
     local loopBody = buildIfChain(1)
     
     -- 4. Replace Block Content
-    block.statements = {
-        Ast.LocalVariableDeclaration(scope, {stateVar}, {Ast.NumberExpression(initialState)}),
-        Ast.WhileStatement(
-            loopBody,
-            Ast.NotEqualsExpression(Ast.VariableExpression(scope, stateVar), Ast.NumberExpression(endState)),
-            scope
-        )
+    local finalStats = {
+        Ast.LocalVariableDeclaration(scope, {stateVar}, {Ast.NumberExpression(initialState)})
     }
+    
+    -- Insert Hoisted Variables
+    if #hoistedIds > 0 then
+        table.insert(finalStats, Ast.LocalVariableDeclaration(scope, hoistedIds, {}))
+    end
+    
+    table.insert(finalStats, Ast.WhileStatement(
+        loopBody,
+        Ast.NotEqualsExpression(Ast.VariableExpression(scope, stateVar), Ast.NumberExpression(endState)),
+        scope
+    ))
+    
+    block.statements = finalStats
 end
 
 return ControlFlowFlattening

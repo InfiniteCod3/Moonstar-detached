@@ -28,16 +28,6 @@ Unparser.TAB = config.TAB;
 
 local function getVarNameSafe(scope, id, context)
     if not scope or not scope.getVariableName then
-        local f = io.open("debug_log_crash.txt", "a")
-        if f then
-            f:write("CRASH in " .. tostring(context) .. "\n")
-            f:write("Scope: " .. tostring(scope) .. "\n")
-            if type(scope) == "table" then
-                 local mt = getmetatable(scope)
-                 f:write("Metatable: " .. tostring(mt) .. "\n")
-            end
-            f:close()
-        end
         error("Scope missing getVariableName in " .. tostring(context))
     end
     return scope:getVariableName(id)

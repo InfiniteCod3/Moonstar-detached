@@ -115,9 +115,6 @@ function Compiler:new(config)
         
         -- Instruction randomization config
         enableInstructionRandomization = config.enableInstructionRandomization or false;
-        
-        -- VM profile for dispatch method
-        vmProfile = config.vmProfile or "baseline";
 
         -- VM string encryption config
         encryptVmStrings = config.encryptVmStrings or false;
