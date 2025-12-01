@@ -316,7 +316,12 @@ local function main(args)
     end
 
     if config.compress then
-        presetConfig.Compression = { Enabled = true }
+        presetConfig.Compression = {
+            Enabled = true,
+            BWT = true,
+            Huffman = true,
+            Preseed = true
+        }
     end
 
     presetConfig.DetailedReport = config.detailed

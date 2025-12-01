@@ -6,248 +6,341 @@
 -- Keyword Pre-seeding, and Dictionary Reset.
 
 local Step = require("moonstar.step");
-local Ast = require("moonstar.ast");
-local util = require("moonstar.util");
 local logger = require("logger");
 
 local Compression = Step:extend();
-Compression.Description = "Compresses the script using Smart LZW (Keywords + Var-Width + Reset)";
+Compression.Description = "Compresses the script using LZSS, Huffman, BWT, and Base92";
 Compression.Name = "Compression";
 
 Compression.SettingsDescriptor = {
-    Enabled = {
-        type = "boolean",
-        default = false,
-    },
+    Enabled = { type = "boolean", default = false },
+    Bytecode = { type = "boolean", default = false },
+    BWT = { type = "boolean", default = true },
+    Huffman = { type = "boolean", default = true },
+    Preseed = { type = "boolean", default = true },
 }
 
+local PRESEED_KEYWORDS = "localfunctionreturnendthenifelseelseif"
+
 function Compression:init(settings)
-
 end
 
-function Compression:apply(ast, pipeline)
-    logger:info("Compressing Code (LZSS + Base92) ...");
-
-    -- 1. Minify (Rename Variables) BEFORE compression to reduce payload size.
-    if pipeline.renameVariables then
-        pipeline:renameVariables(ast)
-    end
-
-    -- 2. Unparse current AST to get source code
-    local source = pipeline:unparse(ast)
-
-    if #source == 0 then
-        return ast
-    end
-
-    -- 3. Compress (LZSS)
-    local compressed = self:lzss_compress(source)
-
-    -- 4. Generate Decompressor AST
-    local decompressor_code = self:get_decompressor(compressed)
-
-    -- Parse the decompressor code into a new AST
-    local new_ast = pipeline.parser:parse(decompressor_code)
-
-    -- Replace the AST
-    ast.body = new_ast.body
-    ast.globalScope = new_ast.globalScope
-
-    return ast
-end
-
-function Compression:lzss_compress(input)
-    local result = {}
+-- BWT Encoding
+local function bwt_encode(s)
+    local n = #s
+    if n == 0 then return "", 0 end
     
-    -- Base92 Alphabet: ASCII 33-126, excluding 34 (") and 92 (\)
-    local b92 = "!#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_abcdefghijklmnopqrstuvwxyz{|}~"
+    local bytes = {}
+    for i = 1, n do bytes[i] = string.byte(s, i) end
     
-    -- Bit packing state
-    local bit_buf = 0
-    local bit_cnt = 0
-
-    local function write_bits(val, width)
-        for i = 0, width - 1 do
-            -- Extract bit i from val
-            local bit = math.floor(val / (2 ^ i)) % 2
-            
-            -- Add to buffer
-            bit_buf = bit_buf + bit * (2 ^ bit_cnt)
-            bit_cnt = bit_cnt + 1
-            
-            -- Flush 13 bits -> 2 Base92 chars
-            if bit_cnt == 13 then
-                local v = bit_buf
-                local c1 = v % 92
-                local c2 = math.floor(v / 92)
-                table.insert(result, b92:sub(c1 + 1, c1 + 1) .. b92:sub(c2 + 1, c2 + 1))
-                bit_buf = 0
-                bit_cnt = 0
-            end
+    local rotations = {}
+    for i = 1, n do rotations[i] = i end
+    
+    table.sort(rotations, function(a, b)
+        if a == b then return false end
+        for i = 0, n - 1 do
+            local ia = (a + i - 1) % n + 1
+            local ib = (b + i - 1) % n + 1
+            local va = bytes[ia]
+            local vb = bytes[ib]
+            if va ~= vb then return va < vb end
         end
-    end
-
-    local WINDOW_SIZE = 4095 -- 12 bits
-    local MIN_MATCH = 3
-    local MAX_MATCH = 18 -- 3 + 15 (4 bits)
+        return a < b -- Stable sort
+    end)
     
-    local i = 1
+    local last_col = {}
+    local primary = 0
+    for i, r in ipairs(rotations) do
+        local idx = r - 1
+        if idx == 0 then idx = n end
+        table.insert(last_col, string.char(bytes[idx]))
+        if r == 1 then primary = i end
+    end
+    return table.concat(last_col), primary - 1
+end
+
+-- LZSS Compression
+local function lzss_compress_tokens(input, use_preseed)
+    local tokens = {}
+    local WINDOW_SIZE = 4095
+    local MIN_MATCH = 3
+    local MAX_MATCH = 18
     local len = #input
     local byte = string.byte
+    local head = {}
+    local chain = {}
     
-    -- Optimization: Hash Chain for O(1) match finding
-    local head = {}  -- Maps hash -> last position
-    local chain = {} -- Maps position -> previous position with same hash
-    
-    local function add_to_dict(pos)
-        if pos + 2 > len then return end
-        -- Simple hash for 3 bytes: b1*65536 + b2*256 + b3
-        local h = byte(input, pos) * 65536 + byte(input, pos + 1) * 256 + byte(input, pos + 2)
+    local function add_to_dict(pos, b1, b2, b3)
+        local h = b1 * 65536 + b2 * 256 + b3
         local prev = head[h]
         head[h] = pos
-        chain[pos] = prev -- Link back to previous occurrence
+        chain[pos] = prev
     end
-
-    local last_progress = -1
-    local MAX_CHAIN_CHECKS = 32 -- Limit search depth for speed
     
-    while i <= len do
-        local progress = math.floor((i / len) * 100)
-        if progress > last_progress + 4 then
-            last_progress = progress
-            io.write(string.format("\r    Compressing: %d%%", progress))
-            io.flush()
+    local start_pos = 1
+    if use_preseed then
+        local kw = PRESEED_KEYWORDS
+        local kw_len = #kw
+        for k = 1, kw_len - 2 do
+            local b1, b2, b3 = byte(kw, k), byte(kw, k+1), byte(kw, k+2)
+            add_to_dict(k, b1, b2, b3)
         end
-
-        local best_match_dist = 0
+        start_pos = kw_len + 1
+    end
+    
+    local idx = 1
+    while idx <= len do
+        local b1 = byte(input, idx)
         local best_match_len = 0
+        local best_match_dist = 0
         
-        -- Try to find match if we have at least 3 bytes left
-        if i + 2 <= len then
-            local h = byte(input, i) * 65536 + byte(input, i + 1) * 256 + byte(input, i + 2)
+        if idx + 2 <= len then
+            local b2 = byte(input, idx + 1)
+            local b3 = byte(input, idx + 2)
+            local h = b1 * 65536 + b2 * 256 + b3
             local match_pos = head[h]
             local checks = 0
             
-            -- Traverse the chain of matches
-            while match_pos and checks < MAX_CHAIN_CHECKS do
-                local dist = i - match_pos
+            local virt_current = use_preseed and (idx + #PRESEED_KEYWORDS) or idx
+            
+            while match_pos and checks < 32 do
+                local dist = virt_current - match_pos
                 if dist <= WINDOW_SIZE then
-                    -- We already know the first 3 bytes match because of the hash
-                    local match_len = 3
-                    while match_len < MAX_MATCH and (i + match_len <= len) do
-                        if byte(input, match_pos + match_len) == byte(input, i + match_len) then
-                            match_len = match_len + 1
+                    local m_len = 0
+                    while m_len < MAX_MATCH and (idx + m_len <= len) do
+                        local in_char = byte(input, idx + m_len)
+                        local m_virt = match_pos + m_len
+                        local match_char
+                        if use_preseed and m_virt <= #PRESEED_KEYWORDS then
+                             match_char = byte(PRESEED_KEYWORDS, m_virt)
+                        else
+                             local mp = use_preseed and (m_virt - #PRESEED_KEYWORDS) or m_virt
+                             match_char = byte(input, mp)
+                        end
+                        
+                        if in_char == match_char then
+                            m_len = m_len + 1
                         else
                             break
                         end
                     end
-                    
-                    if match_len > best_match_len then
-                        best_match_len = match_len
+                    if m_len > best_match_len then
+                        best_match_len = m_len
                         best_match_dist = dist
                         if best_match_len == MAX_MATCH then break end
                     end
                 else
-                    -- If we are out of window, older matches in the chain will also be out of window
-                    -- (Since chain goes backwards in time)
-                    break 
+                    break
                 end
-                
                 match_pos = chain[match_pos]
                 checks = checks + 1
             end
         end
         
         if best_match_len >= MIN_MATCH then
-            -- Write Match: Flag 1 (1 bit) + Dist (12 bits) + Len-3 (4 bits)
-            write_bits(1, 1) 
-            write_bits(best_match_dist, 12)
-            write_bits(best_match_len - MIN_MATCH, 4)
-            
-            -- Update dictionary for the bytes we are skipping
+            table.insert(tokens, { type = 1, dist = best_match_dist, len = best_match_len - MIN_MATCH })
             for k = 0, best_match_len - 1 do
-                add_to_dict(i + k)
+                if idx + k + 2 <= len then
+                   local p = idx + k
+                   local v_p = use_preseed and (p + #PRESEED_KEYWORDS) or p
+                   add_to_dict(v_p, byte(input, p), byte(input, p+1), byte(input, p+2))
+                end
             end
-            
-            i = i + best_match_len
+            idx = idx + best_match_len
         else
-            -- Write Literal: Flag 0 (1 bit) + Char (8 bits)
-            write_bits(0, 1)
-            write_bits(byte(input, i), 8)
-            
-            -- Update dictionary
-            add_to_dict(i)
-            
-            i = i + 1
+            table.insert(tokens, { type = 0, val = b1 })
+            local v_p = use_preseed and (idx + #PRESEED_KEYWORDS) or idx
+            if idx + 2 <= len then
+                add_to_dict(v_p, b1, byte(input, idx+1), byte(input, idx+2))
+            end
+            idx = idx + 1
         end
     end
     
-    -- Clear progress line
-    io.write("\r    Compressing: Done!   \n")
+    -- Append EOF Token (type 2)
+    table.insert(tokens, { type = 2 })
     
-    -- Flush bits
-    if bit_cnt > 0 then
-        -- Pad with zeros to 13 bits
-        local v = bit_buf -- remaining bits are already in place, upper bits are 0
-        local c1 = v % 92
-        local c2 = math.floor(v / 92)
-        table.insert(result, b92:sub(c1 + 1, c1 + 1) .. b92:sub(c2 + 1, c2 + 1))
+    return tokens
+end
+
+-- Huffman Coding
+local function huffman_encode(tokens)
+    local counts = {}
+    for i = 0, 256 do counts[i] = 0 end
+    
+    for _, t in ipairs(tokens) do
+        if t.type == 0 then counts[t.val] = counts[t.val] + 1
+        else counts[256] = counts[256] + 1 end -- Match (type 1) or EOF (type 2)
+    end
+    
+    local nodes = {}
+    for i = 0, 256 do
+        if counts[i] > 0 then
+            table.insert(nodes, { symbol = i, weight = counts[i], id = i })
+        end
+    end
+    
+    local next_id = 257
+    while #nodes > 1 do
+        table.sort(nodes, function(a,b)
+            if a.weight == b.weight then return a.id < b.id end
+            return a.weight < b.weight
+        end)
+        local left = table.remove(nodes, 1)
+        local right = table.remove(nodes, 1)
+        table.insert(nodes, { left = left, right = right, weight = left.weight + right.weight, id = next_id })
+        next_id = next_id + 1
+    end
+    
+    local root = nodes[1]
+    local codes = {}
+    local function traverse(node, code, len)
+        if node.symbol then
+            codes[node.symbol] = { code = code, len = len }
+        else
+            traverse(node.left, code * 2, len + 1)
+            traverse(node.right, code * 2 + 1, len + 1)
+        end
+    end
+    traverse(root, 0, 0)
+    return codes, root
+end
+
+function Compression:apply(ast, pipeline)
+    logger:info("Compressing Code ...");
+
+    if pipeline.renameVariables then
+        pipeline:renameVariables(ast)
     end
 
-    return table.concat(result)
+    local source
+    if self.Bytecode then
+        local src = pipeline:unparse(ast)
+        local fn = loadstring(src)
+        if fn then source = string.dump(fn) else source = src end
+    else
+        source = pipeline:unparse(ast)
+    end
+    if #source == 0 then return ast end
+
+    local bwt_idx = 0
+    if self.BWT then
+        source, bwt_idx = bwt_encode(source)
+    end
+
+    local use_preseed = self.Preseed and not self.BWT
+    local tokens = lzss_compress_tokens(source, use_preseed)
+
+    local bit_stream = {}
+    local bit_buf = 0
+    local bit_cnt = 0
+    local function emit(val, n)
+        for i = 0, n - 1 do
+            local bit = math.floor(val / (2^i)) % 2
+            bit_buf = bit_buf + bit * (2^bit_cnt)
+            bit_cnt = bit_cnt + 1
+            if bit_cnt == 13 then
+                table.insert(bit_stream, bit_buf)
+                bit_buf = 0
+                bit_cnt = 0
+            end
+        end
+    end
+    
+    local use_huffman = self.Huffman
+    if use_huffman then
+        local codes, root = huffman_encode(tokens)
+        
+        local function emit_tree(node)
+            if node.symbol then
+                emit(1, 1); emit(node.symbol, 9)
+            else
+                emit(0, 1); emit_tree(node.left); emit_tree(node.right)
+            end
+        end
+        emit_tree(root)
+        
+        for _, t in ipairs(tokens) do
+            local sym = (t.type == 0) and t.val or 256
+            local c = codes[sym]
+            for i = c.len - 1, 0, -1 do
+                emit(math.floor(c.code / (2^i)) % 2, 1)
+            end
+            if t.type == 1 then
+                emit(t.dist, 12); emit(t.len, 4)
+            elseif t.type == 2 then
+                -- EOF: Emit dist 0
+                emit(0, 12)
+            end
+        end
+    else
+        for _, t in ipairs(tokens) do
+            if t.type == 0 then
+                emit(0, 1); emit(t.val, 8)
+            elseif t.type == 1 then
+                emit(1, 1); emit(t.dist, 12); emit(t.len, 4)
+            elseif t.type == 2 then
+                emit(1, 1); emit(0, 12) -- EOF
+            end
+        end
+    end
+    
+    if bit_cnt > 0 then table.insert(bit_stream, bit_buf) end
+    
+    local b92 = "!#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+    local res_str = {}
+    for _, v in ipairs(bit_stream) do
+        local c1 = v % 92
+        local c2 = math.floor(v / 92)
+        table.insert(res_str, b92:sub(c1+1, c1+1) .. b92:sub(c2+1, c2+1))
+    end
+    
+    local decompressor_code = self:get_decompressor(table.concat(res_str), self.BWT and bwt_idx or nil, use_huffman, use_preseed)
+    local new_ast = pipeline.parser:parse(decompressor_code)
+    ast.body = new_ast.body
+    ast.globalScope = new_ast.globalScope
+    return ast
 end
 
-function Compression:get_decompressor(compressed_data)
-    -- LZSS + Base92 Decompressor
-    -- b: Base92 Alphabet
-    -- d: Data string
-    -- m: Base92 map
-    -- o: Output table
-    -- R: Read bits function
-    -- B: Bit buffer
-    -- N: Bit count
-    -- P: Pointer
+function Compression:get_decompressor(payload, bwt_idx, use_huffman, use_preseed)
+    local parts = {}
+    table.insert(parts, 'local c="!#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_`abcdefghijklmnopqrstuvwxyz{|}~"')
+    table.insert(parts, 'local d="' .. payload .. '"')
+    table.insert(parts, 'local T={}for i=1,92 do T[string.sub(c,i,i)]=i-1 end')
+    table.insert(parts, 'local h,A,Q,J=string.sub,string.char,table.insert,table.concat')
+    table.insert(parts, 'local B,N,P=0,0,1')
+    table.insert(parts, 'local function R(n)local v=0 for i=0,n-1 do if N==0 then local c1=T[h(d,P,P)]local c2=T[h(d,P+1,P+1)]B=c1+c2*92 N=13 P=P+2 end local b=B%2 B=(B-b)/2 N=N-1 v=v+b*2^i end return v end')
     
-    local template = [[
-local b="!#$%%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_abcdefghijklmnopqrstuvwxyz{|}~"
-local d="%s"
-local m={}for i=1,92 do m[string.sub(b,i,i)]=i-1 end
-local S,C,T=string.sub,string.char,table.insert
-local B,N,P=0,0,1
-local function R(n)
-local v=0
-for i=0,n-1 do
-if N==0 then
-local c1=m[S(d,P,P)]
-local c2=m[S(d,P+1,P+1)]
-B=c1+(c2*92)
-N=13
-P=P+2
-end
-local bit=B%%2
-B=(B-bit)/2
-N=N-1
-v=v+bit*(2^i)
-end
-return v
-end
-local o={}
-while P<=#d or N>0 do
-if R(1)==1 then
-local dist=R(12)
-local len=R(4)+3
-local s=#o-dist+1
-for i=0,len-1 do
-o[#o+1]=o[s+i]
-end
-else
-o[#o+1]=C(R(8))
-end
-if P>#d and N==0 then break end
-end
-return(loadstring or load)(table.concat(o))(...)
-]]
-    return string.format(template, compressed_data)
+    if use_huffman then
+       table.insert(parts, 'local function D() if R(1)==1 then return R(9) end local l=D() local r=D() return {l,r} end local tr=D()')
+    end
+    
+    table.insert(parts, 'local o={} local k="'..PRESEED_KEYWORDS..'"')
+    if use_preseed then
+        table.insert(parts, 'for i=1,#k do o[i]=h(k,i,i) end')
+    end
+    
+    if use_huffman then
+        table.insert(parts, 'while 1 do local n=tr while type(n)=="table" do n=n[R(1)+1] end')
+        -- Match is 256. No more 257 check.
+        table.insert(parts, 'if n==256 then local d=R(12) if d==0 then break end local l=R(4)+3 local s=#o-d+1 for i=0,l-1 do o[#o+1]=o[s+i] end')
+        table.insert(parts, 'else o[#o+1]=A(n) end end')
+    else
+        table.insert(parts, 'while 1 do if R(1)==1 then local d=R(12) if d==0 then break end local l=R(4)+3 local s=#o-d+1 for i=0,l-1 do o[#o+1]=o[s+i] end else o[#o+1]=A(R(8)) end end')
+    end
+    
+    local res_var = use_preseed and 'J(o,"",#k+1)' or 'J(o)'
+    
+    if bwt_idx then
+        table.insert(parts, 'local S='..res_var..' local L={} for i=1,#S do L[i]=S:byte(i) end local C={} for i=1,#L do local b=L[i] C[b]=(C[b]or 0)+1 end')
+        table.insert(parts, 'local Z,t={},1 for i=0,255 do if C[i] then Z[i]=t t=t+C[i] C[i]=0 end end')
+        table.insert(parts, 'local M={} for i=1,#L do local b=L[i] M[i]=Z[b]+C[b] C[b]=C[b]+1 end')
+        table.insert(parts, 'local Y={} local p='..(bwt_idx+1)..' for i=#L,1,-1 do Y[i]=A(L[p]) p=M[p] end')
+        res_var = 'J(Y)'
+    end
+    
+    table.insert(parts, 'return(loadstring or load)('..res_var..')(...)')
+    return table.concat(parts, " ")
 end
 
 return Compression;

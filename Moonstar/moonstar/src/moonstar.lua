@@ -238,6 +238,13 @@ local Presets   = {
             ShuffleHandlers = true;
             RandomizeNames = true;
         };
+
+        Compression = {
+            Enabled = true;
+            Preseed = true;
+            BWT = false;
+            Huffman = true;
+        };
     };
 };
  
