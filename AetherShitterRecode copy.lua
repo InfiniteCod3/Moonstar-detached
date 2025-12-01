@@ -184,8 +184,6 @@ local Settings = {
     IFrames = false,
     AutoRemoveSkills = false,
     AttacherVisible = false,
-    LoopVoid = false,
-    MapShield = false,
     Whitelist = {[LocalPlayer.Name] = true},
     TargetName = nil -- For Attacher/Orbit
 }
@@ -260,64 +258,6 @@ local function GetUnwhitelistedPlayers()
     return list
 end
 
--- Loop Void Logic
-task.spawn(function()
-    while not Unloaded do
-        if Settings.LoopVoid and WeldsRemote then
-             for _, player in pairs(GetUnwhitelistedPlayers()) do
-                if player.Character then
-                    local targetHRP = player.Character:FindFirstChild("HumanoidRootPart")
-                    local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    
-                    if targetHRP and localHRP then
-                         local cf1 = CFrame.new(0, -10000, 0)
-                         local vecInf = Vector3.new(0, -10000, 0)
-                         local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
-                         
-                         WeldsRemote:FireServer(targetHRP, localHRP, cf1, vecInf, cf2)
-                    end
-                end
-             end
-             task.wait(0.2)
-        else
-             task.wait(1)
-        end
-    end
-end)
-
--- Map Shield Logic
-task.spawn(function()
-    while not Unloaded do
-        if Settings.MapShield and WeldsRemote then
-             local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-             if localHRP then
-                 -- Only scan parts within radius to reduce lag
-                 local radius = 200
-                 for _, obj in pairs(Workspace:GetDescendants()) do
-                    if Unloaded or not Settings.MapShield then break end
-                    if obj:IsA("BasePart") and not obj.Parent:FindFirstChild("Humanoid") and not obj:IsDescendantOf(LocalPlayer.Character) then
-                         if (obj.Position - localHRP.Position).Magnitude < radius then
-                             local offset = Vector3.new(math.random(-12, 12), math.random(-5, 15), math.random(-12, 12))
-                             -- Identity CFrame
-                             local cf1 = CFrame.new(0,0,0) 
-                             local cf2 = CFrame.new(0,0,0)
-                             
-                             pcall(function()
-                                 WeldsRemote:FireServer(localHRP, obj, cf1, offset, cf2)
-                             end)
-                         end
-                    end
-                    -- Yield occasionally to prevent crash
-                    if math.random() > 0.95 then task.wait() end
-                 end
-             end
-             task.wait(0.1)
-        else
-             task.wait(1)
-        end
-    end
-end)
-
 local function BlowEveryone()
     if not WeldsRemote then return notify("Welds Remote not found") end
     
@@ -340,115 +280,6 @@ local function BlowEveryone()
         end
     end
     notify("Blew " .. count .. " players")
-end
-
-local function VoidEveryone()
-    if not WeldsRemote then return notify("Welds Remote not found") end
-    
-    debugLog("VoidEveryone called")
-    local count = 0
-    for _, player in pairs(GetUnwhitelistedPlayers()) do
-        if player.Character then
-            local targetHRP = player.Character:FindFirstChild("HumanoidRootPart")
-            local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            
-            if targetHRP and localHRP then
-                -- Teleport deep into the void
-                local cf1 = CFrame.new(0, -10000, 0)
-                local vecInf = Vector3.new(0, -10000, 0)
-                local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
-                
-                WeldsRemote:FireServer(targetHRP, localHRP, cf1, vecInf, cf2)
-                count = count + 1
-                debugLog("Voided " .. player.Name)
-            end
-        end
-    end
-    notify("Sent " .. count .. " players to Void")
-end
-
-local function BringAll()
-    if not WeldsRemote then return notify("Welds Remote not found") end
-    
-    debugLog("BringAll called")
-    local count = 0
-    for _, player in pairs(GetUnwhitelistedPlayers()) do
-        if player.Character then
-            local targetHRP = player.Character:FindFirstChild("HumanoidRootPart")
-            local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            
-            if targetHRP and localHRP then
-                -- Bring to local player
-                local cf1 = CFrame.new(0, 0, -5)
-                local vecZero = Vector3.new(0, 0, 0)
-                local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
-                
-                WeldsRemote:FireServer(targetHRP, localHRP, cf1, vecZero, cf2)
-                count = count + 1
-                debugLog("Brought " .. player.Name)
-            end
-        end
-    end
-    notify("Brought " .. count .. " players")
-end
-
-local function SpamTools()
-    if not ToolEquipRemote then return notify("ToolEquip Remote not found") end
-    
-    local backpack = LocalPlayer:FindFirstChild("Backpack")
-    if not backpack then return end
-    local tools = backpack:GetChildren()
-    if #tools == 0 then return notify("No tools in backpack to spam") end
-    
-    notify("Spamming tools (5s)...")
-    local endTime = tick() + 5
-    task.spawn(function()
-        while tick() < endTime and not Unloaded do
-            for _, tool in ipairs(tools) do
-                ToolEquipRemote:FireServer(tool, LocalPlayer.Character)
-                task.wait(0.05)
-                ToolEquipRemote:FireServer(tool, backpack)
-            end
-            task.wait()
-        end
-    end)
-end
-
-local function TargetAction(action)
-    local targetName = Settings.TargetName
-    if not targetName then return notify("No target selected!") end
-    
-    local target = Players:FindFirstChild(targetName)
-    if not target then return notify("Target not found!") end
-    
-    if not WeldsRemote then return notify("Welds Remote not found") end
-    
-    local targetHRP = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
-    local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    
-    if not (targetHRP and localHRP) then return notify("Target or Local HRP missing") end
-    
-    if action == "Void" then
-         local cf1 = CFrame.new(0, -10000, 0)
-         local vecInf = Vector3.new(0, -10000, 0)
-         local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
-         WeldsRemote:FireServer(targetHRP, localHRP, cf1, vecInf, cf2)
-         notify("Voided " .. targetName)
-         
-    elseif action == "Fling" then
-         local cf1 = CFrame.new(-3028.23, 3101.88, 308.06, -0.91, 0, 0.4, 0, 1, 0, -0.4, 0, -0.91)
-         local vecInf = Vector3.new(math.huge, math.huge, math.huge)
-         local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
-         WeldsRemote:FireServer(targetHRP, localHRP, cf1, vecInf, cf2)
-         notify("Flung " .. targetName)
-         
-    elseif action == "Bring" then
-         local cf1 = CFrame.new(0, 0, -5)
-         local vecZero = Vector3.new(0, 0, 0)
-         local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
-         WeldsRemote:FireServer(targetHRP, localHRP, cf1, vecZero, cf2)
-         notify("Brought " .. targetName)
-    end
 end
 
 local function RemoveMap()
@@ -482,36 +313,6 @@ local function RemoveMap()
         end
         notify("Map remove complete (" .. count .. " parts)")
         debugLog("RemoveMap complete. Total: " .. count)
-    end)
-end
-
-local function BringMap()
-    if not WeldsRemote then return notify("Welds Remote not found") end
-    
-    notify("Bringing map...")
-    debugLog("BringMap started")
-    task.spawn(function()
-        local count = 0
-        for _, obj in pairs(Workspace:GetDescendants()) do
-            if Unloaded then break end
-            if obj:IsA("BasePart") and obj.Parent and not obj.Parent:FindFirstChild("Humanoid") and not obj:IsDescendantOf(LocalPlayer.Character) then
-                 local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                
-                if localHRP then
-                    -- Random offset to create a "shield" or "mess" around player without crashing physics
-                    local offset = Vector3.new(math.random(-15, 15), math.random(-5, 15), math.random(-15, 15))
-                    
-                    -- Identity CFrame for rotation, relative position
-                    local cf1 = CFrame.new(0,0,0) 
-                    local cf2 = CFrame.new(0,0,0)
-                    
-                    WeldsRemote:FireServer(localHRP, obj, cf1, offset, cf2)
-                    count = count + 1
-                    if count % 50 == 0 then task.wait() end -- Faster than remove
-                end
-            end
-        end
-        notify("Map brought (" .. count .. " parts)")
     end)
 end
 
@@ -1021,36 +822,13 @@ local function createMenu()
         end)
     end
 
-    -- [ Trolling Section ] --
-    createSection("Trolling")
-    createButton("Blow Everyone (Fling)", Theme.Danger, BlowEveryone)
-    createButton("Void Everyone", Theme.Danger, VoidEveryone)
-    createButton("Bring Everyone", Theme.Accent, BringAll)
-    createButton("Spam Tools (5s)", Theme.NeutralButton, SpamTools)
-
-    -- [ Target Actions ] --
-    createSection("Target Actions")
-    createButton("Void Target", Theme.Danger, function() TargetAction("Void") end)
-    createButton("Fling Target", Theme.Danger, function() TargetAction("Fling") end)
-    createButton("Bring Target", Theme.Accent, function() TargetAction("Bring") end)
-
-    -- [ World Section ] --
-    createSection("World")
+    -- [ Actions Section ] --
+    createSection("Actions")
+    createButton("Blow Everyone (Camera + Char)", Theme.Accent, BlowEveryone)
     createButton("Remove Map", Theme.NeutralButton, RemoveMap)
-    createButton("Bring Map (Client Side)", Theme.NeutralButton, BringMap)
 
     -- [ Toggles Section ] --
     createSection("Toggles")
-    createToggle("Loop Void (Kill Aura)", Settings.LoopVoid, function(val)
-        Settings.LoopVoid = val
-        if val then notify("Loop Void Enabled") else notify("Loop Void Disabled") end
-    end)
-
-    createToggle("Map Shield (Loop Bring)", Settings.MapShield, function(val)
-        Settings.MapShield = val
-        if val then notify("Map Shield Enabled") else notify("Map Shield Disabled") end
-    end)
-
     createToggle("Auto Remove Skills", Settings.AutoRemoveSkills, function(val)
         Settings.AutoRemoveSkills = val
         if val then notify("Auto Remove Skills Enabled") else notify("Auto Remove Skills Disabled") end
