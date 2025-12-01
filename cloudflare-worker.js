@@ -39,6 +39,13 @@ const CONFIG = {
             version: "1.0.0",
             enabled: true,
         },
+        aetherShitter: {
+            kvKey: "AetherShitterRecode.lua",
+            label: "Aether Shitter · Recode",
+            description: "Massive server destruction tool (Use with caution)",
+            version: "1.0.0",
+            enabled: true,
+        },
     },
 };
 
@@ -47,7 +54,7 @@ const CONFIG = {
 const API_KEYS = {
     "demo-dev-key": {
         label: "Developer",
-        allowedScripts: ["lunarity", "doorEsp", "teleport", "remoteLogger"],
+        allowedScripts: ["lunarity", "doorEsp", "teleport", "remoteLogger", "aetherShitter"],
     },
     "test-key-123": {
         label: "Tester",

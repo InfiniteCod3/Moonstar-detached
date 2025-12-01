@@ -169,8 +169,8 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 ScreenGui.Parent = CoreGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 360, 0, 340)
-Main.Position = UDim2.new(0.5, -180, 0.5, -150)
+Main.Size = UDim2.new(0, 360, 0, 380)
+Main.Position = UDim2.new(0.5, -180, 0.5, -190)
 Main.BackgroundColor3 = Theme.Background
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
@@ -298,7 +298,7 @@ ScriptsLabel.Parent = Main
 
 local ScriptList = Instance.new("ScrollingFrame")
 ScriptList.BackgroundTransparency = 1
-ScriptList.Size = UDim2.new(1, -20, 0, 140)
+ScriptList.Size = UDim2.new(1, -20, 0, 180)
 ScriptList.Position = UDim2.new(0, 10, 0, 162)
 ScriptList.BorderSizePixel = 0
 ScriptList.ScrollBarThickness = 4
@@ -320,7 +320,7 @@ end)
 local LogBox = Instance.new("TextLabel")
 LogBox.BackgroundTransparency = 1
 LogBox.Size = UDim2.new(1, -20, 0, 20)
-LogBox.Position = UDim2.new(0, 10, 0, 312)
+LogBox.Position = UDim2.new(0, 10, 0, 352)
 LogBox.Font = Enum.Font.Gotham
 LogBox.Text = "Status: waiting for key"
 LogBox.TextSize = 11

@@ -59,6 +59,41 @@ local function bwt_encode(s)
     return table.concat(last_col), primary - 1
 end
 
+-- MTF Encoding
+local function mtf_encode(s)
+    local n = #s
+    if n == 0 then return "" end
+
+    local alphabet = {}
+    for i = 0, 255 do alphabet[i+1] = i end
+
+    local bytes = {}
+    local byte = string.byte
+    local char = string.char
+    local t_insert = table.insert
+    local t_remove = table.remove
+
+    for i = 1, n do
+        local b = byte(s, i)
+        local index = 1
+        -- Linear search is acceptable for 256 size and typical file sizes
+        for j = 1, 256 do
+            if alphabet[j] == b then
+                index = j
+                break
+            end
+        end
+
+        bytes[i] = char(index - 1)
+
+        if index > 1 then
+            t_remove(alphabet, index)
+            t_insert(alphabet, 1, b)
+        end
+    end
+    return table.concat(bytes)
+end
+
 -- LZSS Compression
 local function lzss_compress_tokens(input, use_preseed)
     local tokens = {}
@@ -206,30 +241,17 @@ local function huffman_encode(tokens)
     return codes, root
 end
 
-function Compression:apply(ast, pipeline)
-    logger:info("Compressing Code ...");
+function Compression:run_compression(source, config)
+    local processed = source
+    local bwt_idx
 
-    if pipeline.renameVariables then
-        pipeline:renameVariables(ast)
+    if config.BWT then
+        processed, bwt_idx = bwt_encode(processed)
+        processed = mtf_encode(processed)
     end
 
-    local source
-    if self.Bytecode then
-        local src = pipeline:unparse(ast)
-        local fn = loadstring(src)
-        if fn then source = string.dump(fn) else source = src end
-    else
-        source = pipeline:unparse(ast)
-    end
-    if #source == 0 then return ast end
-
-    local bwt_idx = 0
-    if self.BWT then
-        source, bwt_idx = bwt_encode(source)
-    end
-
-    local use_preseed = self.Preseed and not self.BWT
-    local tokens = lzss_compress_tokens(source, use_preseed)
+    local use_preseed = config.Preseed and not config.BWT
+    local tokens = lzss_compress_tokens(processed, use_preseed)
 
     local bit_stream = {}
     local bit_buf = 0
@@ -247,7 +269,7 @@ function Compression:apply(ast, pipeline)
         end
     end
     
-    local use_huffman = self.Huffman
+    local use_huffman = config.Huffman
     if use_huffman then
         local codes, root = huffman_encode(tokens)
         
@@ -295,8 +317,47 @@ function Compression:apply(ast, pipeline)
         table.insert(res_str, b92:sub(c1+1, c1+1) .. b92:sub(c2+1, c2+1))
     end
     
-    local decompressor_code = self:get_decompressor(table.concat(res_str), self.BWT and bwt_idx or nil, use_huffman, use_preseed)
-    local new_ast = pipeline.parser:parse(decompressor_code)
+    return self:get_decompressor(table.concat(res_str), config.BWT and bwt_idx or nil, use_huffman, use_preseed)
+end
+
+function Compression:apply(ast, pipeline)
+    logger:info("Compressing Code ...");
+
+    if pipeline.renameVariables then
+        pipeline:renameVariables(ast)
+    end
+
+    local source
+    if self.Bytecode then
+        local src = pipeline:unparse(ast)
+        local fn = loadstring(src)
+        if fn then source = string.dump(fn) else source = src end
+    else
+        source = pipeline:unparse(ast)
+    end
+    if #source == 0 then return ast end
+
+    local configs = {
+        { BWT = true, Huffman = self.Huffman, Preseed = false },
+        { BWT = false, Huffman = self.Huffman, Preseed = self.Preseed }
+    }
+
+    local best_code = nil
+    local best_len = math.huge
+    local best_config = nil
+
+    for _, cfg in ipairs(configs) do
+        local code = self:run_compression(source, cfg)
+        if #code < best_len then
+            best_len = #code
+            best_code = code
+            best_config = cfg
+        end
+    end
+
+    logger:info("Best Compression: BWT=" .. tostring(best_config.BWT) .. " Size=" .. best_len)
+
+    local new_ast = pipeline.parser:parse(best_code)
     ast.body = new_ast.body
     ast.globalScope = new_ast.globalScope
     return ast
@@ -332,7 +393,11 @@ function Compression:get_decompressor(payload, bwt_idx, use_huffman, use_preseed
     local res_var = use_preseed and 'J(o,"",#k+1)' or 'J(o)'
     
     if bwt_idx then
-        table.insert(parts, 'local S='..res_var..' local L={} for i=1,#S do L[i]=S:byte(i) end local C={} for i=1,#L do local b=L[i] C[b]=(C[b]or 0)+1 end')
+        table.insert(parts, 'local S='..res_var)
+        -- Inverse MTF
+        table.insert(parts, 'local G={} for i=0,255 do G[i+1]=i end local K={} for i=1,#S do local x=S:byte(i) local v=G[x+1] K[i]=A(v) table.remove(G,x+1) table.insert(G,1,v) end S=J(K)')
+
+        table.insert(parts, 'local L={} for i=1,#S do L[i]=S:byte(i) end local C={} for i=1,#L do local b=L[i] C[b]=(C[b]or 0)+1 end')
         table.insert(parts, 'local Z,t={},1 for i=0,255 do if C[i] then Z[i]=t t=t+C[i] C[i]=0 end end')
         table.insert(parts, 'local M={} for i=1,#L do local b=L[i] M[i]=Z[b]+C[b] C[b]=C[b]+1 end')
         table.insert(parts, 'local Y={} local p='..(bwt_idx+1)..' for i=#L,1,-1 do Y[i]=A(L[p]) p=M[p] end')

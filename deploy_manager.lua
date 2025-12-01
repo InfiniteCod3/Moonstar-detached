@@ -4,6 +4,7 @@ local SCRIPTS = {
     { id = "DoorESP", label = "DoorESP", needsPreprocess = true },
     { id = "Teleport", label = "Teleport", needsPreprocess = false },
     { id = "RemoteLogger", label = "RemoteLogger", needsPreprocess = true },
+    { id = "AetherShitterRecode", label = "AetherShitter", needsPreprocess = false },
 }
 
 -- Check for compression flag
