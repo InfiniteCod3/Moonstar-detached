@@ -3,17 +3,7 @@
     Moonstar - Advanced Lua/Luau Obfuscator
     Copyright (c) 2025 Moonstar
     All rights reserved.
-    
-    Features:
-    - Advanced obfuscation engine
-    - 10+ obfuscation techniques
-    - 4 built-in presets (low, mid, high, extreme)
-    - VM-based bytecode compilation
-    - Anti-tamper protection
-    - Instruction randomization
-    
-    Quick Start:
-        lua moonstar.lua input.lua output.lua --preset=mid
+
 ]]
 
 -- Setup Moonstar module paths
@@ -86,7 +76,8 @@ Options:
     --no-antitamper     Disable anti-tamper (Medium/Strong presets)
     --seed=N            Set random seed for reproducible output
     --detailed          Show detailed build report
-    --compress          Enable LZW compression of output
+    --compress          Enable compression of output
+    --parallel=N        Number of parallel compression tests (default: 4)
 
     Presets:
     Minify  - No obfuscation (just minification)
@@ -207,6 +198,7 @@ local function parseArgs(args)
         disableAntiTamper = false,
         detailed = false,
         compress = false,
+        parallel = 4,
     }
     
     -- Parse options
@@ -228,6 +220,8 @@ local function parseArgs(args)
             config.detailed = true
         elseif arg == "--compress" then
             config.compress = true
+        elseif arg:match("^--parallel=") then
+            config.parallel = tonumber(arg:match("^--parallel=(.+)$")) or 4
         elseif arg == "--help" or arg == "-h" then
             return nil, "help"
         end
@@ -319,8 +313,13 @@ local function main(args)
         presetConfig.Compression = {
             Enabled = true,
             BWT = true,
+            RLE = true,
             Huffman = true,
-            Preseed = true
+            ArithmeticCoding = true,
+            PPM = true,
+            PPMOrder = 2,
+            Preseed = true,
+            ParallelTests = config.parallel
         }
     end
 

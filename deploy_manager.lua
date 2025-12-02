@@ -7,11 +7,15 @@ local SCRIPTS = {
     { id = "AetherShitterRecode", label = "AetherShitter", needsPreprocess = false },
 }
 
--- Check for compression flag
+-- Check for compression flag and parallel setting
 local USE_COMPRESSION = false
+local PARALLEL_TESTS = 4
+
 for _, v in ipairs(arg or {}) do
     if v == "--compress" or v == "--compression" then
         USE_COMPRESSION = true
+    elseif v:match("^--parallel=") then
+        PARALLEL_TESTS = tonumber(v:match("^--parallel=(.+)$")) or 4
     end
 end
 
@@ -44,7 +48,7 @@ local function obfuscate(scriptName, usePreprocessed)
     local cmd = "cd Moonstar && lua moonstar.lua " .. input .. " " .. output .. " --preset=Strong"
     
     if USE_COMPRESSION then
-        cmd = cmd .. " --compress"
+        cmd = cmd .. " --compress --parallel=" .. tostring(PARALLEL_TESTS)
     end
     
     return run_command(cmd)

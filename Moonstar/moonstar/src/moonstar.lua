@@ -242,8 +242,13 @@ local Presets   = {
         Compression = {
             Enabled = true;
             Preseed = true;
-            BWT = false;
+            BWT = true;
+            RLE = true;
             Huffman = true;
+            ArithmeticCoding = true;
+            PPM = true;
+            PPMOrder = 2;
+            ParallelTests = 4;
         };
     };
 };

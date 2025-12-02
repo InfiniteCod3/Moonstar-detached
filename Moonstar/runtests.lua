@@ -24,6 +24,7 @@ end
 local target_preset = nil
 local enable_compression = false
 local file_filter = nil
+local parallel_tests = 4
 
 for i = 1, #arg do
     local a = arg[i]
@@ -31,6 +32,8 @@ for i = 1, #arg do
         target_preset = a:match("^--preset=(.+)$")
     elseif a == "--compress" then
         enable_compression = true
+    elseif a:match("^--parallel=") then
+        parallel_tests = tonumber(a:match("^--parallel=(.+)$")) or 4
     elseif not a:match("^-") then
         file_filter = a
     end
@@ -193,7 +196,17 @@ for _, preset_name in ipairs(preset_names) do
         local preset_config = deepCopy(Presets[preset_name])
 
         if enable_compression then
-            preset_config.Compression = { Enabled = true }
+            preset_config.Compression = {
+                Enabled = true,
+                BWT = true,
+                RLE = true,
+                Huffman = true,
+                ArithmeticCoding = true,
+                PPM = true,
+                PPMOrder = 2,
+                Preseed = true,
+                ParallelTests = parallel_tests
+            }
         end
 
         print("\n========================================")
