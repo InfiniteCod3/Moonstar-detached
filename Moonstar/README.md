@@ -12,6 +12,7 @@ Moonstar is an advanced Lua/Luau obfuscator designed to provide high-level prote
 - **JIT String Encryption:** Replaces static strings with runtime-generated logic (`JitStringDecryptor`).
 - **Anti-Tamper Protection:** Prevents unauthorized modification of the obfuscated script (`AntiTamper`).
 - **Instruction Randomization:** Randomizes VM instructions to make reverse engineering more difficult (`VmProfileRandomizer`).
+- **Compression:** Compresses the script using advanced algorithms (LZSS, Huffman, Arithmetic, PPM, BWT) to reduce file size and add another layer of obfuscation (`Compression`).
 - **String Encryption:** Encrypts strings to hide sensitive information with multiple modes (Light, Standard, Polymorphic).
 - **String Splitting:** Breaks long strings into smaller chunks to disrupt pattern matching (`SplitStrings`).
 - **Constant Array:** Hides constants in a shuffled array to obscure their original location (`ConstantArray`).
@@ -36,22 +37,24 @@ sudo apt-get update && sudo apt-get install -y lua5.1
 Run Moonstar using the `lua` (or `lua5.1`) command:
 
 ```bash
-lua moonstar.lua <input_file> <output_file> [options]
+lua moonstar.lua <input_file> [options]
 ```
 
 ### Arguments
 
 - `input_file`: Path to the Lua/Luau file you want to obfuscate.
-- `output_file`: Path where the obfuscated script will be saved.
+- `--out <file>`: Path where the obfuscated script will be saved (default: `<input_file>.obfuscated.lua`).
 
 ### Options
 
-- `--preset=X`: Select a configuration preset (default: `Medium`).
+- `--preset=X`: Select a configuration preset (default: `Minify`).
   - **Available Presets:** `Minify`, `Weak`, `Medium`, `Strong`
+- `--config=<file>`: Load configuration from a specific file.
 - `--LuaU`: Target LuaU (Roblox).
 - `--Lua51`: Target Lua 5.1 (default).
 - `--pretty`: Enable pretty printing for readable output (useful for debugging).
-- `--no-antitamper`: Disable anti-tamper protection (for `Medium` and `Strong` presets).
+- `--nocolors`: Disable colored output.
+- `--saveerrors`: Save error messages to a file.
 - `--seed=N`: Set a specific random seed for reproducible output.
 
 ### Presets
@@ -66,28 +69,28 @@ lua moonstar.lua <input_file> <output_file> [options]
 - **Features:** All Weak features plus `EncryptStrings` (Standard), `IndexObfuscation`, `AddVararg`
 
 **Strong** — Maximum protection for sensitive logic.
-- **Features:** All Medium features plus `ControlFlowFlattening`, `GlobalVirtualization`, `JitStringDecryptor`, `AntiTamper`, `Vmify`, `VmProfileRandomizer`
+- **Features:** All Medium features plus `ControlFlowFlattening`, `GlobalVirtualization`, `AntiTamper`, `Vmify`, `VmProfileRandomizer`, `Compression`
 
 ### Examples
 
 **Basic usage (Medium preset):**
 ```bash
-lua moonstar.lua myscript.lua output.lua
+lua moonstar.lua myscript.lua --preset=Medium
 ```
 
 **Maximum protection:**
 ```bash
-lua moonstar.lua myscript.lua output.lua --preset=Strong
+lua moonstar.lua myscript.lua --preset=Strong --out output.lua
 ```
 
 **For Roblox (LuaU):**
 ```bash
-lua moonstar.lua script.lua output.lua --preset=Medium --LuaU
+lua moonstar.lua script.lua --preset=Medium --LuaU
 ```
 
 **Minify only:**
 ```bash
-lua moonstar.lua script.lua output.lua --preset=Minify
+lua moonstar.lua script.lua --preset=Minify
 ```
 
 ## Testing
