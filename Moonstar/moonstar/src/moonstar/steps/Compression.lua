@@ -8,6 +8,7 @@
 -- - BWT+MTF+RLE (bzip2-style) transform
 -- - PPM (Prediction by Partial Matching) context modeling
 -- - Base92 encoding
+-- - FastMode: Simple LZ77 with precomputed tables for fast Roblox decompression
 --
 -- PPM uses order-0/1/2 context models to predict bytes based on previous bytes,
 -- achieving excellent compression on structured text like Lua code.
@@ -22,6 +23,7 @@ Compression.Name = "Compression";
 Compression.SettingsDescriptor = {
     Enabled = { type = "boolean", default = false },
     Bytecode = { type = "boolean", default = false },
+    FastMode = { type = "boolean", default = true },  -- Prioritize decompression speed over compression ratio
     BWT = { type = "boolean", default = true },
     RLE = { type = "boolean", default = true },
     Huffman = { type = "boolean", default = false },
@@ -592,6 +594,179 @@ local function ppm_to_bits(output_syms)
     return bits
 end
 
+-- ============================================================================
+-- FAST MODE COMPRESSION (optimized for decompression speed in Roblox)
+-- Uses simple LZ77 with byte-aligned encoding for O(n) decompression
+-- ============================================================================
+
+-- Fast LZ77 compression - byte-aligned for fast decompression
+local function fast_lz77_compress(input)
+    local output = {}
+    local WINDOW_SIZE = 4095
+    local MIN_MATCH = 4  -- Higher minimum for better speed/size tradeoff
+    local MAX_MATCH = 255 + MIN_MATCH
+    local len = #input
+    local byte = string.byte
+    local char = string.char
+    local head = {}
+    local chain = {}
+    
+    local function add_to_dict(pos, b1, b2, b3)
+        local h = b1 * 65536 + b2 * 256 + b3
+        local prev = head[h]
+        head[h] = pos
+        chain[pos] = prev
+    end
+    
+    local idx = 1
+    while idx <= len do
+        local b1 = byte(input, idx)
+        local best_match_len = 0
+        local best_match_dist = 0
+        
+        if idx + 2 <= len then
+            local b2 = byte(input, idx + 1)
+            local b3 = byte(input, idx + 2)
+            local h = b1 * 65536 + b2 * 256 + b3
+            local match_pos = head[h]
+            local checks = 0
+            
+            while match_pos and checks < 16 do  -- Fewer checks for speed
+                local dist = idx - match_pos
+                if dist <= WINDOW_SIZE then
+                    local m_len = 0
+                    while m_len < MAX_MATCH and (idx + m_len <= len) do
+                        if byte(input, idx + m_len) == byte(input, match_pos + m_len) then
+                            m_len = m_len + 1
+                        else
+                            break
+                        end
+                    end
+                    if m_len > best_match_len then
+                        best_match_len = m_len
+                        best_match_dist = dist
+                        if best_match_len >= 32 then break end  -- Good enough
+                    end
+                else
+                    break
+                end
+                match_pos = chain[match_pos]
+                checks = checks + 1
+            end
+        end
+        
+        if best_match_len >= MIN_MATCH then
+            -- Match: 0x00 marker, then dist_lo, dist_hi, len-MIN_MATCH
+            table.insert(output, char(0))
+            table.insert(output, char(best_match_dist % 256))
+            table.insert(output, char(math.floor(best_match_dist / 256)))
+            table.insert(output, char(best_match_len - MIN_MATCH))
+            for k = 0, best_match_len - 1 do
+                if idx + k + 2 <= len then
+                    add_to_dict(idx + k, byte(input, idx + k), byte(input, idx + k + 1), byte(input, idx + k + 2))
+                end
+            end
+            idx = idx + best_match_len
+        else
+            -- Literal byte: add 1 to avoid 0x00 marker (will subtract on decode)
+            table.insert(output, char(b1 + 1))
+            if idx + 2 <= len then
+                add_to_dict(idx, b1, byte(input, idx + 1), byte(input, idx + 2))
+            end
+            idx = idx + 1
+        end
+    end
+    
+    -- EOF marker: 0x00 with dist=0
+    table.insert(output, char(0))
+    table.insert(output, char(0))
+    table.insert(output, char(0))
+    table.insert(output, char(0))
+    
+    return table.concat(output)
+end
+
+-- Fast decompressor generator - minimal overhead, O(n) decompression
+function Compression:get_fast_decompressor(payload)
+    -- Use Base92 encoding (same as other methods for consistency)
+    local b92 = "!#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+    
+    -- Encode payload bytes to Base92 (13 bits per 2 chars)
+    local encoded = {}
+    local buf = 0
+    local bits = 0
+    
+    for i = 1, #payload do
+        buf = buf + string.byte(payload, i) * (2^bits)
+        bits = bits + 8
+        while bits >= 13 do
+            local val = buf % 8192
+            buf = math.floor(buf / 8192)
+            bits = bits - 13
+            local c1 = val % 92
+            local c2 = math.floor(val / 92)
+            table.insert(encoded, b92:sub(c1 + 1, c1 + 1))
+            table.insert(encoded, b92:sub(c2 + 1, c2 + 1))
+        end
+    end
+    -- Flush remaining bits
+    if bits > 0 then
+        local c1 = buf % 92
+        local c2 = math.floor(buf / 92)
+        table.insert(encoded, b92:sub(c1 + 1, c1 + 1))
+        if c2 > 0 or bits > 7 then
+            table.insert(encoded, b92:sub(c2 + 1, c2 + 1))
+        end
+    end
+    
+    local payload_encoded = table.concat(encoded)
+    local payload_len = #payload  -- Store original length for exact decoding
+    
+    -- Build ultra-fast decompressor
+    local parts = {}
+    
+    -- Lookup table built at load time
+    table.insert(parts, 'local T={}')
+    table.insert(parts, 'local c="!#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_`abcdefghijklmnopqrstuvwxyz{|}~"')
+    table.insert(parts, 'for i=1,92 do T[c:byte(i)]=i-1 end')
+    table.insert(parts, 'local d="' .. payload_encoded .. '"')
+    table.insert(parts, 'local L=' .. payload_len)
+    
+    -- Decode Base92 to bytes - simple bit unpacking
+    table.insert(parts, 'local sb,sc,tc,fl=string.byte,string.char,table.concat,math.floor')
+    table.insert(parts, 'local b={} local bi=0 local buf,bits=0,0 local di=1 local dn=#d')
+    table.insert(parts, [[while bi<L do 
+if bits<8 then 
+local v=T[sb(d,di)]+(T[sb(d,di+1)]or 0)*92 
+buf=buf+v*(2^bits) bits=bits+13 di=di+2 
+end 
+bi=bi+1 b[bi]=buf%256 buf=fl(buf/256) bits=bits-8 
+end]])
+    
+    -- LZ77 decompression - very fast, O(n) with simple loop
+    table.insert(parts, 'local o={} local oi=0 local i=1')
+    table.insert(parts, [[while i<=L do 
+local v=b[i]
+if v==0 then 
+local d1,d2,l=b[i+1],b[i+2],b[i+3]
+if d1==0 and d2==0 then break end
+local dist=d1+d2*256 local len=l+4 
+local s=oi-dist+1
+for j=0,len-1 do oi=oi+1 o[oi]=o[s+j] end
+i=i+4
+else oi=oi+1 o[oi]=sc(v-1) i=i+1 end 
+end]])
+    
+    table.insert(parts, 'return(loadstring or load)(tc(o))(...)')
+    return table.concat(parts, " ")
+end
+
+-- Run fast compression for speed-optimized output
+function Compression:run_fast_compression(source)
+    local compressed = fast_lz77_compress(source)
+    return self:get_fast_decompressor(compressed)
+end
+
 function Compression:run_compression(source, config)
     local processed = source
     local bwt_idx
@@ -771,6 +946,19 @@ function Compression:apply(ast, pipeline)
         source = pipeline:unparse(ast)
     end
     if #source == 0 then return ast end
+
+    -- Fast mode: use simple LZ77 for fastest decompression
+    if self.FastMode then
+        logger:info("Using FastMode compression (optimized for decompression speed)")
+        local best_code = self:run_fast_compression(source)
+        local best_len = #best_code
+        logger:info("FastMode Compression: Size=" .. best_len .. " (original=" .. #source .. ", ratio=" .. string.format("%.1f", best_len/#source*100) .. "%)")
+        
+        local new_ast = pipeline.parser:parse(best_code)
+        ast.body = new_ast.body
+        ast.globalScope = new_ast.globalScope
+        return ast
+    end
 
     local configs = {
         { BWT = true, RLE = self.RLE, Huffman = false, ArithmeticCoding = self.ArithmeticCoding, PPM = false },

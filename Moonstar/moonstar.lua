@@ -312,6 +312,7 @@ local function main(args)
     if config.compress then
         presetConfig.Compression = {
             Enabled = true,
+            FastMode = true,  -- Prioritize decompression speed for Roblox
             BWT = true,
             RLE = true,
             Huffman = true,
