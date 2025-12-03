@@ -49,6 +49,97 @@ local BackgroundGradientSequence = ColorSequence.new{
     ColorSequenceKeypoint.new(1, Theme.BackgroundGradientEnd)
 }
 
+-- Encryption configuration (must match worker)
+local ENCRYPTION_KEY = "LunarityXOR2025!SecretKey"
+local USER_AGENT = "LunarityLoader/1.0"
+
+-- XOR encryption/decryption for payload obfuscation
+local function xorCrypt(input, key)
+    local output = {}
+    local keyLen = #key
+    for i = 1, #input do
+        local keyByte = string.byte(key, ((i - 1) % keyLen) + 1)
+        local inputByte = string.byte(input, i)
+        output[i] = string.char(bit32.bxor(inputByte, keyByte))
+    end
+    return table.concat(output)
+end
+
+local function base64Encode(data)
+    local b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    local result = {}
+    local padding = 0
+    local bytes = { string.byte(data, 1, #data) }
+    local i = 1
+    while i <= #bytes do
+        local b1 = bytes[i] or 0
+        local b2 = bytes[i + 1] or 0
+        local b3 = bytes[i + 2] or 0
+        local combined = bit32.bor(
+            bit32.lshift(b1, 16),
+            bit32.lshift(b2, 8),
+            b3
+        )
+        table.insert(result, string.sub(b64chars, bit32.rshift(combined, 18) % 64 + 1, bit32.rshift(combined, 18) % 64 + 1))
+        table.insert(result, string.sub(b64chars, bit32.rshift(combined, 12) % 64 + 1, bit32.rshift(combined, 12) % 64 + 1))
+        if i + 1 <= #bytes then
+            table.insert(result, string.sub(b64chars, bit32.rshift(combined, 6) % 64 + 1, bit32.rshift(combined, 6) % 64 + 1))
+        else
+            table.insert(result, "=")
+        end
+        if i + 2 <= #bytes then
+            table.insert(result, string.sub(b64chars, combined % 64 + 1, combined % 64 + 1))
+        else
+            table.insert(result, "=")
+        end
+        i = i + 3
+    end
+    return table.concat(result)
+end
+
+local function base64Decode(data)
+    local b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    local lookup = {}
+    for i = 1, 64 do
+        lookup[string.sub(b64chars, i, i)] = i - 1
+    end
+    lookup["="] = 0
+    local result = {}
+    local i = 1
+    while i <= #data do
+        local c1 = lookup[string.sub(data, i, i)] or 0
+        local c2 = lookup[string.sub(data, i + 1, i + 1)] or 0
+        local c3 = lookup[string.sub(data, i + 2, i + 2)] or 0
+        local c4 = lookup[string.sub(data, i + 3, i + 3)] or 0
+        local combined = bit32.bor(
+            bit32.lshift(c1, 18),
+            bit32.lshift(c2, 12),
+            bit32.lshift(c3, 6),
+            c4
+        )
+        table.insert(result, string.char(bit32.rshift(combined, 16) % 256))
+        if string.sub(data, i + 2, i + 2) ~= "=" then
+            table.insert(result, string.char(bit32.rshift(combined, 8) % 256))
+        end
+        if string.sub(data, i + 3, i + 3) ~= "=" then
+            table.insert(result, string.char(combined % 256))
+        end
+        i = i + 4
+    end
+    return table.concat(result)
+end
+
+local function encryptPayload(plainText)
+    local encrypted = xorCrypt(plainText, ENCRYPTION_KEY)
+    return base64Encode(encrypted)
+end
+
+local function decryptPayload(base64Cipher)
+    local ok, decoded = pcall(base64Decode, base64Cipher)
+    if not ok then return nil end
+    return xorCrypt(decoded, ENCRYPTION_KEY)
+end
+
 local HttpRequestInvoker
 
 if typeof(http_request) == "function" then
@@ -128,14 +219,18 @@ local function requestWorker(payload)
         return false, "Failed to encode payload: " .. tostring(encodeErr)
     end
 
+    -- Encrypt the JSON payload for obfuscation
+    local encryptedBody = encryptPayload(jsonBody)
+
     local success, response = pcall(HttpRequestInvoker, {
         Url = BASE_URL .. AUTHORIZE_ENDPOINT,
         Method = "POST",
         Headers = {
             ["Content-Type"] = "application/json",
             ["Accept"] = "application/json",
+            ["User-Agent"] = USER_AGENT,
         },
-        Body = jsonBody,
+        Body = encryptedBody,
     })
 
     if not success then
@@ -422,6 +517,17 @@ local function createScriptButton(meta)
         -- Use scriptId from response.scriptMeta if available, otherwise fall back to meta.id
         local scriptId = (response.scriptMeta and response.scriptMeta.id) or meta.id
 
+        -- Decrypt script if it was encrypted by the worker
+        local scriptSource = response.script
+        if response.scriptEncrypted then
+            local decrypted = decryptPayload(scriptSource)
+            if not decrypted then
+                setStatus("Failed to decrypt script content", Theme.Danger)
+                return
+            end
+            scriptSource = decrypted
+        end
+
         local accessPacket = {
             token = response.accessToken,
             scriptId = scriptId,
@@ -430,9 +536,11 @@ local function createScriptButton(meta)
             expiresIn = expiresIn,
             refreshInterval = refreshInterval,
             issuedAt = os.clock(),
+            encryptionKey = ENCRYPTION_KEY,
+            userAgent = USER_AGENT,
         }
 
-        local chunk, loadErr = loadstring(response.script, meta.id)
+        local chunk, loadErr = loadstring(scriptSource, meta.id)
         if not chunk then
             setStatus("loadstring failed: " .. tostring(loadErr), Theme.Danger)
             return

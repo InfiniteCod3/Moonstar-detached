@@ -20,6 +20,54 @@ elseif HttpService and HttpService.RequestAsync then
     end
 end
 
+-- XOR encryption/decryption for payload obfuscation (matches loader)
+local function xorCrypt(input, key)
+    local output = {}
+    local keyLen = #key
+    for i = 1, #input do
+        local keyByte = string.byte(key, ((i - 1) % keyLen) + 1)
+        local inputByte = string.byte(input, i)
+        output[i] = string.char(bit32.bxor(inputByte, keyByte))
+    end
+    return table.concat(output)
+end
+
+local function base64Encode(data)
+    local b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    local result = {}
+    local bytes = { string.byte(data, 1, #data) }
+    local i = 1
+    while i <= #bytes do
+        local b1 = bytes[i] or 0
+        local b2 = bytes[i + 1] or 0
+        local b3 = bytes[i + 2] or 0
+        local combined = bit32.bor(
+            bit32.lshift(b1, 16),
+            bit32.lshift(b2, 8),
+            b3
+        )
+        table.insert(result, string.sub(b64chars, bit32.rshift(combined, 18) % 64 + 1, bit32.rshift(combined, 18) % 64 + 1))
+        table.insert(result, string.sub(b64chars, bit32.rshift(combined, 12) % 64 + 1, bit32.rshift(combined, 12) % 64 + 1))
+        if i + 1 <= #bytes then
+            table.insert(result, string.sub(b64chars, bit32.rshift(combined, 6) % 64 + 1, bit32.rshift(combined, 6) % 64 + 1))
+        else
+            table.insert(result, "=")
+        end
+        if i + 2 <= #bytes then
+            table.insert(result, string.sub(b64chars, combined % 64 + 1, combined % 64 + 1))
+        else
+            table.insert(result, "=")
+        end
+        i = i + 3
+    end
+    return table.concat(result)
+end
+
+local function encryptPayload(plainText, key)
+    local encrypted = xorCrypt(plainText, key)
+    return base64Encode(encrypted)
+end
+
 local function buildValidateUrl()
     if not LoaderAccess then return nil end
     if typeof(LoaderAccess.validateUrl) == "string" then
@@ -45,14 +93,21 @@ local function requestLoaderValidation(refresh)
     local encodedOk, encodedPayload = pcall(HttpService.JSONEncode, HttpService, payload)
     if not encodedOk then return false, "Failed to encode validation payload" end
 
+    -- Encrypt the payload if encryption key is available
+    local requestBody = encodedPayload
+    if LoaderAccess.encryptionKey then
+        requestBody = encryptPayload(encodedPayload, LoaderAccess.encryptionKey)
+    end
+
     local success, response = pcall(HttpRequestInvoker, {
         Url = validateUrl,
         Method = "POST",
         Headers = {
             ["Content-Type"] = "application/json",
             ["Accept"] = "application/json",
+            ["User-Agent"] = LoaderAccess.userAgent or "LunarityLoader/1.0",
         },
-        Body = encodedPayload,
+        Body = requestBody,
     })
 
     if not success then return false, tostring(response) end
@@ -67,6 +122,12 @@ local function requestLoaderValidation(refresh)
     if not decodeOk then return false, "Invalid JSON from worker" end
 
     if decoded.ok ~= true then return false, decoded.reason or "Validation denied" end
+
+    -- Dynamic token rotation: update the token if a new one was provided
+    if decoded.newToken and typeof(decoded.newToken) == "string" then
+        LoaderAccess.token = decoded.newToken
+    end
+
     return true, decoded
 end
 
@@ -182,6 +243,7 @@ local Settings = {
     ClickFling = false,
     Orbit = false,
     IFrames = false,
+    AntiDebuff = false,
     AutoRemoveSkills = false,
     AttacherVisible = false,
     LoopVoid = false,
@@ -191,6 +253,12 @@ local Settings = {
 }
 
 local DEBUG_MODE = true -- Toggle this to enable/disable debug prints
+local DEBUFF_BLACKLIST = {
+    ["Stunned"] = true,
+    ["Freeze"] = true,
+    ["Ragdoll"] = true,
+    ["Slowed"] = true,
+}
 
 local Connections = {}
 local Unloaded = false
@@ -198,6 +266,32 @@ local Unloaded = false
 -- // Utility Functions
 local function addConnection(conn)
     table.insert(Connections, conn)
+end
+
+local function remove_status(statusIndex)
+    local statusRemote = Remotes and Remotes:FindFirstChild("Status")
+    if statusRemote then
+        statusRemote:FireServer({
+            RemoveStatus = true,
+            StatusIndex = statusIndex
+        })
+    end
+end
+
+-- Anti-Debuff Listener
+if Remotes and Remotes:FindFirstChild("Status") then
+    addConnection(Remotes.Status.OnClientEvent:Connect(function(statusTable)
+        if not Settings.AntiDebuff or Unloaded then return end
+        
+        if type(statusTable) == "table" then
+            for index, statusName in pairs(statusTable) do
+                if DEBUFF_BLACKLIST[statusName] then
+                    remove_status(index)
+                    debugLog("Removed debuff: " .. tostring(statusName))
+                end
+            end
+        end
+    end))
 end
 
 local function createDraggable(frame, dragArea)
@@ -333,7 +427,7 @@ local function BlowEveryone()
                 local vecInf = Vector3.new(math.huge, math.huge, math.huge)
                 local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
                 
-                WeldsRemote:FireServer(targetHRP, localHRP, cf1, vecInf, cf2)
+                WeldsRemote:FireServer(localHRP, targetHRP, cf1, vecInf, cf2)
                 count = count + 1
                 debugLog("Fired weld for " .. player.Name)
             end
@@ -358,7 +452,7 @@ local function VoidEveryone()
                 local vecInf = Vector3.new(0, -10000, 0)
                 local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
                 
-                WeldsRemote:FireServer(targetHRP, localHRP, cf1, vecInf, cf2)
+                WeldsRemote:FireServer(localHRP, targetHRP, cf1, vecInf, cf2)
                 count = count + 1
                 debugLog("Voided " .. player.Name)
             end
@@ -379,11 +473,10 @@ local function BringAll()
             
             if targetHRP and localHRP then
                 -- Bring to local player
-                local cf1 = CFrame.new(0, 0, -5)
+                local cfZero = CFrame.new(0, 0, 0)
                 local vecZero = Vector3.new(0, 0, 0)
-                local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
                 
-                WeldsRemote:FireServer(targetHRP, localHRP, cf1, vecZero, cf2)
+                WeldsRemote:FireServer(localHRP, targetHRP, localHRP.CFrame, vecZero, cfZero)
                 count = count + 1
                 debugLog("Brought " .. player.Name)
             end
@@ -432,21 +525,21 @@ local function TargetAction(action)
          local cf1 = CFrame.new(0, -10000, 0)
          local vecInf = Vector3.new(0, -10000, 0)
          local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
-         WeldsRemote:FireServer(targetHRP, localHRP, cf1, vecInf, cf2)
+         WeldsRemote:FireServer(localHRP, targetHRP, cf1, vecInf, cf2)
          notify("Voided " .. targetName)
          
     elseif action == "Fling" then
          local cf1 = CFrame.new(-3028.23, 3101.88, 308.06, -0.91, 0, 0.4, 0, 1, 0, -0.4, 0, -0.91)
          local vecInf = Vector3.new(math.huge, math.huge, math.huge)
          local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
-         WeldsRemote:FireServer(targetHRP, localHRP, cf1, vecInf, cf2)
+         WeldsRemote:FireServer(localHRP, targetHRP, cf1, vecInf, cf2)
          notify("Flung " .. targetName)
          
     elseif action == "Bring" then
-         local cf1 = CFrame.new(0, 0, -5)
+         local cfZero = CFrame.new(0, 0, 0)
          local vecZero = Vector3.new(0, 0, 0)
-         local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
-         WeldsRemote:FireServer(targetHRP, localHRP, cf1, vecZero, cf2)
+         -- Using LocalPlayer's CFrame as the weld C0 seems to be the trick in Teleport.lua
+         WeldsRemote:FireServer(localHRP, targetHRP, localHRP.CFrame, vecZero, cfZero)
          notify("Brought " .. targetName)
     end
 end
@@ -1034,10 +1127,7 @@ local function createMenu()
     createButton("Fling Target", Theme.Danger, function() TargetAction("Fling") end)
     createButton("Bring Target", Theme.Accent, function() TargetAction("Bring") end)
 
-    -- [ World Section ] --
-    createSection("World")
-    createButton("Remove Map", Theme.NeutralButton, RemoveMap)
-    createButton("Bring Map (Client Side)", Theme.NeutralButton, BringMap)
+
 
     -- [ Toggles Section ] --
     createSection("Toggles")
@@ -1070,7 +1160,72 @@ local function createMenu()
     createToggle("God Mode / IFrames", Settings.IFrames, function(val)
         Settings.IFrames = val
     end)
+
+    createToggle("Anti-Debuff", Settings.AntiDebuff, function(val)
+        Settings.AntiDebuff = val
+        if val then notify("Anti-Debuff Enabled") else notify("Anti-Debuff Disabled") end
+    end)
     
+    -- [ Exploits ] --
+    createSection("Exploits")
+    
+    createToggle("Anti-Knockback", false, function(val)
+        if not getconnections then return notify("Executor missing 'getconnections'") end
+        
+        local velocityRemote = Remotes and Remotes:FindFirstChild("Velocity")
+        if not velocityRemote then return notify("Velocity remote not found") end
+        
+        for _, conn in pairs(getconnections(velocityRemote.OnClientEvent)) do
+            if val then
+                conn:Disable()
+            else
+                conn:Enable()
+            end
+        end
+        notify("Anti-Knockback: " .. (val and "ON" or "OFF"))
+    end)
+
+
+
+    createToggle("Infinite Jump", false, function(val)
+        if val then
+            local jumpConnection
+            jumpConnection = UserInputService.JumpRequest:Connect(function()
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                    LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                end
+            end)
+            getgenv().InfiniteJumpConnection = jumpConnection
+        else
+            if getgenv().InfiniteJumpConnection then
+                getgenv().InfiniteJumpConnection:Disconnect()
+                getgenv().InfiniteJumpConnection = nil
+            end
+        end
+    end)
+    
+    createButton("Force Recover (Anti-Stun)", Theme.Success, function()
+        local recover = Remotes:FindFirstChild("Recover")
+        if recover then
+            recover:FireServer(0.1, 0.1)
+            notify("Fired Recover")
+        else
+            notify("Recover remote not found")
+        end
+    end)
+    
+    createButton("Flash Step (Forward)", Theme.NeutralButton, function()
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local bv = Instance.new("BodyVelocity", hrp)
+            bv.MaxForce = Vector3.new(100000, 0, 100000)
+            bv.Velocity = hrp.CFrame.LookVector * 150
+            game.Debris:AddItem(bv, 0.15)
+        end
+    end)
+
+
+
     -- [ Target Selector ] --
     createSection("Target Selector")
     local SelectorGui = createSelectorUI()

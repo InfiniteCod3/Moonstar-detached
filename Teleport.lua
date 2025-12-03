@@ -57,6 +57,54 @@ local DangerGradientSequence = ColorSequence.new{
     ColorSequenceKeypoint.new(1, Theme.DangerDark)
 }
 
+-- XOR encryption/decryption for payload obfuscation (matches loader)
+local function xorCrypt(input, key)
+    local output = {}
+    local keyLen = #key
+    for i = 1, #input do
+        local keyByte = string.byte(key, ((i - 1) % keyLen) + 1)
+        local inputByte = string.byte(input, i)
+        output[i] = string.char(bit32.bxor(inputByte, keyByte))
+    end
+    return table.concat(output)
+end
+
+local function base64Encode(data)
+    local b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    local result = {}
+    local bytes = { string.byte(data, 1, #data) }
+    local i = 1
+    while i <= #bytes do
+        local b1 = bytes[i] or 0
+        local b2 = bytes[i + 1] or 0
+        local b3 = bytes[i + 2] or 0
+        local combined = bit32.bor(
+            bit32.lshift(b1, 16),
+            bit32.lshift(b2, 8),
+            b3
+        )
+        table.insert(result, string.sub(b64chars, bit32.rshift(combined, 18) % 64 + 1, bit32.rshift(combined, 18) % 64 + 1))
+        table.insert(result, string.sub(b64chars, bit32.rshift(combined, 12) % 64 + 1, bit32.rshift(combined, 12) % 64 + 1))
+        if i + 1 <= #bytes then
+            table.insert(result, string.sub(b64chars, bit32.rshift(combined, 6) % 64 + 1, bit32.rshift(combined, 6) % 64 + 1))
+        else
+            table.insert(result, "=")
+        end
+        if i + 2 <= #bytes then
+            table.insert(result, string.sub(b64chars, combined % 64 + 1, combined % 64 + 1))
+        else
+            table.insert(result, "=")
+        end
+        i = i + 3
+    end
+    return table.concat(result)
+end
+
+local function encryptPayload(plainText, key)
+    local encrypted = xorCrypt(plainText, key)
+    return base64Encode(encrypted)
+end
+
 local HttpRequestInvoker
 
 if typeof(http_request) == "function" then
@@ -111,29 +159,41 @@ local function requestLoaderValidation(refresh)
     end
 
     local payload = {
-        token = LoaderAccess.accessToken,
+        token = LoaderAccess.token,
         scriptId = LOADER_SCRIPT_ID,
         refresh = refresh
     }
 
     local bodyJson = HttpService:JSONEncode(payload)
 
-    local response = HttpRequestInvoker({
+    -- Encrypt the payload if encryption key is available
+    local requestBody = bodyJson
+    if LoaderAccess.encryptionKey then
+        requestBody = encryptPayload(bodyJson, LoaderAccess.encryptionKey)
+    end
+
+    local success, response = pcall(HttpRequestInvoker, {
         Url = validateUrl,
         Method = "POST",
         Headers = {
-            ["Content-Type"] = "application/json"
+            ["Content-Type"] = "application/json",
+            ["User-Agent"] = LoaderAccess.userAgent or "LunarityLoader/1.0",
         },
-        Body = bodyJson
+        Body = requestBody
     })
 
-    if not response or not response.Body then
+    if not success or not response or not response.Body then
         return false, "No response from validation endpoint"
     end
 
-    local decoded = HttpService:JSONDecode(response.Body)
-    if not decoded.ok then
-        return false, decoded.reason or "Validation failed"
+    local decodeOk, decoded = pcall(HttpService.JSONDecode, HttpService, response.Body)
+    if not decodeOk or not decoded.ok then
+        return false, decoded and decoded.reason or "Validation failed"
+    end
+
+    -- Dynamic token rotation: update the token if a new one was provided
+    if decoded.newToken and typeof(decoded.newToken) == "string" then
+        LoaderAccess.token = decoded.newToken
     end
 
     return true, decoded

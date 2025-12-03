@@ -2,3 +2,4 @@
 .wrangler/
 .wrangler/state/v3/kv/Moonstar/debug_pipeline.txt
 node_modules
+backup/
