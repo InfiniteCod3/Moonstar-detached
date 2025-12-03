@@ -103,7 +103,14 @@ function xorCrypt(input, key) {
 
 function encryptPayload(plainText) {
     const encrypted = xorCrypt(plainText, CONFIG.encryptionKey);
-    return btoa(String.fromCharCode(...encrypted));
+    // Use chunked approach to avoid stack overflow on large payloads
+    let binaryStr = "";
+    const chunkSize = 8192;
+    for (let i = 0; i < encrypted.length; i += chunkSize) {
+        const chunk = encrypted.subarray(i, Math.min(i + chunkSize, encrypted.length));
+        binaryStr += String.fromCharCode.apply(null, chunk);
+    }
+    return btoa(binaryStr);
 }
 
 function decryptPayload(base64Cipher) {
@@ -281,7 +288,7 @@ async function handleLoader(env) {
 async function handleAuthorize(request, env) {
     // Validate User-Agent
     if (!validateUserAgent(request)) {
-        logToDiscord("invalid_client", {
+        await logToDiscord("invalid_client", {
             userAgent: request.headers.get("User-Agent"),
             endpoint: "/authorize",
         }, request);
@@ -326,7 +333,7 @@ async function handleAuthorize(request, env) {
     const apiKey = normalizeKey(body.apiKey);
     const keyEntry = keyring[apiKey];
     if (!keyEntry) {
-        logToDiscord("auth_fail", {
+        await logToDiscord("auth_fail", {
             reason: "Invalid API key",
             apiKey: apiKey,
             username: body.username,
@@ -358,7 +365,7 @@ async function handleAuthorize(request, env) {
     }
 
     if (!allowedScripts.includes(scriptId)) {
-        logToDiscord("auth_fail", {
+        await logToDiscord("auth_fail", {
             reason: "Script not permitted for this key",
             apiKey: apiKey,
             scriptId: scriptId,
@@ -384,11 +391,8 @@ async function handleAuthorize(request, env) {
         username: body.username,
     });
 
-    // Encrypt script content for obfuscation
-    const encryptedScript = encryptPayload(scriptBody);
-
     // Log successful authorization
-    logToDiscord("auth_success", {
+    await logToDiscord("auth_success", {
         username: body.username,
         userId: body.userId,
         apiKey: apiKey,
@@ -398,8 +402,8 @@ async function handleAuthorize(request, env) {
 
     return jsonResponse({
         ...responseBase,
-        script: encryptedScript,
-        scriptEncrypted: true,
+        script: scriptBody,
+        scriptEncrypted: false,
         scriptMeta: {
             id: scriptId,
             label: scriptMeta.label,
@@ -419,7 +423,7 @@ function handleHealth() {
 async function handleValidate(request, env) {
     // Validate User-Agent
     if (!validateUserAgent(request)) {
-        logToDiscord("invalid_client", {
+        await logToDiscord("invalid_client", {
             userAgent: request.headers.get("User-Agent"),
             endpoint: "/validate",
         }, request);
@@ -461,7 +465,7 @@ async function handleValidate(request, env) {
     const tokenKey = buildTokenKey(token);
     const record = await env.SCRIPTS.get(tokenKey, { type: "json" });
     if (!record) {
-        logToDiscord("validate_fail", {
+        await logToDiscord("validate_fail", {
             reason: "Token expired or invalid (possible replay attack)",
             scriptId: body.scriptId,
         }, request);
@@ -469,7 +473,7 @@ async function handleValidate(request, env) {
     }
 
     if (body.scriptId && record.scriptId && body.scriptId !== record.scriptId) {
-        logToDiscord("validate_fail", {
+        await logToDiscord("validate_fail", {
             reason: "Token/script mismatch (tampering attempt)",
             scriptId: body.scriptId,
             expectedScriptId: record.scriptId,
