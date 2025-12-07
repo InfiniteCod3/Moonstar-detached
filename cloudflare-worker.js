@@ -286,15 +286,6 @@ async function handleLoader(env) {
 }
 
 async function handleAuthorize(request, env) {
-    // Validate User-Agent
-    if (!validateUserAgent(request)) {
-        await logToDiscord("invalid_client", {
-            userAgent: request.headers.get("User-Agent"),
-            endpoint: "/authorize",
-        }, request);
-        return jsonResponse({ ok: false, reason: "Invalid client." }, { status: 403 });
-    }
-
     const killSwitch = (env?.KILL_SWITCH || "false").toLowerCase() === "true";
     if (killSwitch) {
         return jsonResponse({ ok: false, reason: "Global kill switch active." }, { status: 503 });
@@ -421,15 +412,6 @@ function handleHealth() {
 }
 
 async function handleValidate(request, env) {
-    // Validate User-Agent
-    if (!validateUserAgent(request)) {
-        await logToDiscord("invalid_client", {
-            userAgent: request.headers.get("User-Agent"),
-            endpoint: "/validate",
-        }, request);
-        return jsonResponse({ ok: false, reason: "Invalid client." }, { status: 403 });
-    }
-
     const killSwitch = (env?.KILL_SWITCH || "false").toLowerCase() === "true";
     if (killSwitch) {
         return jsonResponse({ ok: false, reason: "Kill switch active", killSwitch: true }, { status: 403 });

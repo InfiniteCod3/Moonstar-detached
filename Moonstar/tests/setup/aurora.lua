@@ -1,142 +1,135 @@
 -- Aurora: A Roblox Environment Emulator
+-- Compatibility wrapper - loads the modular Aurora system
 
--- Mock Instance
-local Instance = {}
-Instance.__index = Instance
+-- Determine script directory
+local info = debug.getinfo(1, "S")
+local scriptPath = info.source:sub(2)
+local scriptDir = scriptPath:match("(.*/)" ) or scriptPath:match("(.*\\)") or "./"
 
-function Instance.new(className)
-    local self = setmetatable({}, Instance)
-    self.ClassName = className
-    self.Children = {}
-    self.Parent = nil
-    self.Name = ""
-    return self
-end
+-- Load the modular Aurora system
+local auroraPath = scriptDir .. "aurora/init.lua"
+local chunk, err = loadfile(auroraPath)
 
-function Instance:GetChildren()
-    return self.Children
-end
+if chunk then
+    local Aurora = chunk()
+    
+    -- Set up the global environment
+    Aurora.setup(_G)
+    
+    -- Export Aurora module for advanced usage
+    _G.Aurora = Aurora
+    
+    return Aurora
+else
+    -- Fallback: Minimal legacy implementation if modular system fails
+    warn("Failed to load modular Aurora: " .. tostring(err))
+    warn("Using minimal fallback implementation")
+    
+    -- Minimal Instance implementation
+    local Instance = {}
+    Instance.__index = Instance
 
-function Instance:FindFirstChild(name)
-    for _, child in ipairs(self.Children) do
-        if child.Name == name then
-            return child
+    function Instance.new(className)
+        local self = setmetatable({}, Instance)
+        self.ClassName = className
+        self.Children = {}
+        self.Parent = nil
+        self.Name = className
+        self.Attributes = {}
+        return self
+    end
+
+    function Instance:GetChildren()
+        return self.Children
+    end
+
+    function Instance:FindFirstChild(name)
+        for _, child in ipairs(self.Children) do
+            if child.Name == name then
+                return child
+            end
         end
+        return nil
     end
-    return nil
-end
 
-function Instance:GetAttribute(attribute)
-    if self.Attributes and self.Attributes[attribute] then
-        return self.Attributes[attribute]
+    function Instance:GetAttribute(attribute)
+        return self.Attributes and self.Attributes[attribute]
     end
-    return nil
-end
 
-function Instance:ClearAllChildren()
-    self.Children = {}
-end
+    function Instance:SetAttribute(attribute, value)
+        self.Attributes = self.Attributes or {}
+        self.Attributes[attribute] = value
+    end
 
-function Instance:Destroy()
-    self.Parent = nil
-    self.Children = nil
-end
+    function Instance:ClearAllChildren()
+        self.Children = {}
+    end
 
--- Mock Services
-local game = Instance.new("DataModel")
-local workspace = Instance.new("Workspace")
-workspace.Name = "Workspace"
-workspace.Parent = game
-game.Workspace = workspace
+    function Instance:Destroy()
+        self.Parent = nil
+        self.Children = nil
+    end
 
-local CoreGui = Instance.new("CoreGui")
-local Players = Instance.new("Players")
-local ReplicatedStorage = Instance.new("ReplicatedStorage")
-local UserInputService = Instance.new("UserInputService")
-local RunService = Instance.new("RunService")
-local HttpService = Instance.new("HttpService")
+    -- Mock game
+    local game = Instance.new("DataModel")
+    local workspace = Instance.new("Workspace")
+    workspace.Name = "Workspace"
+    workspace.Parent = game
+    game.Workspace = workspace
 
-game:GetService = function(serviceName)
-    if serviceName == "CoreGui" then return CoreGui end
-    if serviceName == "Players" then return Players end
-    if serviceName == "ReplicatedStorage" then return ReplicatedStorage end
-    if serviceName == "UserInputService" then return UserInputService end
-    if serviceName == "RunService" then return RunService end
-    if serviceName == "HttpService" then return HttpService end
-    return nil
-end
-
--- Mock Player
-local LocalPlayer = Instance.new("Player")
-LocalPlayer.Name = "LocalPlayer"
-Players.LocalPlayer = LocalPlayer
-
--- Mock Camera
-local Camera = Instance.new("Camera")
-workspace.CurrentCamera = Camera
-
--- Mock DataTypes
-local Vector3 = {}
-function Vector3.new(...) return {...} end
-
-local CFrame = {}
-function CFrame.new(...) return {...} end
-
-local Color3 = {}
-function Color3.fromRGB(...) return {...} end
-
-local UDim2 = {}
-function UDim2.new(...) return {...} end
-
-local Enum = {
-    KeyCode = {
-        RightControl = "RightControl",
-        RightAlt = "RightAlt",
-    },
-    Font = {
-        Gotham = "Gotham",
-        GothamSemibold = "GothamSemibold",
-    },
-    TextXAlignment = {
-        Left = "Left",
-        Right = "Right",
-    },
-    HighlightDepthMode = {
-        AlwaysOnTop = "AlwaysOnTop",
-    },
-    ZIndexBehavior = {
-        Global = "Global",
-    },
-    FillDirection = {
-        Vertical = "Vertical",
-    },
-    HorizontalAlignment = {
-        Left = "Left",
-    },
-    SortOrder = {
-        LayoutOrder = "LayoutOrder",
-    },
-    UserInputType = {
-        MouseButton1 = "MouseButton1",
+    -- Services
+    local services = {
+        CoreGui = Instance.new("CoreGui"),
+        Players = Instance.new("Players"),
+        ReplicatedStorage = Instance.new("ReplicatedStorage"),
+        UserInputService = Instance.new("UserInputService"),
+        RunService = Instance.new("RunService"),
+        HttpService = Instance.new("HttpService"),
     }
-}
 
--- Globals
-_G.game = game
-_G.workspace = workspace
-_G.Instance = Instance
-_G.Vector3 = Vector3
-_G.CFrame = CFrame
-_G.Color3 = Color3
-_G.UDim2 = UDim2
-_G.Enum = Enum
-_G.printidentity = print
+    -- LocalPlayer
+    local LocalPlayer = Instance.new("Player")
+    LocalPlayer.Name = "LocalPlayer"
+    services.Players.LocalPlayer = LocalPlayer
 
-function _G.print(...)
-    local args = {...}
-    local strings = {}
-    for i = 1, #args do
-        strings[i] = tostring(args[i])
+    -- Camera
+    local Camera = Instance.new("Camera")
+    workspace.CurrentCamera = Camera
+
+    function game:GetService(serviceName)
+        return services[serviceName]
     end
-    printidentity(table.concat(strings, "\t"))
+
+    -- Basic data types
+    local Vector3 = { new = function(...) return {...} end }
+    local CFrame = { new = function(...) return {...} end }
+    local Color3 = { 
+        new = function(...) return {...} end,
+        fromRGB = function(...) return {...} end 
+    }
+    local UDim2 = { new = function(...) return {...} end }
+
+    -- Basic Enum
+    local Enum = {
+        KeyCode = { RightControl = "RightControl", RightAlt = "RightAlt" },
+        Font = { Gotham = "Gotham", GothamSemibold = "GothamSemibold" },
+        TextXAlignment = { Left = "Left", Right = "Right" },
+        HighlightDepthMode = { AlwaysOnTop = "AlwaysOnTop" },
+        ZIndexBehavior = { Global = "Global" },
+        FillDirection = { Vertical = "Vertical" },
+        HorizontalAlignment = { Left = "Left" },
+        SortOrder = { LayoutOrder = "LayoutOrder" },
+        UserInputType = { MouseButton1 = "MouseButton1" }
+    }
+
+    -- Set globals
+    _G.game = game
+    _G.workspace = workspace
+    _G.Instance = Instance
+    _G.Vector3 = Vector3
+    _G.CFrame = CFrame
+    _G.Color3 = Color3
+    _G.UDim2 = UDim2
+    _G.Enum = Enum
+    _G.printidentity = print
 end

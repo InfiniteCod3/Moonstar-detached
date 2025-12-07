@@ -241,15 +241,16 @@ local Presets   = {
 
         Compression = {
             Enabled = true;
-            FastMode = true;  -- Prioritize decompression speed for Roblox
-            Preseed = true;
+            FastMode = false;     -- Disable fast mode
+            BalancedMode = true;  -- Enable balanced mode
             BWT = true;
             RLE = true;
-            Huffman = true;
-            ArithmeticCoding = true;
+            ANS = true;  -- tANS encoder (2-5x faster decode than arithmetic)
+            Huffman = false;
+            ArithmeticCoding = false;
             PPM = true;
-            PPMOrder = 2;
-            ParallelTests = 4;
+            PPMOrder = 4;
+            -- Note: LuaDictionary omitted - VMify transforms keywords to bytecode
         };
     };
 };

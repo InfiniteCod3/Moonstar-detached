@@ -77,7 +77,6 @@ Options:
     --seed=N            Set random seed for reproducible output
     --detailed          Show detailed build report
     --compress          Enable compression of output
-    --parallel=N        Number of parallel compression tests (default: 4)
 
     Presets:
     Minify  - No obfuscation (just minification)
@@ -198,7 +197,6 @@ local function parseArgs(args)
         disableAntiTamper = false,
         detailed = false,
         compress = false,
-        parallel = 4,
     }
     
     -- Parse options
@@ -220,8 +218,6 @@ local function parseArgs(args)
             config.detailed = true
         elseif arg == "--compress" then
             config.compress = true
-        elseif arg:match("^--parallel=") then
-            config.parallel = tonumber(arg:match("^--parallel=(.+)$")) or 4
         elseif arg == "--help" or arg == "-h" then
             return nil, "help"
         end
@@ -312,15 +308,15 @@ local function main(args)
     if config.compress then
         presetConfig.Compression = {
             Enabled = true,
-            FastMode = true,  -- Prioritize decompression speed for Roblox
+            FastMode = true,  -- Toggle to false for maximum compression ratio
             BWT = true,
             RLE = true,
-            Huffman = true,
-            ArithmeticCoding = true,
+            ANS = true,  -- tANS encoder (2-5x faster decode than arithmetic)
+            Huffman = false,
+            ArithmeticCoding = false,
             PPM = true,
-            PPMOrder = 2,
-            Preseed = true,
-            ParallelTests = config.parallel
+            PPMOrder = 4,
+            -- Note: LuaDictionary omitted - obfuscation transforms keywords
         }
     end
 

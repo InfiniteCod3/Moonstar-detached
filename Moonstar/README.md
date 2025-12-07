@@ -103,10 +103,68 @@ lua5.1 runtests.lua
 
 ### Testing Luau and Roblox Scripts
 
-Moonstar includes a mock Roblox environment emulator called **Aurora** to allow for testing Luau code that uses Roblox-specific APIs.
+Moonstar includes a comprehensive mock Roblox environment emulator called **Aurora** to allow for testing Luau code that uses Roblox-specific APIs.
 
-- **Location:** `tests/setup/aurora.lua`
-- **Functionality:** Mocks common Roblox globals like `game`, `workspace`, `Instance`, `Players`, and various data types.
+#### Aurora Emulator
+
+- **Location:** `tests/setup/aurora/` (modular) or `tests/setup/aurora.lua` (compatibility wrapper)
+- **Architecture:** Modular design split across multiple files for maintainability
+
+#### Modules
+
+| Module | Description |
+|--------|-------------|
+| `signal.lua` | RBXScriptSignal implementation with Connect, Once, Wait, Fire, Disconnect |
+| `typeof.lua` | Roblox-style `typeof()` function with custom type registration |
+| `datatypes.lua` | Vector2, Vector3, CFrame, Color3, UDim, UDim2, Ray, BrickColor, TweenInfo, and more |
+| `instance.lua` | Full Instance class with Parent/Children, FindFirstChild, IsA, Clone, Attributes |
+| `services.lua` | HttpService, RunService, TweenService, Players, Debris, and other services |
+| `executor.lua` | Executor environment: getgenv, hookfunction, file operations, rconsole |
+| `task.lua` | Task library: task.spawn, task.defer, task.delay, task.wait, task.cancel |
+| `enum.lua` | Complete Enum system (KeyCode, UserInputType, EasingStyle, Material, etc.) |
+| `init.lua` | Main loader that combines all modules and sets up the environment |
+
+#### Supported Features
+
+**Data Types:**
+- Vector2, Vector3, CFrame (with full rotation/transformation methods)
+- Color3 (fromRGB, fromHSV, Lerp)
+- UDim, UDim2, Rect, NumberRange
+- ColorSequence, NumberSequence
+- Ray, RaycastParams, BrickColor
+- TweenInfo, Axes, Faces
+
+**Instance System:**
+- Full parent-child hierarchy with proper synchronization
+- Class inheritance via `IsA()`
+- FindFirstChild, FindFirstChildOfClass, FindFirstChildWhichIsA
+- GetChildren, GetDescendants, GetFullName
+- WaitForChild (with timeout support)
+- Attributes (SetAttribute, GetAttribute, GetAttributes)
+- Clone with deep copy of children
+- Destroy with proper cleanup
+
+**Services:**
+- `HttpService`: JSONEncode, JSONDecode, GenerateGUID, UrlEncode
+- `RunService`: Heartbeat, RenderStepped, Stepped signals
+- `TweenService`: Create tweens with full easing support
+- `Players`: LocalPlayer mock with Character
+- `UserInputService`: Input type detection, GetMouseLocation
+- `Debris`: AddItem for delayed destruction
+
+**Executor Globals:**
+- Environment: getgenv, getrenv, getreg, getgc
+- Hooking: hookfunction, hookmetamethod
+- Metatables: getrawmetatable, setrawmetatable, setreadonly
+- Upvalues: getupvalues, setupvalue, getconstants
+- File System: isfile, isfolder, readfile, writefile, appendfile, delfile, makefolder
+- Console: rconsoleprint, rconsolewarn, rconsoleerr, rconsoleclear, rconsoleinfo
+- Clipboard: setclipboard, getclipboard
+- HTTP: request, http_request, syn.request
+
+**Task Library:**
+- task.spawn, task.defer, task.delay
+- task.wait, task.cancel
 
 When `runtests.lua` is executed, it automatically discovers and runs `.luau` files found in the `tests/` directory. The Aurora emulator is prepended to each `.luau` test file at runtime, allowing you to write tests using Roblox APIs.
 
