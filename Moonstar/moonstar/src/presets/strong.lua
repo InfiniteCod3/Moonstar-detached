@@ -142,6 +142,15 @@ return function(ctx)
             MaxCopyPropagationIterations = 3,   -- Max optimization iterations per block
             -- P20: Allocation Sinking (defer/eliminate memory allocations)
             EnableAllocationSinking = true,
+            
+            -- Dispatch Enhancements
+            -- D1: Encrypted Block IDs (XOR-encrypt block IDs with per-compilation seed)
+            EnableEncryptedBlockIds = true,
+            -- D2: Randomized BST Comparison Order (randomly flip < vs >= comparisons)
+            EnableRandomizedBSTOrder = true,
+            BstRandomizationRate = 60,          -- 60% of comparisons will use >=
+            -- D3: Hybrid Dispatch (DISABLED for strong preset - table dispatch exposes block IDs)
+            -- EnableHybridDispatch = false,    -- Keep BST for better obfuscation
         },
 
         VmProfileRandomizer = {

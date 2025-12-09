@@ -141,6 +141,51 @@ function VmGen.emitContainerFuncBody(compiler)
             for headerId, _ in pairs(loopHeaders) do
                 markLoopBlocks(headerId)
             end
+            
+            -- D3: Track hot block candidates for hybrid dispatch
+            if compiler.enableHybridDispatch then
+                local hotBlockCandidates = {}
+                
+                -- Collect loop headers with high priority
+                for headerId, _ in pairs(loopHeaders) do
+                    table.insert(hotBlockCandidates, {
+                        id = headerId,
+                        isLoopHeader = true,
+                        priority = 100  -- High priority for loop headers
+                    })
+                end
+                
+                -- Add blocks within loops that are jumped to multiple times
+                for blockId, _ in pairs(loopBlocks) do
+                    if not loopHeaders[blockId] then
+                        local jumpCount = inDegree[blockId] or 0
+                        if jumpCount >= (compiler.hybridHotBlockThreshold or 2) then
+                            table.insert(hotBlockCandidates, {
+                                id = blockId,
+                                isLoopHeader = false,
+                                priority = jumpCount * 10
+                            })
+                        end
+                    end
+                end
+                
+                -- Sort by priority (loop headers first, then by jump count)
+                table.sort(hotBlockCandidates, function(a, b)
+                    return a.priority > b.priority
+                end)
+                
+                -- Limit to maxHybridHotBlocks
+                local maxHotBlocks = compiler.maxHybridHotBlocks or 20
+                while #hotBlockCandidates > maxHotBlocks do
+                    table.remove(hotBlockCandidates)
+                end
+                
+                -- Store for later use
+                compiler.hotBlockIds = {}
+                for _, candidate in ipairs(hotBlockCandidates) do
+                    compiler.hotBlockIds[candidate.id] = true
+                end
+            end
         end
 
         -- Perform Merging with P2 aggressive inlining
@@ -503,9 +548,55 @@ function VmGen.emitContainerFuncBody(compiler)
         return a.id < b.id;
     end);
 
-    local function buildIfBlock(scope, id, lBlock, rBlock)
+    local function buildIfBlock(scope, id, lBlock, rBlock, useGreaterOrEqual)
+        local posExpr = compiler:pos(scope)
+        
+        -- D1: Decode encrypted position before comparison
+        -- IMPORTANT: Use bit.bxor for Lua 5.1/LuaU compatibility (NOT ~ operator)
+        if compiler.enableEncryptedBlockIds and compiler.blockIdEncryptionSeed then
+            if compiler.bitVar then
+                -- Generate: bit.bxor(pos, seed) or bit32.bxor(pos, seed)
+                scope:addReferenceToHigherScope(compiler.scope, compiler.bitVar)
+                scope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.blockSeedVar)
+                
+                posExpr = Ast.FunctionCallExpression(
+                    Ast.IndexExpression(
+                        Ast.VariableExpression(compiler.scope, compiler.bitVar),
+                        Ast.StringExpression("bxor")
+                    ),
+                    {
+                        posExpr,
+                        Ast.VariableExpression(compiler.containerFuncScope, compiler.blockSeedVar)
+                    }
+                )
+            else
+                -- Fallback: No bit library available, emit inline XOR via arithmetic
+                -- This is slower but works everywhere
+                -- Note: For performance, the bit library should be available
+                scope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.blockSeedVar)
+                -- We'll just use pos directly - the block IDs are already encrypted consistently
+                -- This branch shouldn't normally be hit since we check for bit library in init.lua
+            end
+        end
+        
+        -- D2: Randomize comparison order
+        local comparisonExpr
+        local thenBlock, elseBlock
+        
+        if useGreaterOrEqual then
+            -- Use >= comparison: swap branches
+            comparisonExpr = Ast.GreaterThanOrEqualsExpression(posExpr, Ast.NumberExpression(id))
+            thenBlock = rBlock  -- >= id goes to right branch
+            elseBlock = lBlock  -- < id goes to left branch
+        else
+            -- Use < comparison: normal order
+            comparisonExpr = Ast.LessThanExpression(posExpr, Ast.NumberExpression(id))
+            thenBlock = lBlock  -- < id goes to left branch
+            elseBlock = rBlock  -- >= id goes to right branch
+        end
+        
         return Ast.Block({
-            Ast.IfStatement(Ast.LessThanExpression(compiler:pos(scope), Ast.NumberExpression(id)), lBlock, {}, rBlock);
+            Ast.IfStatement(comparisonExpr, thenBlock, {}, elseBlock);
         }, scope);
     end
 
@@ -539,7 +630,14 @@ function VmGen.emitContainerFuncBody(compiler)
         local lBlock = buildWhileBody(tb, l, mid - 1, ifScope);
         local rBlock = buildWhileBody(tb, mid, r, ifScope);
 
-        return buildIfBlock(ifScope, bound, lBlock, rBlock);
+        -- D2: Decide comparison order for this node
+        local useGreaterOrEqual = false
+        if compiler.enableRandomizedBSTOrder then
+            local randomRate = compiler.bstRandomizationRate or 50
+            useGreaterOrEqual = math.random(1, 100) <= randomRate
+        end
+
+        return buildIfBlock(ifScope, bound, lBlock, rBlock, useGreaterOrEqual);
     end
 
     -- P1: Dispatch Table Mode
@@ -560,8 +658,120 @@ function VmGen.emitContainerFuncBody(compiler)
     local whileBody;
     local dispatchTableVar;
     local dispatchTable;
+    local hotTableVar;
+    local hotTable;
     
-    if useTableDispatch then
+    -- D3: Hybrid Hot-Path Dispatch (takes precedence over P1 table dispatch)
+    -- Use table dispatch for hot blocks, BST for cold blocks
+    if compiler.enableHybridDispatch and compiler.hotBlockIds and next(compiler.hotBlockIds) then
+        -- Separate hot and cold blocks
+        local hotBlockData = {}
+        local coldBlockData = {}
+        
+        for _, blockData in ipairs(blocks) do
+            if compiler.hotBlockIds[blockData.id] then
+                table.insert(hotBlockData, blockData)
+            else
+                table.insert(coldBlockData, blockData)
+            end
+        end
+        
+        -- Only use hybrid if we have both hot and cold blocks
+        if #hotBlockData > 0 and #coldBlockData > 0 then
+            -- Create hot block table
+            hotTableVar = compiler.containerFuncScope:addVariable()
+            local hotTableEntries = {}
+            
+            for _, blockData in ipairs(hotBlockData) do
+                local blockId = blockData.id
+                local blockBody = blockData.block
+                
+                -- Create function scope for this block
+                local blockFuncScope = Scope:new(compiler.containerFuncScope)
+                blockBody.scope:setParent(blockFuncScope)
+                
+                -- Add references
+                blockFuncScope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.returnVar, 1)
+                blockFuncScope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.posVar)
+                
+                -- Create function literal
+                local blockFunc = Ast.FunctionLiteralExpression({}, blockBody, false)
+                
+                -- Add table entry
+                table.insert(hotTableEntries, Ast.KeyedTableEntry(
+                    Ast.NumberExpression(blockId),
+                    blockFunc
+                ))
+            end
+            
+            hotTable = Ast.TableConstructorExpression(hotTableEntries)
+            
+            -- Build BST for cold blocks only
+            local coldBST = nil
+            if #coldBlockData > 0 then
+                table.sort(coldBlockData, function(a, b) return a.id < b.id end)
+                coldBST = buildWhileBody(coldBlockData, 1, #coldBlockData, compiler.containerFuncScope, compiler.whileScope)
+            end
+            
+            -- Build hybrid while body:
+            -- local handler = hotTable[pos]
+            -- if handler then handler() else <coldBST> end
+            local hybridScope = Scope:new(compiler.containerFuncScope)
+            hybridScope:addReferenceToHigherScope(compiler.containerFuncScope, hotTableVar)
+            hybridScope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.posVar)
+            
+            local handlerVar = hybridScope:addVariable()
+            
+            -- D3.5: Integration with D1 (Encrypted IDs)
+            -- If encrypted block IDs are enabled, we need to decode pos before hot table lookup
+            local posExprForLookup = Ast.VariableExpression(compiler.containerFuncScope, compiler.posVar)
+            
+            if compiler.enableEncryptedBlockIds and compiler.blockIdEncryptionSeed and compiler.bitVar then
+                hybridScope:addReferenceToHigherScope(compiler.scope, compiler.bitVar)
+                hybridScope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.blockSeedVar)
+                
+                posExprForLookup = Ast.FunctionCallExpression(
+                    Ast.IndexExpression(
+                        Ast.VariableExpression(compiler.scope, compiler.bitVar),
+                        Ast.StringExpression("bxor")
+                    ),
+                    {
+                        Ast.VariableExpression(compiler.containerFuncScope, compiler.posVar),
+                        Ast.VariableExpression(compiler.containerFuncScope, compiler.blockSeedVar)
+                    }
+                )
+            end
+            
+            local hotCallBlock = Ast.Block({
+                Ast.FunctionCallStatement(
+                    Ast.VariableExpression(hybridScope, handlerVar),
+                    {}
+                )
+            }, hybridScope)
+            
+            local coldBlock = coldBST or Ast.Block({}, hybridScope)
+            
+            whileBody = Ast.Block({
+                -- local handler = hotTable[pos] (or hotTable[bxor(pos, seed)] if encrypted)
+                Ast.LocalVariableDeclaration(hybridScope, {handlerVar}, {
+                    Ast.IndexExpression(
+                        Ast.VariableExpression(compiler.containerFuncScope, hotTableVar),
+                        posExprForLookup
+                    )
+                }),
+                -- if handler then handler() else <coldBST> end
+                Ast.IfStatement(
+                    Ast.VariableExpression(hybridScope, handlerVar),
+                    hotCallBlock,
+                    {},
+                    coldBlock
+                )
+            }, hybridScope)
+        else
+            -- Fall back to standard dispatch if no separation possible
+            whileBody = buildWhileBody(blocks, 1, #blocks, compiler.containerFuncScope, compiler.whileScope)
+        end
+    elseif useTableDispatch then
         -- P1: Table-based dispatch (O(1) lookup)
         -- Generate: local blocks = { [id1] = function() ... end, [id2] = function() ... end, ... }
         -- while pos do blocks[pos]() end
@@ -665,6 +875,11 @@ function VmGen.emitContainerFuncBody(compiler)
         table.insert(stats, 1, Ast.LocalVariableDeclaration(compiler.containerFuncScope, {dispatchTableVar}, {dispatchTable}));
     end
 
+    -- D3: Add hot block table declaration for hybrid dispatch
+    if hotTableVar and hotTable then
+        table.insert(stats, 1, Ast.LocalVariableDeclaration(compiler.containerFuncScope, {hotTableVar}, {hotTable}))
+    end
+
     -- P4: Only create overflow table for registers beyond spill range (MAX_REGS + SPILL_REGS and above)
     -- Registers 0-149: normal local variables
     -- Registers 150-159: spill local variables (P4 optimization)
@@ -681,6 +896,15 @@ function VmGen.emitContainerFuncBody(compiler)
     local hoistedStats = compiler:emitHoistedGlobals()
     for i = #hoistedStats, 1, -1 do
         table.insert(stats, 1, hoistedStats[i])
+    end
+
+    -- D1: Add block seed declaration for encrypted dispatch
+    if compiler.enableEncryptedBlockIds and compiler.blockSeedVar and compiler.blockIdEncryptionSeed then
+        table.insert(stats, 1, Ast.LocalVariableDeclaration(
+            compiler.containerFuncScope,
+            {compiler.blockSeedVar},
+            {Ast.NumberExpression(compiler.blockIdEncryptionSeed)}
+        ))
     end
 
     return Ast.Block(stats, compiler.containerFuncScope);

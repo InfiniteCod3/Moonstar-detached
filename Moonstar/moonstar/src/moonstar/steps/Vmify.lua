@@ -243,6 +243,39 @@ Vmify.SettingsDescriptor = {
 		description = "Enable P18 vararg optimization (optimize select('#', ...) and {...}[n] patterns)",
 		type = "boolean",
 		default = false,
+	},
+	-- Dispatch Enhancements: D1 Encrypted Block IDs
+	EnableEncryptedBlockIds = {
+		description = "Enable D1 encrypted block IDs (XOR-encrypt block IDs with per-compilation seed)",
+		type = "boolean",
+		default = false,
+	},
+	-- Dispatch Enhancements: D2 Randomized BST Comparison Order
+	EnableRandomizedBSTOrder = {
+		description = "Enable D2 randomized BST comparison order (randomly flip < vs >= comparisons)",
+		type = "boolean",
+		default = false,
+	},
+	BstRandomizationRate = {
+		description = "Percentage (0-100) of BST nodes to randomize comparison order",
+		type = "number",
+		default = 50,
+	},
+	-- Dispatch Enhancements: D3 Hybrid Hot-Path Dispatch
+	EnableHybridDispatch = {
+		description = "Enable D3 hybrid dispatch (table dispatch for hot blocks, BST for cold)",
+		type = "boolean",
+		default = false,
+	},
+	HybridHotBlockThreshold = {
+		description = "Minimum in-degree to consider a block 'hot'",
+		type = "number",
+		default = 2,
+	},
+	MaxHybridHotBlocks = {
+		description = "Maximum number of hot blocks for table dispatch",
+		type = "number",
+		default = 20,
 	}
 }
 
@@ -308,6 +341,15 @@ function Vmify:init(settings)
 	self.TablePresizeHashThreshold = settings.TablePresizeHashThreshold or 4
 	-- Sprint 5: P18 Vararg Optimization
 	self.EnableVarargOptimization = settings.EnableVarargOptimization or false  -- Default: false
+	-- Dispatch Enhancements: D1 Encrypted Block IDs
+	self.EnableEncryptedBlockIds = settings.EnableEncryptedBlockIds or false  -- Default: false
+	-- Dispatch Enhancements: D2 Randomized BST Comparison Order
+	self.EnableRandomizedBSTOrder = settings.EnableRandomizedBSTOrder or false  -- Default: false
+	self.BstRandomizationRate = settings.BstRandomizationRate or 50
+	-- Dispatch Enhancements: D3 Hybrid Hot-Path Dispatch
+	self.EnableHybridDispatch = settings.EnableHybridDispatch or false  -- Default: false
+	self.HybridHotBlockThreshold = settings.HybridHotBlockThreshold or 2
+	self.MaxHybridHotBlocks = settings.MaxHybridHotBlocks or 20
 end
 
 function Vmify:apply(ast, pipeline)
@@ -415,6 +457,15 @@ function Vmify:apply(ast, pipeline)
 		tablePresizeHashThreshold = self.TablePresizeHashThreshold or 4,
 		-- Sprint 5: P18 Vararg Optimization config
 		enableVarargOptimization = self.EnableVarargOptimization or false,
+		-- Dispatch Enhancements: D1 Encrypted Block IDs config
+		enableEncryptedBlockIds = self.EnableEncryptedBlockIds or false,
+		-- Dispatch Enhancements: D2 Randomized BST Comparison Order config
+		enableRandomizedBSTOrder = self.EnableRandomizedBSTOrder or false,
+		bstRandomizationRate = self.BstRandomizationRate or 50,
+		-- Dispatch Enhancements: D3 Hybrid Hot-Path Dispatch config
+		enableHybridDispatch = self.EnableHybridDispatch or false,
+		hybridHotBlockThreshold = self.HybridHotBlockThreshold or 2,
+		maxHybridHotBlocks = self.MaxHybridHotBlocks or 20,
 	});
     
     -- Compile the Script into a bytecode vm

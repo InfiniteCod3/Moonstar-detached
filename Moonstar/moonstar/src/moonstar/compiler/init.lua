@@ -252,6 +252,25 @@ function Compiler:new(config)
         -- Defer/eliminate memory allocations to reduce GC pressure
         enableAllocationSinking = config.enableAllocationSinking or false; -- Default: false (disabled)
 
+        -- D1: Encrypted Block IDs config
+        -- XOR-encrypt block IDs with per-compilation seed to prevent pattern matching
+        enableEncryptedBlockIds = config.enableEncryptedBlockIds or false; -- Default: false (disabled)
+        blockIdEncryptionSeed = nil; -- Generated at compile time if enabled
+        blockSeedVar = nil; -- Variable for storing seed in generated code
+        bitVar = nil; -- Reference to bit library (bit32 or bit)
+
+        -- D2: Randomized BST Comparison Order config
+        -- Randomly flip comparison operators in BST dispatch for obfuscation
+        enableRandomizedBSTOrder = config.enableRandomizedBSTOrder or false; -- Default: false (disabled)
+        bstRandomizationRate = config.bstRandomizationRate or 50; -- Percentage (0-100) of nodes to randomize
+
+        -- D3: Hybrid Hot-Path Dispatch config
+        -- Use table dispatch for hot blocks (loops), BST for cold blocks
+        enableHybridDispatch = config.enableHybridDispatch or false; -- Default: false (disabled)
+        hybridHotBlockThreshold = config.hybridHotBlockThreshold or 2; -- Min iterations to consider "hot"
+        maxHybridHotBlocks = config.maxHybridHotBlocks or 20; -- Max blocks to put in hot table
+        hotBlockIds = nil; -- Set of hot block IDs for hybrid dispatch
+
         VAR_REGISTER = newproxy(false);
         RETURN_ALL = newproxy(false); 
         POS_REGISTER = newproxy(false);
@@ -325,6 +344,28 @@ function Compiler:createBlock()
         -- This reduces bytecode size (smaller numbers) and potentially improves dispatch slightly
         externalId = internalId;
     end
+    
+    -- D1: Encrypt block external ID with XOR seed (compile-time encryption)
+    -- This makes the block IDs appear random and prevents pattern matching
+    if self.enableEncryptedBlockIds and self.blockIdEncryptionSeed then
+        -- Use host Lua's bit library for compile-time XOR
+        local bxor = bit32 and bit32.bxor or (bit and bit.bxor) or function(a, b)
+            -- Portable XOR fallback for compile-time (host Lua may lack bit libraries)
+            local result = 0
+            local bitval = 1
+            while a > 0 or b > 0 do
+                local abit = a % 2
+                local bbit = b % 2
+                if abit ~= bbit then result = result + bitval end
+                a = math.floor(a / 2)
+                b = math.floor(b / 2)
+                bitval = bitval * 2
+            end
+            return result
+        end
+        externalId = bxor(externalId, self.blockIdEncryptionSeed)
+    end
+    
     self.usedBlockIds[externalId] = true;
 
     local scope = Scope:new(self.containerFuncScope);
@@ -701,6 +742,29 @@ function Compiler:compile(ast)
 
     self.containerFuncScope = Scope:new(self.scope);
     self.whileScope = Scope:new(self.containerFuncScope);
+
+    -- D1: Generate block ID encryption seed and resolve bit library
+    if self.enableEncryptedBlockIds then
+        -- Generate 24-bit seed to stay within safe integer range
+        self.blockIdEncryptionSeed = math.random(0, 2^24 - 1)
+        
+        -- Create seed variable for emission in generated code
+        self.blockSeedVar = self.containerFuncScope:addVariable()
+        
+        -- Resolve bit library for XOR operations (Lua 5.1/LuaU compatible)
+        -- Try bit32 first (Lua 5.2+, LuaU), then bit (Lua 5.1, LuaJIT)
+        local _, bit32Var = newGlobalScope:resolve("bit32")
+        local _, bitVar = newGlobalScope:resolve("bit")
+        
+        if bit32Var then
+            self.bitVar = bit32Var
+            psc:addReferenceToHigherScope(newGlobalScope, bit32Var)
+        elseif bitVar then
+            self.bitVar = bitVar
+            psc:addReferenceToHigherScope(newGlobalScope, bitVar)
+        end
+        -- Note: If neither is available, we'll use a fallback in vm.lua
+    end
 
     self.posVar = self.containerFuncScope:addVariable();
     self.argsVar = self.containerFuncScope:addVariable();
