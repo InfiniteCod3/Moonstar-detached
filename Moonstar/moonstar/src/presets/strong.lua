@@ -91,6 +91,50 @@ return function(ctx)
             EnableTailCallOptimization = true,
             -- P8: Dead Code Elimination (remove unreachable blocks, dead stores, redundant jumps)
             EnableDeadCodeElimination = true,
+            
+            -- Sprint 1: Foundations
+            -- S1: Opcode Shuffling (randomize block external IDs with gaps)
+            EnableOpcodeShuffling = true,
+            -- P11: Peephole Optimization (local pattern optimizations)
+            EnablePeepholeOptimization = true,
+            MaxPeepholeIterations = 5,
+            -- P15: Extended Strength Reduction (power-of-2 optimizations)
+            EnableStrengthReduction = true,
+            
+            -- Sprint 2: Core Security
+            -- S2: Dynamic Register Remapping (shuffle register IDs, inject ghost writes)
+            EnableRegisterRemapping = true,
+            GhostRegisterDensity = 15,          -- 15% of statements get ghost writes
+            -- S4: Multi-Layer String Encryption (XOR → Caesar → Substitution chain)
+            EnableMultiLayerEncryption = true,
+            EncryptionLayers = 3,               -- Chain 3 encryption layers
+            -- S6: Instruction Polymorphism (semantic-preserving code transformations)
+            EnableInstructionPolymorphism = true,
+            PolymorphismRate = 50,              -- 50% of applicable expressions are transformed
+            
+            -- Sprint 3: Core Performance
+            -- P9: Inline Caching for Globals (cache resolved global lookups for hot paths)
+            EnableInlineCaching = true,
+            InlineCacheThreshold = 3,           -- Cache globals accessed 3+ times (lower for strong perf)
+            -- P10: Loop Invariant Code Motion (hoist invariant computations out of loops)
+            EnableLICM = true,
+            LicmMinIterations = 2,              -- Apply LICM to loops with 2+ expected iterations
+            -- P14: Common Subexpression Elimination (reuse computed expression results)
+            EnableCSE = true,
+            MaxCSEIterations = 3,               -- Max CSE optimization passes per block
+            
+            -- Sprint 5: Advanced Performance
+            -- P12: Small Function Inlining (inline small local functions at call sites)
+            EnableFunctionInlining = true,
+            MaxInlineFunctionSize = 10,         -- Inline functions with ≤10 statements
+            MaxInlineParameters = 5,            -- Inline functions with ≤5 parameters
+            MaxInlineDepth = 3,                 -- Prevent excessive inlining chains
+            -- P17: Table Pre-sizing (emit table.create hints for large static tables)
+            EnableTablePresizing = true,
+            TablePresizeArrayThreshold = 4,     -- Pre-size arrays with 4+ elements
+            TablePresizeHashThreshold = 4,      -- Pre-size hashes with 4+ elements
+            -- P18: Vararg Optimization (optimize select('#', ...) and {...}[n] patterns)
+            EnableVarargOptimization = true,
         },
 
         VmProfileRandomizer = {

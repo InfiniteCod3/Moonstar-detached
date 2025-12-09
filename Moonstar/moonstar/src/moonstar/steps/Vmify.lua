@@ -116,6 +116,133 @@ Vmify.SettingsDescriptor = {
 		description = "Enable P8 dead code elimination (remove unreachable blocks, dead stores, redundant jumps)",
 		type = "boolean",
 		default = true,
+	},
+	-- Sprint 1: S1 Opcode Shuffling
+	EnableOpcodeShuffling = {
+		description = "Enable S1 opcode shuffling (randomize block external IDs with gaps)",
+		type = "boolean",
+		default = false,
+	},
+	-- Sprint 1: P11 Peephole Optimization
+	EnablePeepholeOptimization = {
+		description = "Enable P11 peephole optimization (local pattern optimizations)",
+		type = "boolean",
+		default = true,
+	},
+	MaxPeepholeIterations = {
+		description = "Maximum iterations for peephole optimization per block",
+		type = "number",
+		default = 5,
+	},
+	-- Sprint 1: P15 Extended Strength Reduction
+	EnableStrengthReduction = {
+		description = "Enable P15 extended strength reduction (power-of-2 optimizations)",
+		type = "boolean",
+		default = true,
+	},
+	-- Sprint 2: S2 Dynamic Register Remapping
+	EnableRegisterRemapping = {
+		description = "Enable S2 dynamic register remapping (shuffle register IDs, inject ghost writes)",
+		type = "boolean",
+		default = false,
+	},
+	GhostRegisterDensity = {
+		description = "Percentage (0-100) of statements to inject ghost writes (never-read assignments)",
+		type = "number",
+		default = 15,
+	},
+	-- Sprint 2: S4 Multi-Layer String Encryption
+	EnableMultiLayerEncryption = {
+		description = "Enable S4 multi-layer string encryption (XOR → Caesar → Substitution chain)",
+		type = "boolean",
+		default = false,
+	},
+	EncryptionLayers = {
+		description = "Number of encryption layers for multi-layer encryption (1-5)",
+		type = "number",
+		default = 3,
+	},
+	-- Sprint 2: S6 Instruction Polymorphism
+	EnableInstructionPolymorphism = {
+		description = "Enable S6 instruction polymorphism (semantic-preserving code transformations)",
+		type = "boolean",
+		default = false,
+	},
+	PolymorphismRate = {
+		description = "Percentage (0-100) of applicable expressions to transform",
+		type = "number",
+		default = 50,
+	},
+	-- Sprint 3: P9 Inline Caching for Globals
+	EnableInlineCaching = {
+		description = "Enable P9 inline caching for globals (cache resolved global lookups for hot paths)",
+		type = "boolean",
+		default = false,
+	},
+	InlineCacheThreshold = {
+		description = "Minimum access count to cache a global variable",
+		type = "number",
+		default = 5,
+	},
+	-- Sprint 3: P10 Loop Invariant Code Motion
+	EnableLICM = {
+		description = "Enable P10 LICM (hoist invariant computations out of loops)",
+		type = "boolean",
+		default = false,
+	},
+	LicmMinIterations = {
+		description = "Minimum expected loop iterations to apply LICM",
+		type = "number",
+		default = 2,
+	},
+	-- Sprint 3: P14 Common Subexpression Elimination
+	EnableCSE = {
+		description = "Enable P14 CSE (reuse previously computed expression results)",
+		type = "boolean",
+		default = false,
+	},
+	MaxCSEIterations = {
+		description = "Maximum CSE optimization iterations per block",
+		type = "number",
+		default = 3,
+	},
+	-- Sprint 5: P12 Small Function Inlining
+	EnableFunctionInlining = {
+		description = "Enable P12 small function inlining (inline small local functions at call sites)",
+		type = "boolean",
+		default = false,
+	},
+	MaxInlineFunctionSize = {
+		description = "Maximum statements in a function body for inlining",
+		type = "number",
+		default = 10,
+	},
+	MaxInlineParameters = {
+		description = "Maximum parameters for inlining",
+		type = "number",
+		default = 5,
+	},
+	-- Sprint 5: P17 Table Pre-sizing
+	EnableTablePresizing = {
+		description = "Enable P17 table pre-sizing (emit table.create hints for large static tables)",
+		type = "boolean",
+		default = false,
+	},
+	TablePresizeArrayThreshold = {
+		description = "Minimum array elements to add size hint",
+		type = "number",
+		default = 4,
+	},
+	TablePresizeHashThreshold = {
+		description = "Minimum hash elements to add size hint",
+		type = "number",
+		default = 4,
+	},
+	-- Sprint 5: P18 Vararg Optimization
+	EnableVarargOptimization = {
+		description = "Enable P18 vararg optimization (optimize select('#', ...) and {...}[n] patterns)",
+		type = "boolean",
+		default = false,
 	}
 }
 
@@ -146,6 +273,41 @@ function Vmify:init(settings)
 	self.EnableTailCallOptimization = settings.EnableTailCallOptimization ~= false  -- Default: true
 	-- P8: Dead Code Elimination settings
 	self.EnableDeadCodeElimination = settings.EnableDeadCodeElimination ~= false  -- Default: true
+	-- Sprint 1: S1 Opcode Shuffling
+	self.EnableOpcodeShuffling = settings.EnableOpcodeShuffling or false  -- Default: false
+	-- Sprint 1: P11 Peephole Optimization
+	self.EnablePeepholeOptimization = settings.EnablePeepholeOptimization ~= false  -- Default: true
+	self.MaxPeepholeIterations = settings.MaxPeepholeIterations or 5
+	-- Sprint 1: P15 Extended Strength Reduction
+	self.EnableStrengthReduction = settings.EnableStrengthReduction ~= false  -- Default: true
+	-- Sprint 2: S2 Dynamic Register Remapping
+	self.EnableRegisterRemapping = settings.EnableRegisterRemapping or false  -- Default: false
+	self.GhostRegisterDensity = settings.GhostRegisterDensity or 15
+	-- Sprint 2: S4 Multi-Layer String Encryption
+	self.EnableMultiLayerEncryption = settings.EnableMultiLayerEncryption or false  -- Default: false
+	self.EncryptionLayers = settings.EncryptionLayers or 3
+	-- Sprint 2: S6 Instruction Polymorphism
+	self.EnableInstructionPolymorphism = settings.EnableInstructionPolymorphism or false  -- Default: false
+	self.PolymorphismRate = settings.PolymorphismRate or 50
+	-- Sprint 3: P9 Inline Caching for Globals
+	self.EnableInlineCaching = settings.EnableInlineCaching or false  -- Default: false
+	self.InlineCacheThreshold = settings.InlineCacheThreshold or 5
+	-- Sprint 3: P10 Loop Invariant Code Motion
+	self.EnableLICM = settings.EnableLICM or false  -- Default: false
+	self.LicmMinIterations = settings.LicmMinIterations or 2
+	-- Sprint 3: P14 Common Subexpression Elimination
+	self.EnableCSE = settings.EnableCSE or false  -- Default: false
+	self.MaxCSEIterations = settings.MaxCSEIterations or 3
+	-- Sprint 5: P12 Small Function Inlining
+	self.EnableFunctionInlining = settings.EnableFunctionInlining or false  -- Default: false
+	self.MaxInlineFunctionSize = settings.MaxInlineFunctionSize or 10
+	self.MaxInlineParameters = settings.MaxInlineParameters or 5
+	-- Sprint 5: P17 Table Pre-sizing
+	self.EnableTablePresizing = settings.EnableTablePresizing or false  -- Default: false
+	self.TablePresizeArrayThreshold = settings.TablePresizeArrayThreshold or 4
+	self.TablePresizeHashThreshold = settings.TablePresizeHashThreshold or 4
+	-- Sprint 5: P18 Vararg Optimization
+	self.EnableVarargOptimization = settings.EnableVarargOptimization or false  -- Default: false
 end
 
 function Vmify:apply(ast, pipeline)
@@ -218,6 +380,41 @@ function Vmify:apply(ast, pipeline)
 		enableTailCallOptimization = self.EnableTailCallOptimization ~= false,
 		-- P8: Dead Code Elimination config
 		enableDeadCodeElimination = self.EnableDeadCodeElimination ~= false,
+		-- Sprint 1: S1 Opcode Shuffling config
+		enableOpcodeShuffling = self.EnableOpcodeShuffling or false,
+		-- Sprint 1: P11 Peephole Optimization config
+		enablePeepholeOptimization = self.EnablePeepholeOptimization ~= false,
+		maxPeepholeIterations = self.MaxPeepholeIterations or 5,
+		-- Sprint 1: P15 Extended Strength Reduction config
+		enableStrengthReduction = self.EnableStrengthReduction ~= false,
+		-- Sprint 2: S2 Dynamic Register Remapping config
+		enableRegisterRemapping = self.EnableRegisterRemapping or false,
+		ghostRegisterDensity = self.GhostRegisterDensity or 15,
+		-- Sprint 2: S4 Multi-Layer String Encryption config
+		enableMultiLayerEncryption = self.EnableMultiLayerEncryption or false,
+		encryptionLayers = self.EncryptionLayers or 3,
+		-- Sprint 2: S6 Instruction Polymorphism config
+		enableInstructionPolymorphism = self.EnableInstructionPolymorphism or false,
+		polymorphismRate = self.PolymorphismRate or 50,
+		-- Sprint 3: P9 Inline Caching for Globals config
+		enableInlineCaching = self.EnableInlineCaching or false,
+		inlineCacheThreshold = self.InlineCacheThreshold or 5,
+		-- Sprint 3: P10 Loop Invariant Code Motion config
+		enableLICM = self.EnableLICM or false,
+		licmMinIterations = self.LicmMinIterations or 2,
+		-- Sprint 3: P14 Common Subexpression Elimination config
+		enableCSE = self.EnableCSE or false,
+		maxCSEIterations = self.MaxCSEIterations or 3,
+		-- Sprint 5: P12 Small Function Inlining config
+		enableFunctionInlining = self.EnableFunctionInlining or false,
+		maxInlineFunctionSize = self.MaxInlineFunctionSize or 10,
+		maxInlineParameters = self.MaxInlineParameters or 5,
+		-- Sprint 5: P17 Table Pre-sizing config
+		enableTablePresizing = self.EnableTablePresizing or false,
+		tablePresizeArrayThreshold = self.TablePresizeArrayThreshold or 4,
+		tablePresizeHashThreshold = self.TablePresizeHashThreshold or 4,
+		-- Sprint 5: P18 Vararg Optimization config
+		enableVarargOptimization = self.EnableVarargOptimization or false,
 	});
     
     -- Compile the Script into a bytecode vm

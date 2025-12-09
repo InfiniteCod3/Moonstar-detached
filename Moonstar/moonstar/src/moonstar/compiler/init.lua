@@ -26,6 +26,10 @@ local VmGen = require("moonstar.compiler.vm")
 local Registers = require("moonstar.compiler.registers")
 local Upvalues = require("moonstar.compiler.upvalues")
 local Optimization = require("moonstar.compiler.optimization")
+local InlineCache = require("moonstar.compiler.inline_cache")
+local Inlining = require("moonstar.compiler.inlining")
+local TablePresizing = require("moonstar.compiler.table_presizing")
+local VarargOptimization = require("moonstar.compiler.vararg_optimization")
 
 local lookupify = util.lookupify;
 local AstKind = Ast.AstKind;
@@ -172,6 +176,73 @@ function Compiler:new(config)
         -- Remove unreachable blocks, dead stores, and redundant jumps
         enableDeadCodeElimination = config.enableDeadCodeElimination ~= false; -- Default: true (enabled)
 
+        -- S1: Opcode Shuffling config
+        -- Randomize block external IDs with gaps to confuse static analysis
+        enableOpcodeShuffling = config.enableOpcodeShuffling or false; -- Default: false (disabled)
+        opcodeMap = {}; -- Maps internal block ID -> external block ID
+        reverseOpcodeMap = {}; -- Maps external block ID -> internal block ID
+        nextShuffledId = 1; -- Counter for generating shuffled IDs
+
+        -- S2: Dynamic Register Remapping config
+        -- Permute register indices at compile time, inject ghost registers
+        enableRegisterRemapping = config.enableRegisterRemapping or false; -- Default: false (disabled)
+        ghostRegisterDensity = config.ghostRegisterDensity or 15; -- Percentage (0-100) of statements to inject ghost writes
+        registerShuffleMap = nil; -- Will be initialized if enabled
+        registerReverseMap = nil; -- Will be initialized if enabled
+        ghostRegisters = {}; -- Track ghost register allocations
+        ghostRegisterCounter = 0; -- Count of ghost registers allocated
+
+        -- S4: Multi-Layer String Encryption config
+        -- Chain XOR → Caesar → Substitution encryption for enhanced security
+        enableMultiLayerEncryption = config.enableMultiLayerEncryption or false; -- Default: false (use single-layer LCG)
+        encryptionLayers = config.encryptionLayers or 3; -- Number of encryption layers (1-5)
+
+        -- S6: Instruction Polymorphism config
+        -- Generate semantically equivalent but syntactically different code patterns
+        enableInstructionPolymorphism = config.enableInstructionPolymorphism or false; -- Default: false (disabled)
+        polymorphismRate = config.polymorphismRate or 50; -- Percentage (0-100) of expressions to transform
+
+        -- P11: Peephole Optimization config
+        -- Apply local pattern optimizations to instruction sequences
+        enablePeepholeOptimization = config.enablePeepholeOptimization ~= false; -- Default: true (enabled)
+        maxPeepholeIterations = config.maxPeepholeIterations or 5; -- Max optimization iterations per block
+
+        -- P15: Extended Strength Reduction config
+        -- Additional patterns: x * 4 -> (x + x) + (x + x), x / 2 -> x * 0.5, x % (2^n) -> bit ops
+        enableStrengthReduction = config.enableStrengthReduction ~= false; -- Default: true (enabled)
+
+        -- P9: Inline Caching for Globals config
+        -- Cache resolved global lookups for hot paths
+        enableInlineCaching = config.enableInlineCaching or false; -- Default: false (disabled)
+        inlineCacheThreshold = config.inlineCacheThreshold or 5; -- Min accesses to cache a global
+
+        -- P10: Loop Invariant Code Motion (LICM) config
+        -- Hoist invariant computations out of loops
+        enableLICM = config.enableLICM or false; -- Default: false (disabled)
+        licmMinIterations = config.licmMinIterations or 2; -- Min loop iterations to apply LICM
+
+        -- P14: Common Subexpression Elimination (CSE) config
+        -- Reuse previously computed expression results
+        enableCSE = config.enableCSE or false; -- Default: false (disabled)
+        maxCSEIterations = config.maxCSEIterations or 3; -- Max optimization iterations
+
+        -- P12: Small Function Inlining config
+        -- Inline small local functions at call sites
+        enableFunctionInlining = config.enableFunctionInlining or false; -- Default: false (disabled)
+        maxInlineFunctionSize = config.maxInlineFunctionSize or 10; -- Max statements in function body
+        maxInlineParameters = config.maxInlineParameters or 5; -- Max parameters for inlining
+        maxInlineDepth = config.maxInlineDepth or 3; -- Max nesting depth for inline expansions
+
+        -- P17: Table Pre-sizing config
+        -- Emit table constructors with size hints when known
+        enableTablePresizing = config.enableTablePresizing or false; -- Default: false (disabled)
+        tablePresizeArrayThreshold = config.tablePresizeArrayThreshold or 4; -- Min array elements to add size hint
+        tablePresizeHashThreshold = config.tablePresizeHashThreshold or 4; -- Min hash elements to add size hint
+
+        -- P18: Vararg Optimization config
+        -- Optimize common vararg patterns for better performance
+        enableVarargOptimization = config.enableVarargOptimization or false; -- Default: false (disabled)
+
         VAR_REGISTER = newproxy(false);
         RETURN_ALL = newproxy(false); 
         POS_REGISTER = newproxy(false);
@@ -209,28 +280,48 @@ end
 -- ============================================================================
 
 function Compiler:createBlock()
-    local id;
-    if self.enableInstructionRandomization then
+    -- Internal ID is always sequential for ordering
+    local internalId = #self.blocks + 1;
+    
+    local externalId;
+    
+    -- S1: Opcode Shuffling - generate randomized external IDs with gaps
+    if self.enableOpcodeShuffling then
+        repeat
+            -- Generate external ID with random gaps
+            -- Format: (random 4-digit * 1000) + sequential counter
+            -- This creates large gaps that prevent pattern-based deobfuscation
+            local randomBase = math.random(1000, 9999)
+            externalId = randomBase * 1000 + self.nextShuffledId
+            self.nextShuffledId = self.nextShuffledId + 1
+        until not self.usedBlockIds[externalId];
+        
+        -- Store mappings for S1
+        self.opcodeMap[internalId] = externalId
+        self.reverseOpcodeMap[externalId] = internalId
+        
+    elseif self.enableInstructionRandomization then
         -- VUL-2025-003 FIX: Non-uniform distribution to prevent statistical fingerprinting
         repeat
             -- Use exponential distribution with random base and exponent
             local base = math.random(0, 2^20)
             local exp = math.random(0, 5)
-            id = (base * (2^exp)) % (2^25)
+            externalId = (base * (2^exp)) % (2^25)
             
             -- Add per-compilation salt to prevent signature matching
-            id = (id + self.compilationSalt) % (2^25)
-        until not self.usedBlockIds[id];
+            externalId = (externalId + self.compilationSalt) % (2^25)
+        until not self.usedBlockIds[externalId];
     else
         -- OPTIMIZATION: Use sequential IDs when randomization is disabled
         -- This reduces bytecode size (smaller numbers) and potentially improves dispatch slightly
-        id = #self.blocks + 1;
+        externalId = internalId;
     end
-    self.usedBlockIds[id] = true;
+    self.usedBlockIds[externalId] = true;
 
     local scope = Scope:new(self.containerFuncScope);
     local block = {
-        id = id;
+        id = externalId; -- Use external ID for dispatch (what appears in bytecode)
+        internalId = internalId; -- Internal ID for ordering (used for optimization passes)
         statements = {
 
         };
@@ -373,40 +464,62 @@ function Compiler:popRegisterUsageInfo()
 end
 
 -- ============================================================================
--- P3: Constant Hoisting Module
+-- P3: Constant Hoisting Module (Enhanced with P9: Inline Caching)
 -- Hoist frequently-used globals to local variables outside the dispatch loop
+-- P9 adds intelligent caching for immutable globals (math, string, table, etc.)
 -- ============================================================================
 
 -- Track a global access (Phase 1: counting)
 function Compiler:trackGlobalAccess(name)
-    if not self.enableConstantHoisting then return end
+    if not self.enableConstantHoisting and not self.enableInlineCaching then return end
     self.globalAccessCounts[name] = (self.globalAccessCounts[name] or 0) + 1
 end
 
 -- Get the hoisted global variable expression if it exists (Phase 2: usage)
 -- Returns the register ID if the global is hoisted, nil otherwise
 function Compiler:getHoistedGlobal(name)
-    if not self.enableConstantHoisting then return nil end
+    if not self.enableConstantHoisting and not self.enableInlineCaching then return nil end
     return self.hoistedGlobals[name]
 end
 
 -- Emit hoisted global declarations (called before the dispatch loop in vm.lua)
 -- Creates local variables for frequently-accessed globals
+-- P9 Enhancement: Immutable globals have lower thresholds for caching
 function Compiler:emitHoistedGlobals()
-    if not self.enableConstantHoisting then return {} end
+    if not self.enableConstantHoisting and not self.enableInlineCaching then return {} end
     
     local hoistStatements = {}
     local threshold = self.constantHoistThreshold or 3
+    local inlineCacheThreshold = self.inlineCacheThreshold or 5
     local scope = self.containerFuncScope
+    
+    -- P9: Apply inline caching enhancement before sorting
+    if self.enableInlineCaching then
+        InlineCache.enhanceHoisting(self)
+    end
     
     -- Sort globals by access count for deterministic output
     local sortedGlobals = {}
     for name, count in pairs(self.globalAccessCounts) do
-        if count >= threshold then
-            table.insert(sortedGlobals, {name = name, count = count})
+        -- P9: Immutable globals (from InlineCache whitelist) have lower threshold
+        local effectiveThreshold = threshold
+        if self.enableInlineCaching and InlineCache.isImmutable(name) then
+            effectiveThreshold = 2 -- Immutable globals are cheap to cache
+        end
+        
+        if count >= effectiveThreshold then
+            table.insert(sortedGlobals, {
+                name = name,
+                count = count,
+                isImmutable = self.enableInlineCaching and InlineCache.isImmutable(name)
+            })
         end
     end
     table.sort(sortedGlobals, function(a, b)
+        -- P9: Prioritize immutable globals
+        if a.isImmutable ~= b.isImmutable then
+            return a.isImmutable -- true sorts before false
+        end
         if a.count ~= b.count then return a.count > b.count end
         return a.name < b.name
     end)
@@ -527,6 +640,17 @@ function Compiler:compile(ast)
 
     -- P4: Reset spill register variables
     self.spillVars = {};
+
+    -- S2: Initialize register remapping if enabled
+    if self.enableRegisterRemapping then
+        Registers.initRegisterRemapping(self);
+    end
+
+    -- P12: Initialize function inlining
+    Inlining.init(self);
+
+    -- P17: Initialize table pre-sizing
+    TablePresizing.init(self);
 
     self.upvalsProxyLenReturn = math.random(-2^22, 2^22);
 

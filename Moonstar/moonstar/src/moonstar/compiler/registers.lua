@@ -7,6 +7,156 @@ local AstKind = Ast.AstKind;
 
 local Registers = {}
 
+-- ============================================================================
+-- S2: Dynamic Register Remapping
+-- Permute register indices at compile time, inject ghost registers
+-- ============================================================================
+
+-- Generate Fisher-Yates shuffle of register IDs 1 to maxReg
+function Registers.generateRegisterShuffle(maxReg, seed)
+    math.randomseed(seed)
+    
+    local shuffle = {}
+    local reverse = {}
+    
+    -- Initialize identity mapping
+    for i = 1, maxReg do
+        shuffle[i] = i
+    end
+    
+    -- Fisher-Yates shuffle
+    for i = maxReg, 2, -1 do
+        local j = math.random(1, i)
+        shuffle[i], shuffle[j] = shuffle[j], shuffle[i]
+    end
+    
+    -- Build reverse mapping
+    for i = 1, maxReg do
+        reverse[shuffle[i]] = i
+    end
+    
+    return shuffle, reverse
+end
+
+-- Map internal register ID to external (shuffled) ID
+function Registers.mapRegister(compiler, internalId)
+    if not compiler.enableRegisterRemapping then
+        return internalId
+    end
+    
+    -- Only map numeric registers, not special ones
+    if type(internalId) ~= "number" then
+        return internalId
+    end
+    
+    -- Ensure shuffle map exists
+    if not compiler.registerShuffleMap then
+        return internalId
+    end
+    
+    -- Map within bounds
+    if internalId >= 1 and internalId <= #compiler.registerShuffleMap then
+        return compiler.registerShuffleMap[internalId]
+    end
+    
+    return internalId
+end
+
+-- Reverse map external register ID to internal ID
+function Registers.unmapRegister(compiler, externalId)
+    if not compiler.enableRegisterRemapping then
+        return externalId
+    end
+    
+    if type(externalId) ~= "number" then
+        return externalId
+    end
+    
+    if not compiler.registerReverseMap then
+        return externalId
+    end
+    
+    if externalId >= 1 and externalId <= #compiler.registerReverseMap then
+        return compiler.registerReverseMap[externalId]
+    end
+    
+    return externalId
+end
+
+-- Initialize register remapping for a compiler instance
+function Registers.initRegisterRemapping(compiler)
+    if not compiler.enableRegisterRemapping then
+        return
+    end
+    
+    local seed = compiler.compilationSalt or os.time()
+    local maxReg = compiler.MAX_REGS + compiler.SPILL_REGS + 50  -- Include some overflow
+    
+    compiler.registerShuffleMap, compiler.registerReverseMap = 
+        Registers.generateRegisterShuffle(maxReg, seed)
+    
+    -- Initialize ghost register tracking
+    compiler.ghostRegisters = {}
+    compiler.ghostRegisterCounter = 0
+end
+
+-- Allocate a ghost register (write-only, never read)
+function Registers.allocGhostRegister(compiler)
+    if not compiler.enableRegisterRemapping then
+        return nil
+    end
+    
+    -- Find an unused register slot for ghost write
+    local maxReg = compiler.MAX_REGS + compiler.SPILL_REGS
+    for id = maxReg + 50, maxReg + 200 do
+        if not compiler.registers[id] and not compiler.ghostRegisters[id] then
+            compiler.ghostRegisters[id] = true
+            compiler.ghostRegisterCounter = compiler.ghostRegisterCounter + 1
+            return id
+        end
+    end
+    
+    return nil
+end
+
+-- Generate a ghost write statement (never-read assignment)
+function Registers.createGhostWrite(compiler, scope)
+    local ghostReg = Registers.allocGhostRegister(compiler)
+    if not ghostReg then
+        return nil
+    end
+    
+    -- Create a random value for the ghost write
+    local valueType = math.random(1, 4)
+    local value
+    
+    if valueType == 1 then
+        value = Ast.NumberExpression(math.random(-10000, 10000))
+    elseif valueType == 2 then
+        value = Ast.BooleanExpression(math.random() > 0.5)
+    elseif valueType == 3 then
+        value = Ast.NilExpression()
+    else
+        -- Random arithmetic expression
+        local a = math.random(-100, 100)
+        local b = math.random(-100, 100)
+        value = Ast.AddExpression(Ast.NumberExpression(a), Ast.NumberExpression(b))
+    end
+    
+    return Registers.setRegister(compiler, scope, ghostReg, value)
+end
+
+-- Check if ghost write should be injected based on density setting
+function Registers.shouldInjectGhost(compiler)
+    if not compiler.enableRegisterRemapping then
+        return false
+    end
+    
+    local density = compiler.ghostRegisterDensity or 15  -- Default 15%
+    return math.random(1, 100) <= density
+end
+
+
 -- Free a register for reuse
 function Registers.freeRegister(compiler, id, force)
     if compiler.constantRegs[id] then return end -- Never free constant registers

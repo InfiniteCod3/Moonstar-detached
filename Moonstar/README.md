@@ -22,6 +22,54 @@ Moonstar is an advanced Lua/Luau obfuscator designed to provide high-level prote
 - **Local Proxification:** Wraps local variables in proxies to hide their values (`ProxifyLocals`).
 - **Lua 5.1 & LuaU Support:** Fully compatible with standard Lua 5.1 and Roblox's LuaU.
 
+## Bytecode Security & Performance
+
+Moonstar includes advanced bytecode-level optimizations for both security and performance:
+
+### Security Features
+
+- **Opcode Shuffling (S1):** Randomizes block IDs per compilation, producing unique output each time
+- **Dynamic Register Remapping (S2):** Permutes register indices with Fisher-Yates shuffle and injects ghost registers
+- **Multi-Layer String Encryption (S4):** Chains XOR → Caesar → Substitution encryption with unique keys per string
+- **Instruction Polymorphism (S6):** Generates semantically equivalent but syntactically different code patterns
+
+### Performance Optimizations
+
+- **Loop Invariant Code Motion (P10):** Hoists invariant computations out of loops
+- **Peephole Optimization (P11):** Removes redundant copies, dead stores, and identity operations
+- **Small Function Inlining (P12):** Inlines small functions (≤10 statements) at call sites
+- **Common Subexpression Elimination (P14):** Reuses previously computed expression results
+- **Strength Reduction (P15):** Replaces expensive operations (x*2 → x+x, x^2 → x*x)
+- **Inline Caching (P9):** Caches resolved global lookups for frequently accessed globals
+- **Table Pre-sizing (P17):** Emits table constructors with size hints when known
+- **Vararg Optimization (P18):** Optimizes `...` handling for common patterns
+
+### Configuration
+
+Enable/disable features in your config:
+
+```lua
+{
+    -- Security
+    enableOpcodeShuffling = true,
+    enableRegisterRemapping = true,
+    ghostRegisterDensity = 15,
+    enableMultiLayerEncryption = true,
+    encryptionLayers = 3,
+    enableInstructionPolymorphism = true,
+    polymorphismRate = 50,
+    
+    -- Performance
+    enableLICM = true,
+    enablePeepholeOptimization = true,
+    enableFunctionInlining = true,
+    enableCSE = true,
+    enableStrengthReduction = true,
+    enableTablePresizing = true,
+    enableVarargOptimization = true,
+}
+```
+
 ## Installation
 
 Moonstar requires **Lua 5.1** to run.

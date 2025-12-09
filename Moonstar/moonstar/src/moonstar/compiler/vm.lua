@@ -3,6 +3,10 @@ local Scope = require("moonstar.scope");
 local AstKind = Ast.AstKind;
 local util = require("moonstar.util");
 local randomStrings = require("moonstar.randomStrings")
+local Peephole = require("moonstar.compiler.peephole")
+local LICM = require("moonstar.compiler.licm")
+local CSE = require("moonstar.compiler.cse")
+
 
 local lookupify = util.lookupify;
 
@@ -376,6 +380,24 @@ function VmGen.emitContainerFuncBody(compiler)
                 end
             end
         end
+    end
+    
+    -- P11: Peephole Optimization
+    -- Apply local pattern optimizations after block merging and DCE
+    if compiler.enablePeepholeOptimization then
+        Peephole.optimizeAllBlocks(compiler, compiler.maxPeepholeIterations)
+    end
+    
+    -- P10: Loop Invariant Code Motion (LICM)
+    -- Hoist invariant computations out of loops
+    if compiler.enableLICM then
+        LICM.optimizeAllBlocks(compiler)
+    end
+    
+    -- P14: Common Subexpression Elimination (CSE)
+    -- Reuse previously computed expression results
+    if compiler.enableCSE then
+        CSE.optimizeAllBlocks(compiler, compiler.maxCSEIterations)
     end
     
     -- FEATURE: Junk Blocks (Dead Code Insertion)

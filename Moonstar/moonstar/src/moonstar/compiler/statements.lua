@@ -2,6 +2,7 @@ local Ast = require("moonstar.ast");
 local AstKind = Ast.AstKind;
 local logger = require("logger");
 local util = require("moonstar.util");
+local Inlining = require("moonstar.compiler.inlining");
 
 local unpack = unpack or table.unpack;
 
@@ -318,6 +319,13 @@ end
 
 function Statements.LocalFunctionDeclaration(compiler, statement, funcDepth)
     local scope = compiler.activeBlock.scope;
+    
+    -- P12: Track function for potential inlining
+    -- Only track non-upvalue local functions as they are simpler to inline
+    if compiler.enableFunctionInlining and not compiler:isUpvalue(statement.scope, statement.id) then
+        Inlining.trackFunction(compiler, statement.scope, statement.id, statement)
+    end
+    
     if(compiler:isUpvalue(statement.scope, statement.id)) then
         local varReg = compiler:getVarRegister(statement.scope, statement.id, funcDepth, nil);
         scope:addReferenceToHigherScope(compiler.scope, compiler.allocUpvalFunction);
