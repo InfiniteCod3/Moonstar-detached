@@ -243,6 +243,15 @@ function Compiler:new(config)
         -- Optimize common vararg patterns for better performance
         enableVarargOptimization = config.enableVarargOptimization or false; -- Default: false (disabled)
 
+        -- P19: Copy Propagation config
+        -- Eliminate redundant register copies by forward-substituting values
+        enableCopyPropagation = config.enableCopyPropagation or false; -- Default: false (disabled)
+        maxCopyPropagationIterations = config.maxCopyPropagationIterations or 3; -- Max optimization iterations
+
+        -- P20: Allocation Sinking config
+        -- Defer/eliminate memory allocations to reduce GC pressure
+        enableAllocationSinking = config.enableAllocationSinking or false; -- Default: false (disabled)
+
         VAR_REGISTER = newproxy(false);
         RETURN_ALL = newproxy(false); 
         POS_REGISTER = newproxy(false);

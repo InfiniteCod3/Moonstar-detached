@@ -135,6 +135,13 @@ return function(ctx)
             TablePresizeHashThreshold = 4,      -- Pre-size hashes with 4+ elements
             -- P18: Vararg Optimization (optimize select('#', ...) and {...}[n] patterns)
             EnableVarargOptimization = true,
+            
+            -- Sprint 7: Advanced Performance (P19, P20)
+            -- P19: Copy Propagation (eliminate redundant register copies)
+            EnableCopyPropagation = true,
+            MaxCopyPropagationIterations = 3,   -- Max optimization iterations per block
+            -- P20: Allocation Sinking (defer/eliminate memory allocations)
+            EnableAllocationSinking = true,
         },
 
         VmProfileRandomizer = {

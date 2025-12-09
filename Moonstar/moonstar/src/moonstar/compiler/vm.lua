@@ -6,6 +6,8 @@ local randomStrings = require("moonstar.randomStrings")
 local Peephole = require("moonstar.compiler.peephole")
 local LICM = require("moonstar.compiler.licm")
 local CSE = require("moonstar.compiler.cse")
+local CopyPropagation = require("moonstar.compiler.copy_propagation")
+local AllocationSinking = require("moonstar.compiler.allocation_sinking")
 
 
 local lookupify = util.lookupify;
@@ -398,6 +400,18 @@ function VmGen.emitContainerFuncBody(compiler)
     -- Reuse previously computed expression results
     if compiler.enableCSE then
         CSE.optimizeAllBlocks(compiler, compiler.maxCSEIterations)
+    end
+    
+    -- P19: Copy Propagation
+    -- Eliminate redundant register copies by forward-substituting values
+    if compiler.enableCopyPropagation then
+        CopyPropagation.optimizeAllBlocks(compiler)
+    end
+    
+    -- P20: Allocation Sinking
+    -- Defer/eliminate memory allocations to reduce GC pressure
+    if compiler.enableAllocationSinking then
+        AllocationSinking.optimizeAllBlocks(compiler)
     end
     
     -- FEATURE: Junk Blocks (Dead Code Insertion)
