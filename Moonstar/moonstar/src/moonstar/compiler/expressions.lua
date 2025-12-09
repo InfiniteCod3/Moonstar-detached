@@ -7,6 +7,37 @@ local unpack = unpack or table.unpack;
 
 local Expressions = {}
 
+-- P5: Helper to collect all operands from chained string concatenation (a .. b .. c .. d)
+-- Returns a flat array of operands if chain has threshold+ parts, otherwise nil
+local function collectStrCatOperands(expr, threshold)
+    if expr.kind ~= AstKind.StrCatExpression then
+        return nil
+    end
+    
+    threshold = threshold or 3
+    local operands = {}
+    
+    local function collect(node)
+        if node.kind == AstKind.StrCatExpression then
+            -- Recursively collect from nested StrCat
+            collect(node.lhs)
+            collect(node.rhs)
+        else
+            -- Leaf node - add to operands
+            table.insert(operands, node)
+        end
+    end
+    
+    collect(expr)
+    
+    -- Only return if we have threshold+ operands (otherwise normal concat is fine)
+    if #operands >= threshold then
+        return operands
+    end
+    
+    return nil
+end
+
 function Expressions.StringExpression(compiler, expression, funcDepth, numReturns, targetRegs)
     local scope = compiler.activeBlock.scope;
     local regs = {};
@@ -91,14 +122,23 @@ function Expressions.VariableExpression(compiler, expression, funcDepth, numRetu
                     regs[i] = compiler:allocRegister(false);
                 end
 
-                -- OPTIMIZATION: Inline Global Name Strings
-                -- Use compileOperand to allow string encryption/hoisting
+                -- P3: Check for hoisted global first
                 local name = expression.scope:getVariableName(expression.id)
-                local nameExpr, nameReg = compiler:compileOperand(scope, Ast.StringExpression(name), funcDepth)
-                local reads = nameReg and {nameReg} or {}
+                local hoistedVar = compiler:getHoistedGlobal(name)
+                
+                if hoistedVar then
+                    -- P3: Use hoisted local variable instead of _ENV lookup
+                    scope:addReferenceToHigherScope(compiler.containerFuncScope, hoistedVar)
+                    compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.VariableExpression(compiler.containerFuncScope, hoistedVar)), {regs[i]}, {}, false);
+                else
+                    -- OPTIMIZATION: Inline Global Name Strings
+                    -- Use compileOperand to allow string encryption/hoisting
+                    local nameExpr, nameReg = compiler:compileOperand(scope, Ast.StringExpression(name), funcDepth)
+                    local reads = nameReg and {nameReg} or {}
 
-                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.IndexExpression(compiler:env(scope), nameExpr)), {regs[i]}, reads, true);
-                if nameReg then compiler:freeRegister(nameReg, false) end
+                    compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.IndexExpression(compiler:env(scope), nameExpr)), {regs[i]}, reads, true);
+                    if nameReg then compiler:freeRegister(nameReg, false) end
+                end
             else
                 -- Local Variable
                 if(compiler.scopeFunctionDepths[expression.scope] == funcDepth) then
@@ -279,18 +319,42 @@ function Expressions.IndexExpression(compiler, expression, funcDepth, numReturns
         end
 
         if(i == 1) then
-            local baseReg = compiler:compileExpression(expression.base, funcDepth, 1)[1];
+            -- P3: Check for hoisted nested global (e.g., table.insert)
+            local hoistedVar = nil
+            local base = expression.base
+            local index = expression.index
+            
+            if base and base.kind == AstKind.VariableExpression and
+               base.scope and base.scope.isGlobal and
+               index and index.kind == AstKind.StringExpression then
+                -- This is a nested global access like table.insert
+                local baseName = base.scope:getVariableName(base.id)
+                local indexName = index.value
+                
+                if baseName and indexName then
+                    local nestedName = baseName .. "." .. indexName
+                    hoistedVar = compiler:getHoistedGlobal(nestedName)
+                end
+            end
+            
+            if hoistedVar then
+                -- P3: Use hoisted local variable instead of nested lookup
+                scope:addReferenceToHigherScope(compiler.containerFuncScope, hoistedVar)
+                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.VariableExpression(compiler.containerFuncScope, hoistedVar)), {regs[i]}, {}, false);
+            else
+                local baseReg = compiler:compileExpression(expression.base, funcDepth, 1)[1];
 
-            -- OPTIMIZATION: Literal Inlining for Index
-            local indexExpr, indexReg = compiler:compileOperand(scope, expression.index, funcDepth);
+                -- OPTIMIZATION: Literal Inlining for Index
+                local indexExpr, indexReg = compiler:compileOperand(scope, expression.index, funcDepth);
 
-            local reads = {baseReg}
-            if indexReg then table.insert(reads, indexReg) end
+                local reads = {baseReg}
+                if indexReg then table.insert(reads, indexReg) end
 
-            compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.IndexExpression(compiler:register(scope, baseReg), indexExpr)), {regs[i]}, reads, true);
+                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.IndexExpression(compiler:register(scope, baseReg), indexExpr)), {regs[i]}, reads, true);
 
-            compiler:freeRegister(baseReg, false);
-            if indexReg then compiler:freeRegister(indexReg, false) end
+                compiler:freeRegister(baseReg, false);
+                if indexReg then compiler:freeRegister(indexReg, false) end
+            end
         else
            compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.NilExpression()), {regs[i]}, {}, false);
         end
@@ -309,6 +373,41 @@ function Expressions.BinaryExpression(compiler, expression, funcDepth, numReturn
         end
 
         if(i == 1) then
+            -- P5: String Concatenation Chain Optimization (a .. b .. c .. d -> table.concat({a, b, c, d}))
+            -- Only apply when enabled and there are threshold+ concatenation operands
+            local p5Handled = false
+            if compiler.enableSpecializedPatterns and expression.kind == AstKind.StrCatExpression then
+                local strCatOperands = collectStrCatOperands(expression, compiler.strCatChainThreshold)
+                if strCatOperands then
+                    -- Collect all operands into a table and use table.concat
+                    local tableEntries = {}
+                    local operandRegs = {}
+                    
+                    for _, operand in ipairs(strCatOperands) do
+                        local opExpr, opReg = compiler:compileOperand(scope, operand, funcDepth)
+                        table.insert(tableEntries, Ast.TableEntry(opExpr))
+                        if opReg then table.insert(operandRegs, opReg) end
+                    end
+                    
+                    -- Create: table.concat({operand1, operand2, ...})
+                    -- We need to access table.concat via _ENV
+                    local tableGlobal = Ast.IndexExpression(compiler:env(scope), Ast.StringExpression("table"))
+                    local concatFunc = Ast.IndexExpression(tableGlobal, Ast.StringExpression("concat"))
+                    local tableArg = Ast.TableConstructorExpression(tableEntries)
+                    local callExpr = Ast.FunctionCallExpression(concatFunc, {tableArg})
+                    
+                    compiler:addStatement(compiler:setRegister(scope, regs[i], callExpr), {regs[i]}, operandRegs, true)
+                    
+                    -- Free operand registers
+                    for _, opReg in ipairs(operandRegs) do
+                        compiler:freeRegister(opReg, false)
+                    end
+                    
+                    p5Handled = true
+                end
+            end
+            
+            if not p5Handled then
             -- OPTIMIZATION: Literal Inlining
             local lhsExpr, lhsReg = compiler:compileOperand(scope, expression.lhs, funcDepth);
             local rhsExpr, rhsReg = compiler:compileOperand(scope, expression.rhs, funcDepth);
@@ -428,6 +527,7 @@ function Expressions.BinaryExpression(compiler, expression, funcDepth, numReturn
 
             if rhsReg and (not reused or targetReg ~= rhsReg) then compiler:freeRegister(rhsReg, false) end
             if lhsReg and (not reused or targetReg ~= lhsReg) then compiler:freeRegister(lhsReg, false) end
+            end -- P5: end of if not p5Handled
         else
             compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.NilExpression()), {regs[i]}, {}, false);
         end

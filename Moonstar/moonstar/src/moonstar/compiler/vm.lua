@@ -9,17 +9,20 @@ local lookupify = util.lookupify;
 local VmGen = {}
 
 function VmGen.emitContainerFuncBody(compiler)
-    -- OPTIMIZATION: Block Merging (Super Blocks)
+    -- OPTIMIZATION: Block Merging (Super Blocks) with Aggressive Inlining (P2)
     -- Merge linear sequences of blocks to reduce dispatch overhead
+    -- P2 enhancements: Loop detection, aggressive single-predecessor inlining, depth limiting
     do
         local blockMap = {}
         local inDegree = {}
         local outEdge = {} -- block -> targetId (if unconditional)
+        local allEdges = {} -- block -> list of targetIds (for loop detection)
 
         -- Map blocks and initialize in-degrees
         for _, block in ipairs(compiler.blocks) do
             blockMap[block.id] = block
             inDegree[block.id] = 0
+            allEdges[block.id] = {}
         end
 
         -- Helper to scan for jump targets
@@ -36,6 +39,19 @@ function VmGen.emitContainerFuncBody(compiler)
             end
         end
 
+        -- Helper to collect all jump targets from an expression
+        local function collectTargets(expr, targets)
+            if not expr then return end
+            if expr.kind == AstKind.NumberExpression then
+                table.insert(targets, expr.value)
+            elseif expr.kind == AstKind.BinaryExpression or
+                   expr.kind == AstKind.OrExpression or
+                   expr.kind == AstKind.AndExpression then
+                collectTargets(expr.lhs, targets)
+                collectTargets(expr.rhs, targets)
+            end
+        end
+
         -- Analyze Control Flow
         for _, block in ipairs(compiler.blocks) do
             if #block.statements > 0 then
@@ -49,17 +65,88 @@ function VmGen.emitContainerFuncBody(compiler)
                         local targetId = val.value
                         outEdge[block] = targetId
                         inDegree[targetId] = (inDegree[targetId] or 0) + 1
+                        table.insert(allEdges[block.id], targetId)
                     else
                         -- Conditional Jump
                         scanTargets(val)
+                        collectTargets(val, allEdges[block.id])
                     end
                 end
             end
         end
 
-        -- Perform Merging
+        -- P2: Loop Detection using DFS to find back-edges
+        -- A back-edge is an edge from a block to an ancestor in DFS tree
+        local loopBlocks = {} -- Set of block IDs that are part of loops (hot blocks)
+        do
+            local visited = {}
+            local inStack = {}
+            local loopHeaders = {} -- Blocks that are targets of back-edges
+
+            local function dfs(blockId)
+                if visited[blockId] then return end
+                visited[blockId] = true
+                inStack[blockId] = true
+
+                local edges = allEdges[blockId]
+                if edges then
+                    for _, targetId in ipairs(edges) do
+                        if inStack[targetId] then
+                            -- Back-edge found: targetId is a loop header
+                            loopHeaders[targetId] = true
+                        elseif not visited[targetId] then
+                            dfs(targetId)
+                        end
+                    end
+                end
+
+                inStack[blockId] = false
+            end
+
+            -- Start DFS from start block
+            dfs(compiler.startBlockId)
+
+            -- Mark all blocks reachable from loop headers as hot
+            -- Simple approach: mark the loop header and all blocks that can reach it
+            local function markLoopBlocks(headerId)
+                local reachable = {}
+                local queue = {headerId}
+                local processed = {}
+
+                while #queue > 0 do
+                    local current = table.remove(queue, 1)
+                    if not processed[current] then
+                        processed[current] = true
+                        reachable[current] = true
+                        loopBlocks[current] = true
+
+                        -- Add predecessors (blocks that jump to current)
+                        for bid, edges in pairs(allEdges) do
+                            for _, tid in ipairs(edges) do
+                                if tid == current and not processed[bid] and bid ~= headerId then
+                                    table.insert(queue, bid)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            for headerId, _ in pairs(loopHeaders) do
+                markLoopBlocks(headerId)
+            end
+        end
+
+        -- Perform Merging with P2 aggressive inlining
         local changed = true
         local mergedBlocks = {} -- Set of IDs that have been merged (and thus removed)
+        local inlineDepth = {} -- Track inline depth per block to prevent exponential growth
+        
+        -- P2 Configuration (from compiler config)
+        local MAX_INLINE_DEPTH = compiler.maxInlineDepth or 10
+        local NORMAL_INLINE_THRESHOLD = compiler.inlineThresholdNormal or 12
+        local HOT_INLINE_THRESHOLD = compiler.inlineThresholdHot or 25
+        local aggressiveInliningEnabled = compiler.enableAggressiveInlining ~= false
 
         while changed do
             changed = false
@@ -73,36 +160,49 @@ function VmGen.emitContainerFuncBody(compiler)
                         -- 1. Target exists and hasn't been merged
                         -- 2. Target is not the start block
                         -- 3. Target is not 'block' itself (infinite loop)
-                        -- 4. EITHER:
-                        --    a) Target has only one predecessor (classic merge)
-                        --    b) Target is small (<= 12 statements) and can be inlined (tail duplication)
                         if targetBlock and not mergedBlocks[targetId] and
                            targetId ~= compiler.startBlockId and
                            targetId ~= block.id then
 
-                            local isMergeCandidate = inDegree[targetId] == 1
-                            -- Tail Duplication: Inline small blocks even if they have multiple predecessors
-                            -- OPTIMIZATION: Increased threshold to 12 to reduce dispatch overhead
-                            local isInlineCandidate = #targetBlock.statements <= 12
+                            -- P2: Check inline depth limit
+                            local currentDepth = (inlineDepth[block.id] or 0) + (inlineDepth[targetId] or 0)
+                            if currentDepth < MAX_INLINE_DEPTH then
 
-                            if isMergeCandidate or isInlineCandidate then
-                                -- 1. Remove the jump from block (last statement)
-                                table.remove(block.statements)
+                                -- P2: Single-predecessor blocks are ALWAYS inlined regardless of size
+                                local isSinglePredecessor = inDegree[targetId] == 1
 
-                                -- 2. Append all statements from targetBlock
-                                for _, stat in ipairs(targetBlock.statements) do
-                                    table.insert(block.statements, stat)
+                                -- P2: Determine inline threshold based on whether block is hot (if aggressive inlining enabled)
+                                local inlineThreshold
+                                if aggressiveInliningEnabled and loopBlocks[targetId] then
+                                    inlineThreshold = HOT_INLINE_THRESHOLD
+                                else
+                                    inlineThreshold = NORMAL_INLINE_THRESHOLD
                                 end
+                                local isSmallBlock = #targetBlock.statements <= inlineThreshold
 
-                                -- 3. Update outEdge for block to point to target's successor
-                                outEdge[block] = outEdge[targetBlock]
+                                -- P2: Inline if single predecessor (always) OR small block
+                                if isSinglePredecessor or isSmallBlock then
+                                    -- 1. Remove the jump from block (last statement)
+                                    table.remove(block.statements)
 
-                                -- 4. If it was a merge, mark target as merged. If just an inline, don't.
-                                if isMergeCandidate then
-                                    mergedBlocks[targetId] = true
+                                    -- 2. Append all statements from targetBlock
+                                    for _, stat in ipairs(targetBlock.statements) do
+                                        table.insert(block.statements, stat)
+                                    end
+
+                                    -- 3. Update outEdge for block to point to target's successor
+                                    outEdge[block] = outEdge[targetBlock]
+
+                                    -- 4. Track inline depth
+                                    inlineDepth[block.id] = currentDepth + 1
+
+                                    -- 5. If it was a single-predecessor merge, mark target as merged
+                                    if isSinglePredecessor then
+                                        mergedBlocks[targetId] = true
+                                    end
+
+                                    changed = true
                                 end
-
-                                changed = true
                             end
                         end
                     end
@@ -118,6 +218,164 @@ function VmGen.emitContainerFuncBody(compiler)
             end
         end
         compiler.blocks = newBlocks
+    end
+    
+    -- P8: Dead Code Elimination
+    -- Optimize by removing unreachable blocks, dead stores, and redundant jumps
+    if compiler.enableDeadCodeElimination ~= false then
+        local dceChanged = true
+        local dceIterations = 0
+        local MAX_DCE_ITERATIONS = 5 -- Limit iterations to prevent infinite loops
+        
+        while dceChanged and dceIterations < MAX_DCE_ITERATIONS do
+            dceChanged = false
+            dceIterations = dceIterations + 1
+            
+            -- P8.1: Unreachable Block Detection
+            -- Remove blocks with no predecessors (except start block)
+            do
+                local blockMap = {}
+                local hasIncomingEdge = {}
+                
+                -- Build block map
+                for _, block in ipairs(compiler.blocks) do
+                    blockMap[block.id] = block
+                    hasIncomingEdge[block.id] = false
+                end
+                
+                -- Mark start block as reachable
+                hasIncomingEdge[compiler.startBlockId] = true
+                
+                -- Scan for all jump targets
+                local function markReachableTargets(expr)
+                    if not expr then return end
+                    if expr.kind == AstKind.NumberExpression then
+                        local tid = expr.value
+                        if blockMap[tid] then
+                            hasIncomingEdge[tid] = true
+                        end
+                    elseif expr.kind == AstKind.BinaryExpression or
+                           expr.kind == AstKind.OrExpression or
+                           expr.kind == AstKind.AndExpression then
+                        markReachableTargets(expr.lhs)
+                        markReachableTargets(expr.rhs)
+                    end
+                end
+                
+                -- Find all reachable blocks
+                for _, block in ipairs(compiler.blocks) do
+                    if #block.statements > 0 then
+                        local lastStatWrapper = block.statements[#block.statements]
+                        if lastStatWrapper.writes[compiler.POS_REGISTER] then
+                            local assignStat = lastStatWrapper.statement
+                            local val = assignStat.rhs[1]
+                            markReachableTargets(val)
+                        end
+                    end
+                end
+                
+                -- Remove unreachable blocks
+                local reachableBlocks = {}
+                for _, block in ipairs(compiler.blocks) do
+                    if hasIncomingEdge[block.id] then
+                        table.insert(reachableBlocks, block)
+                    else
+                        dceChanged = true
+                    end
+                end
+                compiler.blocks = reachableBlocks
+            end
+            
+            -- P8.2: Dead Store Elimination
+            -- Remove register assignments where the value is never read
+            do
+                for _, block in ipairs(compiler.blocks) do
+                    local newStatements = {}
+                    for statIndex, statWrapper in ipairs(block.statements) do
+                        local isDead = false
+                        
+                        -- Check if this statement writes to a register (not POS or RETURN)
+                        local writtenReg = nil
+                        for reg, _ in pairs(statWrapper.writes) do
+                            if type(reg) == "number" then
+                                writtenReg = reg
+                                break
+                            end
+                        end
+                        
+                        -- If it writes to a register, check if it's read before next write
+                        if writtenReg and not statWrapper.usesUpvals then
+                            local isRead = false
+                            local isOverwritten = false
+                            
+                            -- Check remaining statements in this block
+                            for i = statIndex + 1, #block.statements do
+                                local futureStatWrapper = block.statements[i]
+                                if futureStatWrapper.reads[writtenReg] then
+                                    isRead = true
+                                    break
+                                end
+                                if futureStatWrapper.writes[writtenReg] then
+                                    isOverwritten = true
+                                    break
+                                end
+                            end
+                            
+                            -- If the register is overwritten without being read, it's a dead store
+                            -- Note: We only eliminate if overwritten in same block (conservative)
+                            -- Cross-block analysis would require full dataflow analysis
+                            if isOverwritten and not isRead then
+                                isDead = true
+                                dceChanged = true
+                            end
+                        end
+                        
+                        if not isDead then
+                            table.insert(newStatements, statWrapper)
+                        end
+                    end
+                    block.statements = newStatements
+                end
+            end
+            
+            -- P8.3: Redundant Jump Elimination
+            -- Remove jumps to the immediately following block
+            do
+                -- First, sort blocks by ID to determine natural ordering
+                local sortedBlocks = {}
+                for _, block in ipairs(compiler.blocks) do
+                    table.insert(sortedBlocks, block)
+                end
+                table.sort(sortedBlocks, function(a, b) return a.id < b.id end)
+                
+                -- Build next-block mapping
+                local nextBlockId = {}
+                for i = 1, #sortedBlocks - 1 do
+                    nextBlockId[sortedBlocks[i].id] = sortedBlocks[i + 1].id
+                end
+                
+                -- Check each block's final jump
+                for _, block in ipairs(compiler.blocks) do
+                    if #block.statements > 0 then
+                        local lastStatWrapper = block.statements[#block.statements]
+                        if lastStatWrapper.writes[compiler.POS_REGISTER] then
+                            local assignStat = lastStatWrapper.statement
+                            local val = assignStat.rhs[1]
+                            
+                            -- Only eliminate unconditional jumps (NumberExpression)
+                            if val.kind == AstKind.NumberExpression then
+                                local targetId = val.value
+                                -- If jumping to the next sequential block, remove the jump
+                                if nextBlockId[block.id] == targetId then
+                                    table.remove(block.statements)
+                                    dceChanged = true
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end
     
     -- FEATURE: Junk Blocks (Dead Code Insertion)
@@ -224,9 +482,17 @@ function VmGen.emitContainerFuncBody(compiler)
             return nil;
         end
 
-        -- OPTIMIZATION: Perfectly Balanced BST
-        -- Always split at the exact center to minimize tree depth (O(log N))
-        local mid = l + math.ceil(len / 2);
+        -- SECURITY: Dispatch Tree Noise
+        -- Add controlled deviation to BST split to prevent pattern matching
+        local idealMid = l + math.ceil(len / 2)
+        local mid = idealMid
+        if compiler.enableInstructionRandomization and len > 4 then
+            local maxDeviation = math.floor(len * 0.15)
+            if maxDeviation > 0 then
+                local deviation = math.random(-maxDeviation, maxDeviation)
+                mid = math.max(l + 1, math.min(r, idealMid + deviation))
+            end
+        end
 
         -- Use the ID of the block at the split point as the pivot
         -- Blocks < mid go left, Blocks >= mid go right
@@ -240,9 +506,78 @@ function VmGen.emitContainerFuncBody(compiler)
         return buildIfBlock(ifScope, bound, lBlock, rBlock);
     end
 
+    -- P1: Dispatch Table Mode
+    -- Choose dispatch mode based on config and block count
+    local useTableDispatch = false
+    local blockCount = #blocks
+    
+    if compiler.vmDispatchMode == "table" then
+        useTableDispatch = true
+    elseif compiler.vmDispatchMode == "auto" then
+        -- Use table dispatch for smaller scripts (< threshold blocks)
+        -- Table dispatch has function call overhead per block but O(1) lookup
+        -- BST dispatch has O(log N) comparisons but no function call overhead
+        useTableDispatch = blockCount < compiler.vmDispatchTableThreshold
+    end
+    -- vmDispatchMode == "bst" uses the existing BST implementation (useTableDispatch = false)
+
     local whileBody;
-    -- Standard binary search tree dispatch (if-chain)
-    whileBody = buildWhileBody(blocks, 1, #blocks, compiler.containerFuncScope, compiler.whileScope);
+    local dispatchTableVar;
+    local dispatchTable;
+    
+    if useTableDispatch then
+        -- P1: Table-based dispatch (O(1) lookup)
+        -- Generate: local blocks = { [id1] = function() ... end, [id2] = function() ... end, ... }
+        -- while pos do blocks[pos]() end
+        
+        dispatchTableVar = compiler.containerFuncScope:addVariable();
+        
+        -- Create table entries for each block
+        local tableEntries = {}
+        for _, blockData in ipairs(blocks) do
+            local blockId = blockData.id
+            local blockBody = blockData.block
+            
+            -- Create a function scope for this block
+            local blockFuncScope = Scope:new(compiler.containerFuncScope)
+            blockBody.scope:setParent(blockFuncScope)
+            
+            -- Add references to required variables from containerFuncScope
+            blockFuncScope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.returnVar, 1);
+            blockFuncScope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.posVar);
+            
+            -- Create function literal for this block
+            local blockFunc = Ast.FunctionLiteralExpression({}, blockBody, false);
+            
+            -- Create table entry: [blockId] = function() ... end
+            table.insert(tableEntries, Ast.KeyedTableEntry(
+                Ast.NumberExpression(blockId),
+                blockFunc
+            ))
+        end
+        
+        -- Store dispatch table for later use in stats
+        dispatchTable = Ast.TableConstructorExpression(tableEntries)
+        
+        -- The while body simply calls the function from the dispatch table
+        -- while pos do dispatchTable[pos]() end
+        local dispatchScope = Scope:new(compiler.containerFuncScope)
+        dispatchScope:addReferenceToHigherScope(compiler.containerFuncScope, dispatchTableVar)
+        dispatchScope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.posVar)
+        
+        whileBody = Ast.Block({
+            Ast.FunctionCallStatement(
+                Ast.IndexExpression(
+                    Ast.VariableExpression(compiler.containerFuncScope, dispatchTableVar),
+                    Ast.VariableExpression(compiler.containerFuncScope, compiler.posVar)
+                ),
+                {}
+            )
+        }, dispatchScope)
+    else
+        -- Standard binary search tree dispatch (if-chain)
+        whileBody = buildWhileBody(blocks, 1, #blocks, compiler.containerFuncScope, compiler.whileScope);
+    end
 
     compiler.whileScope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.returnVar, 1);
     compiler.whileScope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.posVar);
@@ -256,6 +591,16 @@ function VmGen.emitContainerFuncBody(compiler)
     for i, var in pairs(compiler.registerVars) do
         if(i ~= compiler.MAX_REGS) then
             table.insert(declarations, var);
+        end
+    end
+
+    -- P4: Add spill register variables to declarations
+    -- Spill registers are used for registers MAX_REGS to MAX_REGS + SPILL_REGS - 1
+    -- They provide faster access than table indexing for these overflow registers
+    for spillIndex = 0, compiler.SPILL_REGS - 1 do
+        local spillVar = compiler.spillVars[spillIndex]
+        if spillVar then
+            table.insert(declarations, spillVar)
         end
     end
 
@@ -278,13 +623,28 @@ function VmGen.emitContainerFuncBody(compiler)
             });
         }
     }
+    
+    -- P1: Add dispatch table declaration for table dispatch mode
+    if useTableDispatch and dispatchTableVar and dispatchTable then
+        table.insert(stats, 1, Ast.LocalVariableDeclaration(compiler.containerFuncScope, {dispatchTableVar}, {dispatchTable}));
+    end
 
-    if compiler.maxUsedRegister >= compiler.MAX_REGS then
-        -- Ensure registerVars[MAX_REGS] exists before using it
+    -- P4: Only create overflow table for registers beyond spill range (MAX_REGS + SPILL_REGS and above)
+    -- Registers 0-149: normal local variables
+    -- Registers 150-159: spill local variables (P4 optimization)
+    -- Registers 160+: table indexing (overflow)
+    if compiler.maxUsedRegister >= compiler.MAX_REGS + compiler.SPILL_REGS then
+        -- Ensure registerVars[MAX_REGS] exists before using it (this is the overflow table)
         if not compiler.registerVars[compiler.MAX_REGS] then
             compiler.registerVars[compiler.MAX_REGS] = compiler.containerFuncScope:addVariable();
         end
         table.insert(stats, 1, Ast.LocalVariableDeclaration(compiler.containerFuncScope, {compiler.registerVars[compiler.MAX_REGS]}, {Ast.TableConstructorExpression({})}));
+    end
+
+    -- P3: Add hoisted global declarations before the dispatch loop
+    local hoistedStats = compiler:emitHoistedGlobals()
+    for i = #hoistedStats, 1, -1 do
+        table.insert(stats, 1, hoistedStats[i])
     end
 
     return Ast.Block(stats, compiler.containerFuncScope);
