@@ -4,8 +4,9 @@
 --
 -- This Script provides a Simple Obfuscation Step that wraps the entire Script into a function
 
--- TODO: Wrapper Functions
--- TODO: Proxy Object for indexing: e.g: ARR[X] becomes ARR + X
+-- Future Enhancement Ideas:
+-- 1. Wrapper Functions - Additional obfuscation layer for array access
+-- 2. Proxy Object for indexing - Transform ARR[X] to use arithmetic operations (e.g., ARR + X)
 
 local Step = require("moonstar.step");
 local Ast = require("moonstar.ast");

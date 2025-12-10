@@ -299,8 +299,41 @@ function MultiLayerEncryption.injectDecoder(compiler)
                     {Ast.VariableExpression(funcScope, seedArg)}
                 ),
                 
-                -- TODO: Add layer state computation loop
-                -- For now, simplified: compute state up to current layer
+                -- Layer state computation loop: for l = 1, layer do state = (LCG_A * state + LCG_C) % LCG_M end
+                Ast.ForStatement(
+                    Scope:new(outerForScope),
+                    outerForScope:addVariable(),  -- loop variable 'l'
+                    Ast.NumberExpression(1),
+                    Ast.VariableExpression(outerForScope, layerVar),
+                    Ast.NumberExpression(1),
+                    Ast.Block({
+                        -- state = (LCG_A * state + LCG_C) % LCG_M
+                        Ast.AssignmentStatement(
+                            {Ast.AssignmentVariable(funcScope, stateVar)},
+                            {Ast.ModExpression(
+                                Ast.AddExpression(
+                                    Ast.MulExpression(
+                                        Ast.NumberExpression(LCG_A),
+                                        Ast.VariableExpression(funcScope, stateVar)
+                                    ),
+                                    Ast.NumberExpression(LCG_C)
+                                ),
+                                Ast.NumberExpression(LCG_M)
+                            )}
+                        )
+                    }, Scope:new(outerForScope))
+                ),
+                
+                -- Compute layerSeed from state: layerSeed = floor(state / 65536)
+                Ast.LocalVariableDeclaration(outerForScope, {layerSeedVar}, {
+                    Ast.FunctionCallExpression(
+                        Ast.IndexExpression(getGlobal("math"), Ast.StringExpression("floor")),
+                        {Ast.DivExpression(
+                            Ast.VariableExpression(funcScope, stateVar),
+                            Ast.NumberExpression(65536)
+                        )}
+                    )
+                }),
                 
                 -- Decrypt based on layer type
                 -- (This is a simplified inline version - full implementation would be more complex)

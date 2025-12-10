@@ -234,11 +234,23 @@ function Pipeline:getSteps()
 end
 
 function Pipeline:setOption(name, value)
-	assert(false, "TODO");
-	if(Pipeline.DefaultSettings[name] ~= nil) then
+	if Pipeline.DefaultSettings[name] ~= nil then
+		self[name] = value;
 		
+		-- Special handling for settings that require component updates
+		if name == "LuaVersion" then
+			self:setLuaVersion(value);
+		elseif name == "PrettyPrint" then
+			self.unparser = Unparser:new({
+				LuaVersion = self.LuaVersion;
+				PrettyPrint = value;
+			});
+		end
+		
+		logger:debug(string.format("Pipeline option '%s' set to '%s'", name, tostring(value)));
 	else
-		logger:error(string.format("\"%s\" is not a valid setting"));
+		logger:error(string.format("\"%s\" is not a valid setting. Valid settings: %s", 
+			name, table.concat(util.keys(Pipeline.DefaultSettings), ", ")));
 	end
 end
 
