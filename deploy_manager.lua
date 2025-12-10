@@ -8,12 +8,16 @@ local SCRIPTS = {
 }
 
 -- Check for compression flag and parallel setting
-local USE_COMPRESSION = false
+local COMPRESSION_MODE = nil  -- nil, "default", "balanced", or "fast"
 local PARALLEL_TESTS = 4
 
 for _, v in ipairs(arg or {}) do
     if v == "--compress" or v == "--compression" then
-        USE_COMPRESSION = true
+        COMPRESSION_MODE = "default"
+    elseif v == "--compress-balanced" then
+        COMPRESSION_MODE = "balanced"
+    elseif v == "--compress-fast" then
+        COMPRESSION_MODE = "fast"
     elseif v:match("^--parallel=") then
         PARALLEL_TESTS = tonumber(v:match("^--parallel=(.+)$")) or 4
     end
@@ -38,8 +42,10 @@ end
 
 local function obfuscate(scriptName, usePreprocessed)
     print("  [+] Obfuscating " .. scriptName .. " (Strong Preset)...")
-    if USE_COMPRESSION then
-        print("      (Compression Enabled)")
+    if COMPRESSION_MODE then
+        local mode_label = COMPRESSION_MODE == "default" and "Default" or 
+                           COMPRESSION_MODE == "balanced" and "Balanced" or "Fast"
+        print("      (Compression Enabled: " .. mode_label .. ")")
     end
     local input = usePreprocessed and ("../" .. scriptName .. ".preprocessed.lua") or ("../" .. scriptName .. ".lua")
     local output = "../" .. scriptName .. ".obfuscated.lua"
@@ -47,8 +53,14 @@ local function obfuscate(scriptName, usePreprocessed)
     -- We cd into Moonstar because it likely depends on relative paths for its modules
     local cmd = "cd Moonstar && lua moonstar.lua " .. input .. " " .. output .. " --preset=Strong"
     
-    if USE_COMPRESSION then
-        cmd = cmd .. " --compress --parallel=" .. tostring(PARALLEL_TESTS)
+    if COMPRESSION_MODE then
+        if COMPRESSION_MODE == "balanced" then
+            cmd = cmd .. " --compress-balanced --parallel=" .. tostring(PARALLEL_TESTS)
+        elseif COMPRESSION_MODE == "fast" then
+            cmd = cmd .. " --compress-fast --parallel=" .. tostring(PARALLEL_TESTS)
+        else
+            cmd = cmd .. " --compress --parallel=" .. tostring(PARALLEL_TESTS)
+        end
     end
     
     return run_command(cmd)

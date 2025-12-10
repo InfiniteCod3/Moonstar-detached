@@ -4,71 +4,51 @@ Moonstar is an advanced Lua/Luau obfuscator designed to provide high-level prote
 
 ## Features
 
-- **Advanced Obfuscation Engine:** Utilizes a sophisticated pipeline to transform code.
-- **Multiple Presets:** Built-in configurations ranging from simple minification to extreme protection.
-- **VM-based Bytecode Compilation:** Compiles Lua code into a custom bytecode format executed by a virtual machine (`Vmify`).
-- **Control Flow Flattening:** Flattens nested control structures into a complex state machine (`ControlFlowFlattening`).
-- **Global Virtualization:** Hides global variables and mocks the environment to prevent hooking (`GlobalVirtualization`).
-- **JIT String Encryption:** Replaces static strings with runtime-generated logic (`JitStringDecryptor`).
-- **Anti-Tamper Protection:** Prevents unauthorized modification of the obfuscated script (`AntiTamper`).
-- **Instruction Randomization:** Randomizes VM instructions to make reverse engineering more difficult (`VmProfileRandomizer`).
-- **Compression:** Compresses the script using advanced algorithms (LZSS, Huffman, Arithmetic, PPM, BWT) to reduce file size and add another layer of obfuscation (`Compression`).
-- **String Encryption:** Encrypts strings to hide sensitive information with multiple modes (Light, Standard, Polymorphic).
-- **String Splitting:** Breaks long strings into smaller chunks to disrupt pattern matching (`SplitStrings`).
-- **Constant Array:** Hides constants in a shuffled array to obscure their original location (`ConstantArray`).
-- **Constant Folding:** Pre-calculates constant expressions to simplify code before obfuscation (`ConstantFolding`).
-- **Number to Expression:** Converts plain numbers into complex arithmetic expressions (`NumbersToExpressions`).
-- **Vararg Injection:** Injects unused vararg (`...`) parameters to confuse function signatures (`AddVararg`).
-- **Local Proxification:** Wraps local variables in proxies to hide their values (`ProxifyLocals`).
-- **Lua 5.1 & LuaU Support:** Fully compatible with standard Lua 5.1 and Roblox's LuaU.
+### Core Obfuscation
+- **VM-based Bytecode** — Custom bytecode format with embedded virtual machine
+- **Control Flow Flattening** — Converts nested structures into opaque state machines
+- **Global Virtualization** — Hides globals and mocks environment to prevent hooking
+- **Anti-Tamper Protection** — Detects and prevents runtime code modifications
+- **Compression** — LZSS, Huffman, Arithmetic, PPM, or BWT compression
 
-## Bytecode Security & Performance
+### String & Constant Protection
+- **Multi-Mode String Encryption** — Light, Standard, or Polymorphic encryption modes
+- **Multi-Layer Encryption** — Chains XOR → Caesar → Substitution with unique keys
+- **JIT String Decryption** — Runtime-generated decryption logic
+- **String Splitting** — Breaks strings into chunks to defeat pattern matching
+- **Constant Array** — Hides constants in shuffled arrays with obfuscated indices
+- **Numbers to Expressions** — Converts literals into complex arithmetic expressions
 
-Moonstar includes advanced bytecode-level optimizations for both security and performance:
+### Bytecode Security
+- **Opcode Shuffling** — Unique randomized block IDs per compilation
+- **Dynamic Register Remapping** — Fisher-Yates shuffled registers with ghost writes
+- **Instruction Polymorphism** — Semantically equivalent but syntactically different code
+- **Encrypted Block IDs** — XOR-encrypted dispatch with per-compilation seed
+- **Randomized BST Order** — Shuffled binary search tree comparisons
 
-### Security Features
+### Bytecode Performance
+- **Loop Invariant Code Motion** — Hoists invariant computations out of loops
+- **Peephole Optimization** — Eliminates redundant copies, dead stores, identity ops
+- **Function Inlining** — Inlines small functions (≤10 statements) at call sites
+- **Common Subexpression Elimination** — Reuses previously computed expressions
+- **Strength Reduction** — Converts expensive ops (x*2 → x+x, x^2 → x*x)
+- **Copy Propagation** — Eliminates redundant register copies
+- **Allocation Sinking** — Defers/eliminates unnecessary memory allocations
+- **Inline Caching** — Caches frequently accessed global lookups
+- **Table Pre-sizing** — Emits size hints for table constructors
+- **Vararg Optimization** — Optimizes `select('#', ...)` and `{...}[n]` patterns
+- **Tail Call Optimization** — Proper tail call emission for eligible returns
+- **Loop Unrolling** — Unrolls small constant-bound loops (≤8 iterations)
+- **Dead Code Elimination** — Removes unreachable blocks and dead stores
+- **Aggressive Block Inlining** — Inlines single-predecessor and hot-path blocks
+- **Constant Hoisting** — Promotes frequently-used globals to locals
 
-- **Opcode Shuffling (S1):** Randomizes block IDs per compilation, producing unique output each time
-- **Dynamic Register Remapping (S2):** Permutes register indices with Fisher-Yates shuffle and injects ghost registers
-- **Multi-Layer String Encryption (S4):** Chains XOR → Caesar → Substitution encryption with unique keys per string
-- **Instruction Polymorphism (S6):** Generates semantically equivalent but syntactically different code patterns
-
-### Performance Optimizations
-
-- **Loop Invariant Code Motion (P10):** Hoists invariant computations out of loops
-- **Peephole Optimization (P11):** Removes redundant copies, dead stores, and identity operations
-- **Small Function Inlining (P12):** Inlines small functions (≤10 statements) at call sites
-- **Common Subexpression Elimination (P14):** Reuses previously computed expression results
-- **Strength Reduction (P15):** Replaces expensive operations (x*2 → x+x, x^2 → x*x)
-- **Inline Caching (P9):** Caches resolved global lookups for frequently accessed globals
-- **Table Pre-sizing (P17):** Emits table constructors with size hints when known
-- **Vararg Optimization (P18):** Optimizes `...` handling for common patterns
-
-### Configuration
-
-Enable/disable features in your config:
-
-```lua
-{
-    -- Security
-    enableOpcodeShuffling = true,
-    enableRegisterRemapping = true,
-    ghostRegisterDensity = 15,
-    enableMultiLayerEncryption = true,
-    encryptionLayers = 3,
-    enableInstructionPolymorphism = true,
-    polymorphismRate = 50,
-    
-    -- Performance
-    enableLICM = true,
-    enablePeepholeOptimization = true,
-    enableFunctionInlining = true,
-    enableCSE = true,
-    enableStrengthReduction = true,
-    enableTablePresizing = true,
-    enableVarargOptimization = true,
-}
-```
+### Additional
+- **Multiple Presets** — `Minify`, `Weak`, `Medium`, `Strong`
+- **Lua 5.1 & LuaU Support** — Full compatibility with standard Lua and Roblox
+- **Vararg Injection** — Confuses function signatures with unused `...`
+- **Local Proxification** — Wraps local variables in proxies
+- **VM Profile Randomizer** — Permutes opcodes and handler names
 
 ## Installation
 

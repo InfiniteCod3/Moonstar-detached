@@ -159,7 +159,5 @@ return function(ctx)
             ShuffleHandlers = true,
             RandomizeNames = true,
         },
-
-        Compression = ctx.deepCopy(ctx.CompressionConfig.Fast),
     }
 end

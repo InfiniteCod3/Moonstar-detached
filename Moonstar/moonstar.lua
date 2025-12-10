@@ -193,7 +193,9 @@ Options:
     --no-antitamper     Disable anti-tamper (Medium/Strong presets)
     --seed=N            Set random seed for reproducible output
     --detailed          Show detailed build report
-    --compress          Enable compression of output
+    --compress          Enable compression (default: all algorithms)
+    --compress-balanced Enable balanced compression (BWT+RLE+ANS+PPM)
+    --compress-fast     Enable fast compression (BWT+RLE+ANS+PPM fast mode)
 
 Presets:
     Minify  - No obfuscation (just minification)
@@ -225,7 +227,7 @@ local function parseArguments(args)
         seed = 0,
         disableAntiTamper = false,
         detailed = false,
-        compress = false,
+        compressionMode = nil,  -- nil, "default", "balanced", or "fast"
     }
 
     local optionHandlers = {
@@ -234,7 +236,9 @@ local function parseArguments(args)
         ["--pretty"] = function() config.prettyPrint = true end,
         ["--no-antitamper"] = function() config.disableAntiTamper = true end,
         ["--detailed"] = function() config.detailed = true end,
-        ["--compress"] = function() config.compress = true end,
+        ["--compress"] = function() config.compressionMode = "default" end,
+        ["--compress-balanced"] = function() config.compressionMode = "balanced" end,
+        ["--compress-fast"] = function() config.compressionMode = "fast" end,
         ["--help"] = function() return "help" end,
         ["-h"] = function() return "help" end,
     }
@@ -299,8 +303,17 @@ local function applyConfigOverrides(presetConfig, cliConfig)
     end
 
     -- Enable compression if requested
-    if cliConfig.compress then
-        presetConfig.Compression = deepCopy(CompressionConfig.Fast)
+    if cliConfig.compressionMode then
+        if cliConfig.compressionMode == "default" then
+            -- Default (--compress): All algorithms (best ratio, slowest)
+            presetConfig.Compression = deepCopy(CompressionConfig.Default)
+        elseif cliConfig.compressionMode == "balanced" then
+            -- Balanced: BWT + RLE + ANS + PPM (good balance)
+            presetConfig.Compression = deepCopy(CompressionConfig.Balanced)
+        else
+            -- Fast: BWT + RLE + ANS + PPM fast mode (fastest, lower ratio)
+            presetConfig.Compression = deepCopy(CompressionConfig.Fast)
+        end
     end
 
     return presetConfig

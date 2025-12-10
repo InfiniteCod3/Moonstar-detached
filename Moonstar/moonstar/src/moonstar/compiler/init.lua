@@ -25,7 +25,7 @@ local Expressions = require("moonstar.compiler.expressions")
 local VmGen = require("moonstar.compiler.vm")
 local Registers = require("moonstar.compiler.registers")
 local Upvalues = require("moonstar.compiler.upvalues")
-local Optimization = require("moonstar.compiler.optimization")
+
 local InlineCache = require("moonstar.compiler.inline_cache")
 local Inlining = require("moonstar.compiler.inlining")
 local TablePresizing = require("moonstar.compiler.table_presizing")
@@ -1330,14 +1330,6 @@ function Compiler:compileExpression(expression, funcDepth, numReturns, targetReg
     end
 end
 
--- ============================================================================
--- VMify Enhancer - Anti-Deobfuscation Layer (Delegated to Optimization module)
--- ============================================================================
 
--- Main enhancement function for VMified code
--- This is a module-level function that can be called on compiled string output
-function Compiler.enhanceVMCode(code)
-    return Optimization.enhanceVMCode(code)
-end
 
 return Compiler;

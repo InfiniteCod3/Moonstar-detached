@@ -31,6 +31,20 @@ local LUA_VERSIONS = {
 
 local CompressionConfig = {}
 
+CompressionConfig.Default = {
+    Enabled = true,
+    FastMode = false,
+    BalancedMode = false,
+    BWT = true,
+    RLE = true,
+    ANS = true,
+    Huffman = true,
+    ArithmeticCoding = true,
+    PPM = true,
+    PPMOrder = 2,
+    Preseed = true,
+}
+
 CompressionConfig.Balanced = {
     Enabled = true,
     FastMode = false,
