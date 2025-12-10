@@ -24,40 +24,27 @@ local function unlookupify(tb)
 	return tb2;
 end
 
+local escape_char_map = {}
+for i = 0, 255 do
+	local c = string.char(i)
+	if c:match("[^ -~\n\t\a\b\v\r\"\']") then
+		escape_char_map[c] = string.format("\\%03d", i)
+	elseif c == "\\" then escape_char_map[c] = "\\\\"
+	elseif c == "\n" then escape_char_map[c] = "\\n"
+	elseif c == "\r" then escape_char_map[c] = "\\r"
+	elseif c == "\t" then escape_char_map[c] = "\\t"
+	elseif c == "\a" then escape_char_map[c] = "\\a"
+	elseif c == "\b" then escape_char_map[c] = "\\b"
+	elseif c == "\v" then escape_char_map[c] = "\\v"
+	elseif c == "\"" then escape_char_map[c] = "\\\""
+	elseif c == "\'" then escape_char_map[c] = "\\\'"
+	else
+		escape_char_map[c] = c
+	end
+end
+
 local function escape(str)
-	return str:gsub(".", function(char)
-		if char:match("[^ -~\n\t\a\b\v\r\"\']") then -- Check if non Printable ASCII Character
-			return string.format("\\%03d", string.byte(char))
-		end
-		if(char == "\\") then
-			return "\\\\";
-		end
-		if(char == "\n") then
-			return "\\n";
-		end
-		if(char == "\r") then
-			return "\\r";
-		end
-		if(char == "\t") then
-			return "\\t";
-		end
-		if(char == "\a") then
-			return "\\a";
-		end
-		if(char == "\b") then
-			return "\\b";
-		end
-		if(char == "\v") then
-			return "\\v";
-		end
-		if(char == "\"") then
-			return "\\\"";
-		end
-		if(char == "\'") then
-			return "\\\'";
-		end
-		return char;
-	end)
+	return str:gsub(".", escape_char_map)
 end
 
 local function chararray(str)

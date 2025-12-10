@@ -50,7 +50,7 @@ function DebugInfoRemover:apply(ast, pipeline)
 	
 	-- Helper to clear location info from a node
 	local function clearLocation(node)
-		if not node then return end
+		if not node or type(node) ~= "table" then return end
 		
 		if removeLocations then
 			-- Clear source position information
