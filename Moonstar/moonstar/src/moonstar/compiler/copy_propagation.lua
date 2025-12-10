@@ -62,35 +62,33 @@ function CopyPropagation.buildCopyMap(statements)
     local copyMap = {}
     
     for i, statWrapper in ipairs(statements) do
-        if not statWrapper then goto continue end
-        
-        local isCopy, targetReg, sourceReg = CopyPropagation.isCopyStatement(statWrapper)
-        
-        if isCopy then
-            copyMap[targetReg] = {
-                sourceReg = sourceReg,
-                defIndex = i,
-                isValid = true
-            }
-        end
-        
-        -- Invalidate when source register is written
-        for reg, _ in pairs(statWrapper.writes) do
-            if type(reg) == "number" then
-                -- Invalidate copies that source from this reg
-                for target, info in pairs(copyMap) do
-                    if info.sourceReg == reg and info.isValid then
-                        info.isValid = false
+        if statWrapper then
+            local isCopy, targetReg, sourceReg = CopyPropagation.isCopyStatement(statWrapper)
+            
+            if isCopy then
+                copyMap[targetReg] = {
+                    sourceReg = sourceReg,
+                    defIndex = i,
+                    isValid = true
+                }
+            end
+            
+            -- Invalidate when source register is written
+            for reg, _ in pairs(statWrapper.writes) do
+                if type(reg) == "number" then
+                    -- Invalidate copies that source from this reg
+                    for target, info in pairs(copyMap) do
+                        if info.sourceReg == reg and info.isValid then
+                            info.isValid = false
+                        end
                     end
-                end
-                -- Clear this reg as a copy target if it's being redefined (and not a new copy)
-                if copyMap[reg] and not isCopy then
-                    copyMap[reg] = nil
+                    -- Clear this reg as a copy target if it's being redefined (and not a new copy)
+                    if copyMap[reg] and not isCopy then
+                        copyMap[reg] = nil
+                    end
                 end
             end
         end
-        
-        ::continue::
     end
     
     return copyMap
@@ -191,28 +189,26 @@ function CopyPropagation.optimizeBlock(compiler, block)
         
         -- Phase 2 & 3: Propagate copies forward
         for i, statWrapper in ipairs(statements) do
-            if not statWrapper then goto continue end
-            
-            for reg, _ in pairs(statWrapper.reads) do
-                if type(reg) == "number" then
-                    local copyInfo = copyMap[reg]
-                    
-                    if copyInfo and copyInfo.isValid and copyInfo.defIndex < i then
-                        if CopyPropagation.canPropagate(statWrapper, copyInfo.sourceReg) then
-                            -- Update the reads tracking
-                            statWrapper.reads[reg] = nil
-                            statWrapper.reads[copyInfo.sourceReg] = true
-                            
-                            -- The actual AST substitution is tricky because we use
-                            -- scope-based variable expressions. For now, mark changed
-                            -- and let the subsequent dead store elimination clean up.
-                            iterChanged = true
+            if statWrapper then
+                for reg, _ in pairs(statWrapper.reads) do
+                    if type(reg) == "number" then
+                        local copyInfo = copyMap[reg]
+                        
+                        if copyInfo and copyInfo.isValid and copyInfo.defIndex < i then
+                            if CopyPropagation.canPropagate(statWrapper, copyInfo.sourceReg) then
+                                -- Update the reads tracking
+                                statWrapper.reads[reg] = nil
+                                statWrapper.reads[copyInfo.sourceReg] = true
+                                
+                                -- The actual AST substitution is tricky because we use
+                                -- scope-based variable expressions. For now, mark changed
+                                -- and let the subsequent dead store elimination clean up.
+                                iterChanged = true
+                            end
                         end
                     end
                 end
             end
-            
-            ::continue::
         end
         
         changed = changed or iterChanged

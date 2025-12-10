@@ -31,36 +31,34 @@ function AllocationSinking.findAllocations(block)
     
     for i, statWrapper in ipairs(block.statements) do
         local stat = statWrapper.statement
-        if not stat then goto continue end
-        
-        if stat.kind == AstKind.AssignmentStatement then
-            for j, rhs in ipairs(stat.rhs or {}) do
-                if AllocationSinking.isAllocation(rhs) then
-                    -- Find target register
-                    local targetReg = nil
-                    for reg, _ in pairs(statWrapper.writes) do
-                        if type(reg) == "number" then
-                            targetReg = reg
-                            break
+        if stat then
+            if stat.kind == AstKind.AssignmentStatement then
+                for j, rhs in ipairs(stat.rhs or {}) do
+                    if AllocationSinking.isAllocation(rhs) then
+                        -- Find target register
+                        local targetReg = nil
+                        for reg, _ in pairs(statWrapper.writes) do
+                            if type(reg) == "number" then
+                                targetReg = reg
+                                break
+                            end
                         end
-                    end
-                    
-                    if targetReg then
-                        table.insert(allocations, {
-                            statIndex = i,
-                            rhsIndex = j,
-                            targetReg = targetReg,
-                            expr = rhs,
-                            isTable = AllocationSinking.isTableAllocation(rhs),
-                            isClosure = AllocationSinking.isClosureAllocation(rhs),
-                            entries = rhs.entries, -- For tables
-                        })
+                        
+                        if targetReg then
+                            table.insert(allocations, {
+                                statIndex = i,
+                                rhsIndex = j,
+                                targetReg = targetReg,
+                                expr = rhs,
+                                isTable = AllocationSinking.isTableAllocation(rhs),
+                                isClosure = AllocationSinking.isClosureAllocation(rhs),
+                                entries = rhs.entries, -- For tables
+                            })
+                        end
                     end
                 end
             end
         end
-        
-        ::continue::
     end
     
     return allocations
@@ -75,33 +73,29 @@ function AllocationSinking.doesEscape(alloc, statements)
     
     for i = alloc.statIndex + 1, #statements do
         local statWrapper = statements[i]
-        if not statWrapper then goto continue end
-        
-        -- Check if this statement reads our register
-        if not statWrapper.reads[reg] then
-            goto continue
+        if statWrapper then
+            -- Check if this statement reads our register
+            if statWrapper.reads[reg] then
+                local stat = statWrapper.statement
+                if stat then
+                    -- Escape via return
+                    if stat.kind == AstKind.ReturnStatement then
+                        return true, "return"
+                    end
+                    
+                    -- Escape via upvalue capture
+                    if statWrapper.usesUpvals then
+                        return true, "upvalue"
+                    end
+                    
+                    -- Escape via function call (passed as argument)
+                    if stat.kind == AstKind.FunctionCallStatement or
+                       stat.kind == AstKind.FunctionCallExpression then
+                        return true, "function_call"
+                    end
+                end
+            end
         end
-        
-        local stat = statWrapper.statement
-        if not stat then goto continue end
-        
-        -- Escape via return
-        if stat.kind == AstKind.ReturnStatement then
-            return true, "return"
-        end
-        
-        -- Escape via upvalue capture
-        if statWrapper.usesUpvals then
-            return true, "upvalue"
-        end
-        
-        -- Escape via function call (passed as argument)
-        if stat.kind == AstKind.FunctionCallStatement or
-           stat.kind == AstKind.FunctionCallExpression then
-            return true, "function_call"
-        end
-        
-        ::continue::
     end
     
     return false, nil
@@ -124,22 +118,20 @@ function AllocationSinking.analyzeUsage(alloc, statements)
     
     for i = alloc.statIndex + 1, #statements do
         local statWrapper = statements[i]
-        if not statWrapper then goto continue end
-        
-        if statWrapper.reads[reg] then
-            usage.readCount = usage.readCount + 1
-            usage.isUsed = true
-            usage.lastUseIndex = i
-            if not usage.firstUseIndex then
-                usage.firstUseIndex = i
+        if statWrapper then
+            if statWrapper.reads[reg] then
+                usage.readCount = usage.readCount + 1
+                usage.isUsed = true
+                usage.lastUseIndex = i
+                if not usage.firstUseIndex then
+                    usage.firstUseIndex = i
+                end
+            end
+            
+            if statWrapper.writes[reg] then
+                usage.writeCount = usage.writeCount + 1
             end
         end
-        
-        if statWrapper.writes[reg] then
-            usage.writeCount = usage.writeCount + 1
-        end
-        
-        ::continue::
     end
     
     return usage
@@ -260,36 +252,32 @@ function AllocationSinking.sinkToFirstUse(compiler, block)
         local escapes, _ = AllocationSinking.doesEscape(alloc, statements)
         
         -- Only sink non-escaping allocations
-        if escapes then
-            goto continue
-        end
-        
-        -- Check if we can sink (first use is more than 1 statement away)
-        if usage.firstUseIndex and usage.firstUseIndex > alloc.statIndex + 1 then
-            local canSink = true
-            
-            -- Ensure no reads of the target register between alloc and first use
-            for i = alloc.statIndex + 1, usage.firstUseIndex - 1 do
-                local statWrapper = statements[i]
-                if statWrapper and statWrapper.reads[alloc.targetReg] then
-                    canSink = false
+        if not escapes then
+            -- Check if we can sink (first use is more than 1 statement away)
+            if usage.firstUseIndex and usage.firstUseIndex > alloc.statIndex + 1 then
+                local canSink = true
+                
+                -- Ensure no reads of the target register between alloc and first use
+                for i = alloc.statIndex + 1, usage.firstUseIndex - 1 do
+                    local statWrapper = statements[i]
+                    if statWrapper and statWrapper.reads[alloc.targetReg] then
+                        canSink = false
+                        break
+                    end
+                end
+                
+                if canSink then
+                    -- Move allocation just before first use
+                    local allocStat = table.remove(statements, alloc.statIndex)
+                    -- Adjust for removal (index shifts down by 1)
+                    local newIndex = usage.firstUseIndex - 1
+                    table.insert(statements, newIndex, allocStat)
+                    changed = true
+                    -- After modifying, we should break and restart since indices changed
                     break
                 end
             end
-            
-            if canSink then
-                -- Move allocation just before first use
-                local allocStat = table.remove(statements, alloc.statIndex)
-                -- Adjust for removal (index shifts down by 1)
-                local newIndex = usage.firstUseIndex - 1
-                table.insert(statements, newIndex, allocStat)
-                changed = true
-                -- After modifying, we should break and restart since indices changed
-                break
-            end
         end
-        
-        ::continue::
     end
     
     return changed

@@ -13,11 +13,6 @@ return function(ctx)
         PrettyPrint   = false,
         Seed          = 0,
 
-        GlobalVirtualization = {
-            Enabled = true,
-            VirtualizeEnv = true,
-        },
-
         WrapInFunction = {
             Enabled = true,
         },
@@ -26,10 +21,6 @@ return function(ctx)
             Enabled = true,
         },
 
-        JitStringDecryptor = {
-            Enabled = false,
-            MaxLength = 30,
-        },
 
         EncryptStrings = {
             Enabled = true,
@@ -56,10 +47,6 @@ return function(ctx)
             Complexity = "medium",
         },
 
-        AddVararg = {
-            Enabled = true,
-            Probability = 0.1,
-        },
 
         AntiTamper = {
             Enabled = true,
@@ -151,13 +138,18 @@ return function(ctx)
             BstRandomizationRate = 60,          -- 60% of comparisons will use >=
             -- D3: Hybrid Dispatch (DISABLED for strong preset - table dispatch exposes block IDs)
             -- EnableHybridDispatch = false,    -- Keep BST for better obfuscation
-        },
-
-        VmProfileRandomizer = {
-            Enabled = true,
+            
+            -- VM Profile Randomization (merged from VmProfileRandomizer step)
             PermuteOpcodes = true,
             ShuffleHandlers = true,
             RandomizeNames = true,
         },
+
+        DebugInfoRemover = {
+            Enabled = true,
+            RemoveSourceLocations = true,
+            RemoveTokens = true,
+        },
     }
 end
+

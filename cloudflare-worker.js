@@ -49,6 +49,13 @@ const CONFIG = {
             version: "1.0.0",
             enabled: true,
         },
+        playerTracker: {
+            kvKey: "PlayerTracker.lua",
+            label: "Player Tracker · Aim",
+            description: "Hold RMB to track closest player with auto-prediction algorithms",
+            version: "1.0.0",
+            enabled: true,
+        },
     },
 };
 
@@ -57,11 +64,11 @@ const CONFIG = {
 const API_KEYS = {
     "demo-dev-key": {
         label: "Developer",
-        allowedScripts: ["lunarity", "doorEsp", "teleport", "remoteLogger", "aetherShitter"],
+        allowedScripts: ["lunarity", "doorEsp", "teleport", "remoteLogger", "aetherShitter", "playerTracker"],
     },
     "test-key-123": {
         label: "Tester",
-        allowedScripts: ["lunarity", "doorEsp", "teleport"],
+        allowedScripts: ["lunarity", "doorEsp", "teleport", "playerTracker"],
     },
     // Add more keys here:
     // "your-custom-key": {
@@ -313,10 +320,10 @@ async function handleAuthorize(request, env) {
     } catch (err) {
         console.error("JSON parse error:", err.message);
         console.error("Request body:", bodyText.substring(0, 500));
-        return jsonResponse({ 
-            ok: false, 
+        return jsonResponse({
+            ok: false,
             reason: "Invalid JSON payload.",
-            debug: bodyText.substring(0, 200) 
+            debug: bodyText.substring(0, 200)
         }, { status: 400 });
     }
 

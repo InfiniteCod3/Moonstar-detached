@@ -38,10 +38,6 @@ return function(ctx)
             Enabled = true,
             Complexity = "low",
         },
-
-        AddVararg = {
-            Enabled = true,
-            Probability = 0.15,
-        },
     }
 end
+

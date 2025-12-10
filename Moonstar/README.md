@@ -7,14 +7,13 @@ Moonstar is an advanced Lua/Luau obfuscator designed to provide high-level prote
 ### Core Obfuscation
 - **VM-based Bytecode** — Custom bytecode format with embedded virtual machine
 - **Control Flow Flattening** — Converts nested structures into opaque state machines
-- **Global Virtualization** — Hides globals and mocks environment to prevent hooking
-- **Anti-Tamper Protection** — Detects and prevents runtime code modifications
+- **Anti-Tamper Protection** — Distributed integrity checks, timing detection, and silent corruption
 - **Compression** — LZSS, Huffman, Arithmetic, PPM, or BWT compression
 
 ### String & Constant Protection
 - **Multi-Mode String Encryption** — Light, Standard, or Polymorphic encryption modes
 - **Multi-Layer Encryption** — Chains XOR → Caesar → Substitution with unique keys
-- **JIT String Decryption** — Runtime-generated decryption logic
+- **JIT String Decryption** — Runtime-generated decryption logic (via EncryptStrings)
 - **String Splitting** — Breaks strings into chunks to defeat pattern matching
 - **Constant Array** — Hides constants in shuffled arrays with obfuscated indices
 - **Numbers to Expressions** — Converts literals into complex arithmetic expressions
@@ -46,9 +45,9 @@ Moonstar is an advanced Lua/Luau obfuscator designed to provide high-level prote
 ### Additional
 - **Multiple Presets** — `Minify`, `Weak`, `Medium`, `Strong`
 - **Lua 5.1 & LuaU Support** — Full compatibility with standard Lua and Roblox
-- **Vararg Injection** — Confuses function signatures with unused `...`
 - **Local Proxification** — Wraps local variables in proxies
-- **VM Profile Randomizer** — Permutes opcodes and handler names
+- **Debug Info Remover** — Strips source locations, line numbers, and tokens from AST
+- **VM Profile Randomization** — Permutes opcodes and handler names (integrated in Vmify)
 
 ## Installation
 
@@ -94,10 +93,10 @@ lua moonstar.lua <input_file> [options]
 - **Features:** `WrapInFunction`, `EncryptStrings` (Light), `SplitStrings`, `ConstantArray`, `NumbersToExpressions`
 
 **Medium** — Balanced protection for general use.
-- **Features:** All Weak features plus `EncryptStrings` (Standard), `IndexObfuscation`, `AddVararg`
+- **Features:** All Weak features plus `EncryptStrings` (Standard), `IndexObfuscation`
 
 **Strong** — Maximum protection for sensitive logic.
-- **Features:** All Medium features plus `ControlFlowFlattening`, `GlobalVirtualization`, `AntiTamper`, `Vmify`, `VmProfileRandomizer`, `Compression`
+- **Features:** All Medium features plus `ControlFlowFlattening`, `AntiTamper`, `Vmify` (with profile randomization), `DebugInfoRemover`, `Compression`
 
 ### Examples
 

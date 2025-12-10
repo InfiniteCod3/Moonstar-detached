@@ -276,7 +276,23 @@ Vmify.SettingsDescriptor = {
 		description = "Maximum number of hot blocks for table dispatch",
 		type = "number",
 		default = 20,
-	}
+	},
+	-- VM Profile Randomization (merged from VmProfileRandomizer step)
+	PermuteOpcodes = {
+		description = "Randomize opcode assignments for each compilation",
+		type = "boolean",
+		default = true,
+	},
+	ShuffleHandlers = {
+		description = "Randomize handler order in the VM",
+		type = "boolean",
+		default = true,
+	},
+	RandomizeNames = {
+		description = "Randomize internal VM variable names",
+		type = "boolean",
+		default = true,
+	},
 }
 
 function Vmify:init(settings)
@@ -350,6 +366,10 @@ function Vmify:init(settings)
 	self.EnableHybridDispatch = settings.EnableHybridDispatch or false  -- Default: false
 	self.HybridHotBlockThreshold = settings.HybridHotBlockThreshold or 2
 	self.MaxHybridHotBlocks = settings.MaxHybridHotBlocks or 20
+	-- VM Profile Randomization (merged from VmProfileRandomizer step)
+	self.PermuteOpcodes = settings.PermuteOpcodes ~= false  -- Default: true
+	self.ShuffleHandlers = settings.ShuffleHandlers ~= false  -- Default: true
+	self.RandomizeNames = settings.RandomizeNames ~= false  -- Default: true
 end
 
 function Vmify:apply(ast, pipeline)
@@ -466,6 +486,10 @@ function Vmify:apply(ast, pipeline)
 		enableHybridDispatch = self.EnableHybridDispatch or false,
 		hybridHotBlockThreshold = self.HybridHotBlockThreshold or 2,
 		maxHybridHotBlocks = self.MaxHybridHotBlocks or 20,
+		-- VM Profile Randomization config
+		permuteOpcodes = self.PermuteOpcodes ~= false,
+		shuffleHandlers = self.ShuffleHandlers ~= false,
+		randomizeNames = self.RandomizeNames ~= false,
 	});
     
     -- Compile the Script into a bytecode vm

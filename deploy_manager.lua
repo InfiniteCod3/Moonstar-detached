@@ -5,6 +5,7 @@ local SCRIPTS = {
     { id = "Teleport", label = "Teleport", needsPreprocess = false },
     { id = "RemoteLogger", label = "RemoteLogger", needsPreprocess = true },
     { id = "AetherShitterRecode", label = "AetherShitter", needsPreprocess = false },
+    { id = "PlayerTracker", label = "PlayerTracker", needsPreprocess = false },
 }
 
 -- Check for compression flag and parallel setting
