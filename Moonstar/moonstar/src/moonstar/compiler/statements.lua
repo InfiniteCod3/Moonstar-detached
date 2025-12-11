@@ -3,6 +3,7 @@ local AstKind = Ast.AstKind;
 local logger = require("logger");
 local util = require("moonstar.util");
 local Inlining = require("moonstar.compiler.inlining");
+local ConditionalFusion = require("moonstar.compiler.conditional_fusion");
 
 local unpack = unpack or table.unpack;
 
@@ -17,6 +18,12 @@ local isComparisonOp = {
 
 local function emitConditionalJump(compiler, condition, trueBlock, falseBlock, funcDepth)
     local scope = compiler.activeBlock.scope
+
+    -- P22: Try Conditional Fusion for and/or chains first
+    -- This eliminates intermediate registers for compound conditions like (a > 5 and b < 10)
+    if ConditionalFusion.tryEmitFusedConditional(compiler, condition, trueBlock, falseBlock, funcDepth) then
+        return -- Fusion handled the entire conditional
+    end
 
     if isComparisonOp[condition.kind] then
         -- Fused instruction path: Directly use the comparison in the jump logic
@@ -49,6 +56,7 @@ local function emitConditionalJump(compiler, condition, trueBlock, falseBlock, f
         compiler:freeRegister(conditionReg, false);
     end
 end
+
 
 -- P6: Loop Unrolling helper functions
 -- Check if an expression is a compile-time constant number

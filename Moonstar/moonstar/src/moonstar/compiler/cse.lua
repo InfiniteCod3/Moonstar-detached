@@ -11,89 +11,143 @@ local CSE = {}
 -- ============================================================================
 -- Expression Hashing
 -- Create a canonical hash of an expression structure for comparison
+-- PERFORMANCE: Memoize hashes on AST nodes and use table.concat to reduce GC
 -- ============================================================================
 
+-- PERFORMANCE: Cache for kind-to-string conversion (avoid repeated tostring calls)
+local kindStringCache = {}
+local function getKindString(kind)
+    local cached = kindStringCache[kind]
+    if cached then return cached end
+    cached = tostring(kind)
+    kindStringCache[kind] = cached
+    return cached
+end
+
+-- ============================================================================
+-- PERFORMANCE: Pre-computed lookup tables for O(1) side-effect detection
+-- These replace O(n) conditional chains in hasSideEffects() for faster checks
+-- ============================================================================
+
+-- Expressions that never have side effects (pure literals and variable reads)
+local noSideEffectsKinds = {
+    [AstKind.NumberExpression] = true,
+    [AstKind.StringExpression] = true,
+    [AstKind.BooleanExpression] = true,
+    [AstKind.NilExpression] = true,
+    [AstKind.VariableExpression] = true,
+}
+
+-- Binary expressions: need to check both operands for side effects
+local binaryExprKinds = {
+    [AstKind.AddExpression] = true,
+    [AstKind.SubExpression] = true,
+    [AstKind.MulExpression] = true,
+    [AstKind.DivExpression] = true,
+    [AstKind.ModExpression] = true,
+    [AstKind.PowExpression] = true,
+    [AstKind.StrCatExpression] = true,
+    [AstKind.LessThanExpression] = true,
+    [AstKind.GreaterThanExpression] = true,
+    [AstKind.LessThanOrEqualsExpression] = true,
+    [AstKind.GreaterThanOrEqualsExpression] = true,
+    [AstKind.EqualsExpression] = true,
+    [AstKind.NotEqualsExpression] = true,
+    [AstKind.AndExpression] = true,
+    [AstKind.OrExpression] = true,
+}
+
+-- Unary expressions: need to check the operand for side effects
+local unaryExprKinds = {
+    [AstKind.NotExpression] = true,
+    [AstKind.NegateExpression] = true,
+    [AstKind.LenExpression] = true,
+}
+
 -- Generate a canonical string representation of an expression for hashing
+-- PERFORMANCE: Memoize result on AST node to avoid recomputation
 function CSE.hashExpression(expr)
     if not expr then return nil end
     
-    local kind = expr.kind
-    
-    -- Literals: hash by value
-    if kind == AstKind.NumberExpression then
-        return "NUM:" .. tostring(expr.value)
-    elseif kind == AstKind.StringExpression then
-        return "STR:" .. expr.value
-    elseif kind == AstKind.BooleanExpression then
-        return "BOOL:" .. tostring(expr.value)
-    elseif kind == AstKind.NilExpression then
-        return "NIL"
+    -- PERFORMANCE: Check memoized hash first
+    if expr._cseHash ~= nil then
+        return expr._cseHash  -- nil means "computed as unhashable", false means "not computed"
     end
+    
+    local kind = expr.kind
+    local result = nil
+    
+    -- Literals: hash by value (simple concatenation is fine for 2-part strings)
+    if kind == AstKind.NumberExpression then
+        result = "NUM:" .. tostring(expr.value)
+    elseif kind == AstKind.StringExpression then
+        result = "STR:" .. expr.value
+    elseif kind == AstKind.BooleanExpression then
+        result = "BOOL:" .. tostring(expr.value)
+    elseif kind == AstKind.NilExpression then
+        result = "NIL"
     
     -- Variable expressions: hash by scope and id
-    if kind == AstKind.VariableExpression then
-        -- Use a unique identifier for the variable
+    elseif kind == AstKind.VariableExpression then
+        -- PERFORMANCE: Use table.concat for 5-part string
         local scopeId = tostring(expr.scope) or "?"
         local varId = tostring(expr.id) or "?"
-        return "VAR:" .. scopeId .. ":" .. varId
-    end
+        result = table.concat({"VAR:", scopeId, ":", varId})
     
-    -- Binary expressions: hash by kind and operand hashes
-    if kind == AstKind.AddExpression or
-       kind == AstKind.SubExpression or
-       kind == AstKind.MulExpression or
-       kind == AstKind.DivExpression or
-       kind == AstKind.ModExpression or
-       kind == AstKind.PowExpression or
-       kind == AstKind.StrCatExpression or
-       kind == AstKind.LessThanExpression or
-       kind == AstKind.GreaterThanExpression or
-       kind == AstKind.LessThanOrEqualsExpression or
-       kind == AstKind.GreaterThanOrEqualsExpression or
-       kind == AstKind.EqualsExpression or
-       kind == AstKind.NotEqualsExpression then
+    -- PERFORMANCE: O(1) lookup instead of O(n) conditional chain for binary expressions
+    -- Uses the pre-computed binaryExprKinds table to avoid ~15 conditional checks per call
+    elseif binaryExprKinds[kind] then
         local lhsHash = CSE.hashExpression(expr.lhs)
         local rhsHash = CSE.hashExpression(expr.rhs)
         if lhsHash and rhsHash then
-            return tostring(kind) .. "(" .. lhsHash .. "," .. rhsHash .. ")"
+            -- PERFORMANCE: Use table.concat for 5-part string
+            result = table.concat({getKindString(kind), "(", lhsHash, ",", rhsHash, ")"})
         end
-        return nil
-    end
     
-    -- And/Or expressions
-    if kind == AstKind.AndExpression or kind == AstKind.OrExpression then
-        local lhsHash = CSE.hashExpression(expr.lhs)
-        local rhsHash = CSE.hashExpression(expr.rhs)
-        if lhsHash and rhsHash then
-            return tostring(kind) .. "(" .. lhsHash .. "," .. rhsHash .. ")"
-        end
-        return nil
-    end
-    
-    -- Unary expressions: hash by kind and operand hash
-    if kind == AstKind.NotExpression or
-       kind == AstKind.NegateExpression or
-       kind == AstKind.LenExpression then
+    -- PERFORMANCE: O(1) lookup instead of O(n) conditional chain for unary expressions
+    -- Uses the pre-computed unaryExprKinds table to avoid ~3 conditional checks per call
+    elseif unaryExprKinds[kind] then
         local rhsHash = CSE.hashExpression(expr.rhs)
         if rhsHash then
-            return tostring(kind) .. "(" .. rhsHash .. ")"
+            result = table.concat({getKindString(kind), "(", rhsHash, ")"})
         end
-        return nil
-    end
     
     -- Index expressions
-    if kind == AstKind.IndexExpression then
+    elseif kind == AstKind.IndexExpression then
         local baseHash = CSE.hashExpression(expr.base)
         local indexHash = CSE.hashExpression(expr.index)
         if baseHash and indexHash then
-            return "IDX(" .. baseHash .. "," .. indexHash .. ")"
+            result = table.concat({"IDX(", baseHash, ",", indexHash, ")"})
         end
-        return nil
     end
     
     -- Function calls, table constructors, etc. are NOT eligible for CSE
-    -- (side effects or unique values)
-    return nil
+    -- (side effects or unique values) - result stays nil
+    
+    -- PERFORMANCE: Memoize result (including nil for unhashable expressions)
+    expr._cseHash = result
+    return result
+end
+
+-- Clear memoized hashes when AST is mutated (call after peephole or other passes modify AST)
+function CSE.invalidateHashes(statements)
+    if not statements then return end
+    for _, statWrapper in ipairs(statements) do
+        local stat = statWrapper and statWrapper.statement
+        if stat then
+            CSE.invalidateExprHashes(stat)
+        end
+    end
+end
+
+-- Recursively clear hash from an expression and its children
+function CSE.invalidateExprHashes(node)
+    if not node then return end
+    node._cseHash = nil
+    if node.lhs then CSE.invalidateExprHashes(node.lhs) end
+    if node.rhs then CSE.invalidateExprHashes(node.rhs) end
+    if node.base then CSE.invalidateExprHashes(node.base) end
+    if node.index then CSE.invalidateExprHashes(node.index) end
 end
 
 -- ============================================================================
@@ -106,63 +160,24 @@ function CSE.hasSideEffects(expr)
     
     local kind = expr.kind
     
-    -- Literals have no side effects
-    if kind == AstKind.NumberExpression or
-       kind == AstKind.StringExpression or
-       kind == AstKind.BooleanExpression or
-       kind == AstKind.NilExpression then
+    -- PERFORMANCE: O(1) lookup instead of O(n) conditional chain
+    -- Pure expressions (literals, variable reads) have no side effects
+    if noSideEffectsKinds[kind] then
         return false
     end
     
-    -- Variable reads have no side effects
-    if kind == AstKind.VariableExpression then
-        return false
-    end
-    
-    -- Binary and unary expressions: check operands
-    if kind == AstKind.AddExpression or
-       kind == AstKind.SubExpression or
-       kind == AstKind.MulExpression or
-       kind == AstKind.DivExpression or
-       kind == AstKind.ModExpression or
-       kind == AstKind.PowExpression or
-       kind == AstKind.StrCatExpression or
-       kind == AstKind.LessThanExpression or
-       kind == AstKind.GreaterThanExpression or
-       kind == AstKind.LessThanOrEqualsExpression or
-       kind == AstKind.GreaterThanOrEqualsExpression or
-       kind == AstKind.EqualsExpression or
-       kind == AstKind.NotEqualsExpression or
-       kind == AstKind.AndExpression or
-       kind == AstKind.OrExpression then
+    -- Binary expressions: check both operands (recursive)
+    if binaryExprKinds[kind] then
         return CSE.hasSideEffects(expr.lhs) or CSE.hasSideEffects(expr.rhs)
     end
     
-    if kind == AstKind.NotExpression or
-       kind == AstKind.NegateExpression or
-       kind == AstKind.LenExpression then
+    -- Unary expressions: check the operand (recursive)
+    if unaryExprKinds[kind] then
         return CSE.hasSideEffects(expr.rhs)
     end
     
-    -- Index expressions might have side effects via __index metamethod
-    -- For safety, we treat them as having potential side effects
-    if kind == AstKind.IndexExpression then
-        return true
-    end
-    
-    -- Function calls always have potential side effects
-    if kind == AstKind.FunctionCallExpression or
-       kind == AstKind.PassSelfFunctionCallExpression then
-        return true
-    end
-    
-    -- Table constructors don't have side effects but create unique values
-    -- so they shouldn't be CSE'd
-    if kind == AstKind.TableConstructorExpression then
-        return true
-    end
-    
-    -- Default: assume side effects
+    -- All other expressions (function calls, table constructors, index expressions, etc.)
+    -- are assumed to have side effects or create unique values
     return true
 end
 
@@ -257,30 +272,25 @@ function CSE.optimizeBlock(compiler, block)
                             -- Check if any register read by the original expression was
                             -- modified between the original and this occurrence
                             local dependencyInvalidated = false
-                            local originalReads = statements[sourceIndex].reads
+                            -- PERFORMANCE: Use pre-computed numeric read registers
+                            local originalWrapper = statements[sourceIndex]
+                            local originalNumericReads = originalWrapper.numericReadRegs or {}
                             
-                            for reg, _ in pairs(originalReads) do
-                                if type(reg) == "number" then
-                                    local invalidationIndex = invalidatedRegs[reg]
-                                    if invalidationIndex and
-                                       invalidationIndex > sourceIndex and
-                                       invalidationIndex <= i then
-                                        dependencyInvalidated = true
-                                        break
-                                    end
+                            for _, reg in ipairs(originalNumericReads) do
+                                local invalidationIndex = invalidatedRegs[reg]
+                                if invalidationIndex and
+                                   invalidationIndex > sourceIndex and
+                                   invalidationIndex <= i then
+                                    dependencyInvalidated = true
+                                    break
                                 end
                             end
                             
                             if not dependencyInvalidated then
                                 -- We can reuse the previous computation!
                                 -- Get the target register for this statement
-                                local targetReg = nil
-                                for reg, _ in pairs(statWrapper.writes) do
-                                    if type(reg) == "number" then
-                                        targetReg = reg
-                                        break
-                                    end
-                                end
+                                -- PERFORMANCE: Use pre-computed numeric write register
+                                local targetReg = statWrapper.numericWriteReg
                                 
                                 if targetReg and targetReg ~= sourceReg then
                                     -- Replace the RHS with a register read
@@ -311,13 +321,8 @@ function CSE.optimizeBlock(compiler, block)
                         end
                     else
                         -- First occurrence of this expression
-                        local targetReg = nil
-                        for reg, _ in pairs(statWrapper.writes) do
-                            if type(reg) == "number" then
-                                targetReg = reg
-                                break
-                            end
-                        end
+                        -- PERFORMANCE: Use pre-computed numeric write register
+                        local targetReg = statWrapper.numericWriteReg
                         
                         if targetReg then
                             exprMap[hash] = {

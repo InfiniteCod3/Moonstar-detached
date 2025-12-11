@@ -1,4 +1,4 @@
--- Simple Luau to Lua51 preprocessor
+//ng-- Simple Luau to Lua51 preprocessor
 -- Converts compound assignment operators to their expanded forms
 
 local function preprocess(source)

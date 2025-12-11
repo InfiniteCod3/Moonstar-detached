@@ -244,6 +244,18 @@ Vmify.SettingsDescriptor = {
 		type = "boolean",
 		default = false,
 	},
+	-- Sprint 8: P21 Register Locality Optimization
+	EnableRegisterLocality = {
+		description = "Enable P21 register locality optimization (group live registers for cache locality)",
+		type = "boolean",
+		default = false,
+	},
+	-- Sprint 8: P22 Conditional Fusion
+	EnableConditionalFusion = {
+		description = "Enable P22 conditional fusion (fuse and/or chains into direct branching)",
+		type = "boolean",
+		default = false,
+	},
 	-- Dispatch Enhancements: D1 Encrypted Block IDs
 	EnableEncryptedBlockIds = {
 		description = "Enable D1 encrypted block IDs (XOR-encrypt block IDs with per-compilation seed)",
@@ -357,6 +369,10 @@ function Vmify:init(settings)
 	self.TablePresizeHashThreshold = settings.TablePresizeHashThreshold or 4
 	-- Sprint 5: P18 Vararg Optimization
 	self.EnableVarargOptimization = settings.EnableVarargOptimization or false  -- Default: false
+	-- Sprint 8: P21 Register Locality Optimization
+	self.EnableRegisterLocality = settings.EnableRegisterLocality or false  -- Default: false
+	-- Sprint 8: P22 Conditional Fusion
+	self.EnableConditionalFusion = settings.EnableConditionalFusion or false  -- Default: false
 	-- Dispatch Enhancements: D1 Encrypted Block IDs
 	self.EnableEncryptedBlockIds = settings.EnableEncryptedBlockIds or false  -- Default: false
 	-- Dispatch Enhancements: D2 Randomized BST Comparison Order
@@ -477,6 +493,10 @@ function Vmify:apply(ast, pipeline)
 		tablePresizeHashThreshold = self.TablePresizeHashThreshold or 4,
 		-- Sprint 5: P18 Vararg Optimization config
 		enableVarargOptimization = self.EnableVarargOptimization or false,
+		-- Sprint 8: P21 Register Locality Optimization config
+		enableRegisterLocality = self.EnableRegisterLocality or false,
+		-- Sprint 8: P22 Conditional Fusion config
+		enableConditionalFusion = self.EnableConditionalFusion or false,
 		-- Dispatch Enhancements: D1 Encrypted Block IDs config
 		enableEncryptedBlockIds = self.EnableEncryptedBlockIds or false,
 		-- Dispatch Enhancements: D2 Randomized BST Comparison Order config

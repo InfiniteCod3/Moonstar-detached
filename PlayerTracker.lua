@@ -233,6 +233,7 @@ local Settings = {
     MaxDistance = 1000,
     TargetPart = "Head", -- "Head", "HumanoidRootPart", "Torso"
     ShowIndicator = true,
+    ShowPrediction = true, -- Show visual prediction indicator
     PredictionStrength = 1.0, -- Multiplier for prediction
 }
 
@@ -245,6 +246,15 @@ local Connections = {}
 local Unloaded = false
 local IsTracking = false
 local CurrentTarget = nil
+
+-- Prediction visualization objects
+local PredictionVisuals = {
+    PredictionSphere = nil,
+    ConnectionBeam = nil,
+    AttachmentCurrent = nil,
+    AttachmentPredicted = nil,
+    PredictionPart = nil,
+}
 
 -- Position history for prediction algorithms
 local PositionHistory = {}
@@ -519,6 +529,231 @@ local function getPredictionModeName()
     return "Unknown"
 end
 
+-- // Prediction Visualization System
+
+local function cleanupPredictionVisuals()
+    if PredictionVisuals.PredictionSphere then
+        PredictionVisuals.PredictionSphere:Destroy()
+        PredictionVisuals.PredictionSphere = nil
+    end
+    if PredictionVisuals.PredictionPart then
+        PredictionVisuals.PredictionPart:Destroy()
+        PredictionVisuals.PredictionPart = nil
+    end
+    if PredictionVisuals.ConnectionBeam then
+        PredictionVisuals.ConnectionBeam:Destroy()
+        PredictionVisuals.ConnectionBeam = nil
+    end
+    if PredictionVisuals.AttachmentCurrent then
+        PredictionVisuals.AttachmentCurrent:Destroy()
+        PredictionVisuals.AttachmentCurrent = nil
+    end
+    if PredictionVisuals.AttachmentPredicted then
+        PredictionVisuals.AttachmentPredicted:Destroy()
+        PredictionVisuals.AttachmentPredicted = nil
+    end
+end
+
+local function createPredictionVisuals()
+    cleanupPredictionVisuals()
+    
+    -- Create the predicted position marker (invisible part to hold attachment)
+    local predictionPart = Instance.new("Part")
+    predictionPart.Name = "PredictionMarker"
+    predictionPart.Anchored = true
+    predictionPart.CanCollide = false
+    predictionPart.CanQuery = false
+    predictionPart.Transparency = 1
+    predictionPart.Size = Vector3.new(0.5, 0.5, 0.5)
+    predictionPart.Parent = Workspace
+    PredictionVisuals.PredictionPart = predictionPart
+    
+    -- Create glowing sphere at predicted position using BillboardGui
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "PredictionSphere"
+    billboard.Size = UDim2.new(0, 60, 0, 60)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = predictionPart
+    PredictionVisuals.PredictionSphere = billboard
+    
+    -- Outer glow ring
+    local outerGlow = Instance.new("ImageLabel")
+    outerGlow.Name = "OuterGlow"
+    outerGlow.Size = UDim2.new(1, 0, 1, 0)
+    outerGlow.BackgroundTransparency = 1
+    outerGlow.Image = "rbxassetid://3570695787" -- Circular gradient
+    outerGlow.ImageColor3 = Theme.Accent
+    outerGlow.ImageTransparency = 0.3
+    outerGlow.Parent = billboard
+    
+    -- Inner core
+    local innerCore = Instance.new("ImageLabel")
+    innerCore.Name = "InnerCore"
+    innerCore.Size = UDim2.new(0.5, 0, 0.5, 0)
+    innerCore.Position = UDim2.new(0.25, 0, 0.25, 0)
+    innerCore.BackgroundTransparency = 1
+    innerCore.Image = "rbxassetid://3570695787"
+    innerCore.ImageColor3 = Theme.AccentLight
+    innerCore.ImageTransparency = 0
+    innerCore.Parent = billboard
+    
+    -- Crosshair horizontal
+    local crossH = Instance.new("Frame")
+    crossH.Name = "CrossH"
+    crossH.Size = UDim2.new(0.6, 0, 0, 2)
+    crossH.Position = UDim2.new(0.2, 0, 0.5, -1)
+    crossH.BackgroundColor3 = Theme.AccentLight
+    crossH.BackgroundTransparency = 0.2
+    crossH.BorderSizePixel = 0
+    crossH.Parent = billboard
+    
+    -- Crosshair vertical
+    local crossV = Instance.new("Frame")
+    crossV.Name = "CrossV"
+    crossV.Size = UDim2.new(0, 2, 0.6, 0)
+    crossV.Position = UDim2.new(0.5, -1, 0.2, 0)
+    crossV.BackgroundColor3 = Theme.AccentLight
+    crossV.BackgroundTransparency = 0.2
+    crossV.BorderSizePixel = 0
+    crossV.Parent = billboard
+    
+    -- Prediction mode label
+    local modeLabel = Instance.new("TextLabel")
+    modeLabel.Name = "ModeLabel"
+    modeLabel.Size = UDim2.new(1, 0, 0, 12)
+    modeLabel.Position = UDim2.new(0, 0, 1, 4)
+    modeLabel.BackgroundTransparency = 1
+    modeLabel.Font = Enum.Font.GothamSemibold
+    modeLabel.TextSize = 10
+    modeLabel.Text = ""
+    modeLabel.TextColor3 = Theme.Accent
+    modeLabel.TextStrokeTransparency = 0.5
+    modeLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+    modeLabel.Parent = billboard
+    
+    -- Create attachments for beam
+    local attachmentPredicted = Instance.new("Attachment")
+    attachmentPredicted.Name = "PredictedAttachment"
+    attachmentPredicted.Parent = predictionPart
+    PredictionVisuals.AttachmentPredicted = attachmentPredicted
+    
+    return predictionPart, billboard
+end
+
+local function updatePredictionVisuals(currentPos, predictedPos)
+    if not Settings.ShowPrediction then
+        cleanupPredictionVisuals()
+        return
+    end
+    
+    if not predictedPos or not currentPos then
+        if PredictionVisuals.PredictionSphere then
+            PredictionVisuals.PredictionSphere.Enabled = false
+        end
+        if PredictionVisuals.ConnectionBeam then
+            PredictionVisuals.ConnectionBeam.Enabled = false
+        end
+        return
+    end
+    
+    -- Create visuals if they don't exist
+    if not PredictionVisuals.PredictionPart or not PredictionVisuals.PredictionPart.Parent then
+        createPredictionVisuals()
+    end
+    
+    -- Update prediction marker position
+    PredictionVisuals.PredictionPart.Position = predictedPos
+    
+    -- Enable sphere
+    if PredictionVisuals.PredictionSphere then
+        PredictionVisuals.PredictionSphere.Enabled = true
+        
+        -- Update mode label
+        local modeLabel = PredictionVisuals.PredictionSphere:FindFirstChild("ModeLabel")
+        if modeLabel then
+            modeLabel.Text = getPredictionModeName()
+        end
+        
+        -- Animate glow (pulsing effect)
+        local outerGlow = PredictionVisuals.PredictionSphere:FindFirstChild("OuterGlow")
+        if outerGlow then
+            local pulse = 0.3 + math.sin(tick() * 4) * 0.15
+            outerGlow.ImageTransparency = pulse
+        end
+        
+        -- Dynamic size based on distance from current to predicted
+        local predictionDistance = (predictedPos - currentPos).Magnitude
+        local scaleFactor = math.clamp(predictionDistance / 10, 0.5, 2)
+        PredictionVisuals.PredictionSphere.Size = UDim2.new(0, 60 * scaleFactor, 0, 60 * scaleFactor)
+    end
+    
+    -- Create/update beam connection from current to predicted position
+    if not PredictionVisuals.ConnectionBeam then
+        -- We need an attachment on the target player
+        local beam = Instance.new("Beam")
+        beam.Name = "PredictionBeam"
+        beam.Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, Theme.AccentDark),
+            ColorSequenceKeypoint.new(0.5, Theme.Accent),
+            ColorSequenceKeypoint.new(1, Theme.AccentLight)
+        }
+        beam.Transparency = NumberSequence.new{
+            NumberSequenceKeypoint.new(0, 0.7),
+            NumberSequenceKeypoint.new(0.5, 0.4),
+            NumberSequenceKeypoint.new(1, 0.2)
+        }
+        beam.Width0 = 0.15
+        beam.Width1 = 0.3
+        beam.FaceCamera = true
+        beam.Segments = 20
+        beam.LightEmission = 0.5
+        beam.LightInfluence = 0.2
+        beam.Parent = Workspace
+        PredictionVisuals.ConnectionBeam = beam
+    end
+    
+    -- Create temporary attachment for current position if needed
+    local target = CurrentTarget
+    if target and target.Character then
+        local targetPart = target.Character:FindFirstChild(Settings.TargetPart)
+            or target.Character:FindFirstChild("HumanoidRootPart")
+            or target.Character:FindFirstChild("Head")
+        
+        if targetPart then
+            -- Create or move attachment on target
+            if not PredictionVisuals.AttachmentCurrent or PredictionVisuals.AttachmentCurrent.Parent ~= targetPart then
+                if PredictionVisuals.AttachmentCurrent then
+                    PredictionVisuals.AttachmentCurrent:Destroy()
+                end
+                local att = Instance.new("Attachment")
+                att.Name = "CurrentPosAttachment"
+                att.Parent = targetPart
+                PredictionVisuals.AttachmentCurrent = att
+            end
+            
+            -- Update beam attachments
+            PredictionVisuals.ConnectionBeam.Attachment0 = PredictionVisuals.AttachmentCurrent
+            PredictionVisuals.ConnectionBeam.Attachment1 = PredictionVisuals.AttachmentPredicted
+            PredictionVisuals.ConnectionBeam.Enabled = true
+            
+            -- Add curve to beam for visual interest
+            local direction = (predictedPos - currentPos).Unit
+            local perpendicular = Vector3.new(-direction.Z, 0, direction.X) * 0.5
+            PredictionVisuals.ConnectionBeam.CurveSize0 = perpendicular.Magnitude * 2
+            PredictionVisuals.ConnectionBeam.CurveSize1 = -perpendicular.Magnitude * 2
+        end
+    end
+end
+
+local function hidePredictionVisuals()
+    if PredictionVisuals.PredictionSphere then
+        PredictionVisuals.PredictionSphere.Enabled = false
+    end
+    if PredictionVisuals.ConnectionBeam then
+        PredictionVisuals.ConnectionBeam.Enabled = false
+    end
+end
+
 -- Record position history for a target
 local lastHistoryTime = 0
 local function recordPosition(target)
@@ -608,7 +843,10 @@ local function startTracking()
     if TrackingConnection then return end
     
     TrackingConnection = RunService.RenderStepped:Connect(function()
-        if not IsTracking or Unloaded or not Settings.Enabled then return end
+        if not IsTracking or Unloaded or not Settings.Enabled then
+            hidePredictionVisuals()
+            return
+        end
         
         -- Get or update target
         local target = getClosestPlayer()
@@ -617,15 +855,35 @@ local function startTracking()
             CurrentTarget = target
             PositionHistory = {} -- Reset history for new target
             resetKalman()
+            hidePredictionVisuals()
         end
         
-        if not target then return end
+        if not target then
+            hidePredictionVisuals()
+            return
+        end
         
         -- Record position for prediction
         recordPosition(target)
         
-        -- Get predicted position and look at it
-        local targetPos = getTargetPosition(target)
+        -- Get current actual position
+        local part = target.Character:FindFirstChild(Settings.TargetPart)
+            or target.Character:FindFirstChild("HumanoidRootPart")
+            or target.Character:FindFirstChild("Head")
+        local currentPos = part and part.Position or nil
+        
+        -- Get predicted position
+        local predictedPos = getPredictedPosition(PositionHistory)
+        
+        -- Update prediction visualization
+        if currentPos and predictedPos then
+            updatePredictionVisuals(currentPos, predictedPos)
+        else
+            hidePredictionVisuals()
+        end
+        
+        -- Look at predicted position (or current if no prediction)
+        local targetPos = predictedPos or currentPos
         if targetPos then
             lookAtPosition(targetPos)
         end
@@ -654,6 +912,7 @@ addConnection(UserInputService.InputEnded:Connect(function(input, gameProcessed)
         CurrentTarget = nil
         PositionHistory = {}
         resetKalman()
+        hidePredictionVisuals()
     end
 end))
 
@@ -667,7 +926,7 @@ local function createMenu()
 
     local main = Instance.new("Frame")
     main.Name = "Main"
-    main.Size = UDim2.new(0, 280, 0, 340)
+    main.Size = UDim2.new(0, 280, 0, 370)
     main.Position = UDim2.new(0, 40, 0.5, -170)
     main.BackgroundColor3 = Theme.Background
     main.BorderSizePixel = 0
@@ -1015,6 +1274,16 @@ local function createMenu()
     -- Create UI elements
     createToggle("Enabled", Settings.Enabled, function(value)
         Settings.Enabled = value
+        if not value then
+            hidePredictionVisuals()
+        end
+    end)
+
+    createToggle("Show Prediction", Settings.ShowPrediction, function(value)
+        Settings.ShowPrediction = value
+        if not value then
+            cleanupPredictionVisuals()
+        end
     end)
 
     createDropdown("Prediction Mode", {"Linear", "Quadratic", "Kalman", "Auto"}, Settings.PredictionMode, function(index, name)

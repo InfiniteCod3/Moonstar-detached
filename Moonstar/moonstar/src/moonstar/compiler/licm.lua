@@ -112,26 +112,19 @@ function LICM.isInvariantStatement(statWrapper, loopVars, modifiedRegs)
         return false
     end
     
-    -- Check what register this writes to
-    local writtenReg = nil
-    for reg, _ in pairs(statWrapper.writes) do
-        if type(reg) == "number" then
-            writtenReg = reg
-            break
-        end
-    end
+    -- PERFORMANCE: Use pre-computed numeric write register
+    local writtenReg = statWrapper.numericWriteReg
     
     -- If it writes to a loop variable, it's not invariant
     if writtenReg and loopVars[writtenReg] then
         return false
     end
     
-    -- Check if all reads are from registers not modified in the loop
-    for reg, _ in pairs(statWrapper.reads) do
-        if type(reg) == "number" then
-            if modifiedRegs[reg] or loopVars[reg] then
-                return false
-            end
+    -- PERFORMANCE: Use pre-computed numeric read registers
+    local numericReadRegs = statWrapper.numericReadRegs or {}
+    for _, reg in ipairs(numericReadRegs) do
+        if modifiedRegs[reg] or loopVars[reg] then
+            return false
         end
     end
     
@@ -147,10 +140,10 @@ end
 function LICM.findModifiedRegisters(statements)
     local modified = {}
     for _, statWrapper in ipairs(statements) do
-        for reg, _ in pairs(statWrapper.writes) do
-            if type(reg) == "number" then
-                modified[reg] = true
-            end
+        -- PERFORMANCE: Use pre-computed numeric write register
+        local reg = statWrapper.numericWriteReg
+        if reg then
+            modified[reg] = true
         end
     end
     return modified
@@ -163,10 +156,10 @@ end
 function LICM.findReadRegisters(statements)
     local reads = {}
     for _, statWrapper in ipairs(statements) do
-        for reg, _ in pairs(statWrapper.reads) do
-            if type(reg) == "number" then
-                reads[reg] = true
-            end
+        -- PERFORMANCE: Use pre-computed numeric read registers
+        local numericReads = statWrapper.numericReadRegs or {}
+        for _, reg in ipairs(numericReads) do
+            reads[reg] = true
         end
     end
     return reads
@@ -194,13 +187,8 @@ function LICM.hoistFromBlock(statements, loopVars)
         if canHoist then
             -- Additional check: the written register shouldn't be read before
             -- this statement in the loop (data dependency)
-            local writtenReg = nil
-            for reg, _ in pairs(statWrapper.writes) do
-                if type(reg) == "number" then
-                    writtenReg = reg
-                    break
-                end
-            end
+            -- PERFORMANCE: Use pre-computed numeric write register
+            local writtenReg = statWrapper.numericWriteReg
             
             -- Check if any earlier statement reads this register
             local hasEarlierRead = false

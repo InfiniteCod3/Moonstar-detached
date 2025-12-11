@@ -130,9 +130,15 @@ function Compiler:new(config)
         encryptVmStrings = config.encryptVmStrings or false;
         
         -- VM dispatch mode config
-        -- Options: "bst" (binary search tree), "table" (O(1) hash table), "auto" (choose based on block count)
+        -- Options: "bst" (binary search tree), "table" (O(1) hash table), "auto" (choose based on block count), "inline" (direct inline for tiny scripts)
         vmDispatchMode = config.vmDispatchMode or "auto";
         vmDispatchTableThreshold = config.vmDispatchTableThreshold or 100; -- Use table dispatch when block count < threshold in auto mode
+        
+        -- MAJOR RUNTIME OPTIMIZATION #1: Direct Inline Dispatch
+        -- For very small scripts, inline all block code directly into the dispatch to eliminate ALL function call overhead
+        -- This generates: if pos == 1 then <block1> elseif pos == 2 then <block2> else ... end
+        enableDirectInlineDispatch = config.enableDirectInlineDispatch ~= false; -- Default: true (enabled in auto mode)
+        directInlineMaxBlocks = config.directInlineMaxBlocks or 8; -- Max blocks for direct inline mode
         
         -- P2: Aggressive Block Inlining config
         -- These options control how aggressively the compiler inlines blocks to reduce dispatch overhead
@@ -157,6 +163,12 @@ function Compiler:new(config)
         -- P4: Spill register variables (for registers MAX_REGS to MAX_REGS + SPILL_REGS - 1)
         -- These are declared as local variables instead of using table indexing
         spillVars = {};
+        
+        -- MAJOR RUNTIME OPTIMIZATION #2: Register Pool Pre-allocation
+        -- Pre-size the overflow table to enable LuaU/LuaJIT array optimization
+        -- Consecutive integer indices 1..N are stored in an array part, which is ~3x faster
+        enableRegisterPreallocation = config.enableRegisterPreallocation ~= false; -- Default: true
+        registerPreallocSize = config.registerPreallocSize or 50; -- Pre-allocate space for 50 overflow registers
 
         -- P5: Specialized Instruction Patterns config
         -- Optimize common patterns like string concatenation chains and increment/decrement
@@ -251,6 +263,16 @@ function Compiler:new(config)
         -- P20: Allocation Sinking config
         -- Defer/eliminate memory allocations to reduce GC pressure
         enableAllocationSinking = config.enableAllocationSinking or false; -- Default: false (disabled)
+
+        -- P21: Register Locality Optimization config
+        -- Groups registers that are live at the same time into contiguous ranges
+        -- Improves cache locality and reduces trace compilation overhead
+        enableRegisterLocality = config.enableRegisterLocality or false; -- Default: false (disabled)
+
+        -- P22: Conditional Fusion config
+        -- Fuses and/or chains of comparisons into direct branching
+        -- Eliminates intermediate register allocations for boolean results
+        enableConditionalFusion = config.enableConditionalFusion or false; -- Default: false (disabled)
 
         -- D1: Encrypted Block IDs config
         -- XOR-encrypt block IDs with per-compilation seed to prevent pattern matching
@@ -391,12 +413,36 @@ function Compiler:setActiveBlock(block)
 end
 
 function Compiler:addStatement(statement, writes, reads, usesUpvals)
-    if(self.activeBlock.advanceToNextBlock) then  
+    if(self.activeBlock.advanceToNextBlock) then
+        local writesLookup = lookupify(writes)
+        local readsLookup = lookupify(reads)
+        
+        -- PERFORMANCE: Pre-compute numeric register IDs once at creation time
+        -- This avoids repeated pairs() iterations in optimization passes
+        local numericWriteReg = nil
+        local numericReadRegs = {}
+        
+        for _, reg in ipairs(writes) do
+            if type(reg) == "number" then
+                numericWriteReg = reg  -- Usually only one write register
+                break
+            end
+        end
+        
+        for _, reg in ipairs(reads) do
+            if type(reg) == "number" then
+                table.insert(numericReadRegs, reg)
+            end
+        end
+        
         table.insert(self.activeBlock.statements, {
             statement = statement,
-            writes = lookupify(writes),
-            reads = lookupify(reads),
+            writes = writesLookup,
+            reads = readsLookup,
             usesUpvals = usesUpvals or false,
+            -- PERFORMANCE: Pre-computed numeric register info
+            numericWriteReg = numericWriteReg,
+            numericReadRegs = numericReadRegs,
         });
     end
 end
@@ -764,6 +810,13 @@ function Compiler:compile(ast)
             psc:addReferenceToHigherScope(newGlobalScope, bitVar)
         end
         -- Note: If neither is available, we'll use a fallback in vm.lua
+        
+        -- RUNTIME OPTIMIZATION #2: Cache bit.bxor in a local variable
+        -- Avoids repeated table indexing (bit.bxor or bit32.bxor) on every dispatch iteration
+        -- Local function access is ~3x faster than table.method access
+        if self.bitVar then
+            self.bxorCacheVar = self.containerFuncScope:addVariable()
+        end
     end
 
     self.posVar = self.containerFuncScope:addVariable();

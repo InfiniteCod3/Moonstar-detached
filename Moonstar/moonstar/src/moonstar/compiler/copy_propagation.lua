@@ -32,24 +32,14 @@ function CopyPropagation.isCopyStatement(statWrapper)
         return false
     end
     
-    -- Check it's a register (numeric write), not a global
-    local writeCount = 0
-    local writeReg = nil
-    for reg, _ in pairs(statWrapper.writes) do
-        if type(reg) == "number" then
-            writeCount = writeCount + 1
-            writeReg = reg
-        end
-    end
+    -- PERFORMANCE: Use pre-computed numeric register IDs
+    local writeReg = statWrapper.numericWriteReg
+    local readRegs = statWrapper.numericReadRegs or {}
+    local readReg = readRegs[1]
     
-    local readCount = 0
-    local readReg = nil
-    for reg, _ in pairs(statWrapper.reads) do
-        if type(reg) == "number" then
-            readCount = readCount + 1
-            readReg = reg
-        end
-    end
+    -- Check: exactly 1 numeric write and 1 numeric read, and they differ
+    local writeCount = writeReg and 1 or 0
+    local readCount = #readRegs
     
     return writeCount == 1 and readCount == 1 and writeReg ~= readReg, writeReg, readReg
 end
@@ -73,19 +63,18 @@ function CopyPropagation.buildCopyMap(statements)
                 }
             end
             
-            -- Invalidate when source register is written
-            for reg, _ in pairs(statWrapper.writes) do
-                if type(reg) == "number" then
-                    -- Invalidate copies that source from this reg
-                    for target, info in pairs(copyMap) do
-                        if info.sourceReg == reg and info.isValid then
-                            info.isValid = false
-                        end
+            -- PERFORMANCE: Use pre-computed numeric write register
+            local writtenReg = statWrapper.numericWriteReg
+            if writtenReg then
+                -- Invalidate copies that source from this reg
+                for target, info in pairs(copyMap) do
+                    if info.sourceReg == writtenReg and info.isValid then
+                        info.isValid = false
                     end
-                    -- Clear this reg as a copy target if it's being redefined (and not a new copy)
-                    if copyMap[reg] and not isCopy then
-                        copyMap[reg] = nil
-                    end
+                end
+                -- Clear this reg as a copy target if it's being redefined (and not a new copy)
+                if copyMap[writtenReg] and not isCopy then
+                    copyMap[writtenReg] = nil
                 end
             end
         end

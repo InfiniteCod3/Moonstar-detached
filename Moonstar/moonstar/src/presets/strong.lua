@@ -130,6 +130,12 @@ return function(ctx)
             -- P20: Allocation Sinking (defer/eliminate memory allocations)
             EnableAllocationSinking = true,
             
+            -- Sprint 8: Bytecode Execution Performance (P21, P22)
+            -- P21: Register Locality Optimization (group live registers for cache locality)
+            EnableRegisterLocality = true,
+            -- P22: Conditional Fusion (fuse and/or chains into direct branching)
+            EnableConditionalFusion = true,
+            
             -- Dispatch Enhancements
             -- D1: Encrypted Block IDs (XOR-encrypt block IDs with per-compilation seed)
             EnableEncryptedBlockIds = true,
