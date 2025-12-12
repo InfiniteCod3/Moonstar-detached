@@ -443,6 +443,9 @@ function Statements.WhileStatement(compiler, statement, funcDepth)
 
     statement.__start_block = checkBlock;
     statement.__final_block = finalBlock;
+    
+    -- PERF-OPT: Track loop body as hot block for fast-path dispatch
+    compiler.hotLoopBlocks[innerBlock.id] = true;
 
     compiler:addStatement(compiler:setPos(scope, checkBlock.id), {compiler.POS_REGISTER}, {}, false);
 
@@ -519,6 +522,9 @@ function Statements.ForStatement(compiler, statement, funcDepth)
 
     statement.__start_block = checkBlock;
     statement.__final_block = finalBlock;
+    
+    -- PERF-OPT: Track loop body as hot block for fast-path dispatch
+    compiler.hotLoopBlocks[innerBlock.id] = true;
 
     local posState = compiler.registers[compiler.POS_REGISTER];
     compiler.registers[compiler.POS_REGISTER] = compiler.VAR_REGISTER;
@@ -530,16 +536,24 @@ function Statements.ForStatement(compiler, statement, funcDepth)
     compiler:addStatement(compiler:copyRegisters(scope, {finalReg}, {finalExprReg}), {finalReg}, {finalExprReg}, false);
     compiler:freeRegister(finalExprReg);
 
+    -- PERF-OPT: Detect constant step for simplified bound checking
+    local isConstantPositiveStep = statement.incrementBy.kind == AstKind.NumberExpression and statement.incrementBy.value > 0
+    local isConstantNegativeStep = statement.incrementBy.kind == AstKind.NumberExpression and statement.incrementBy.value < 0
+    
     local incrementExprReg = compiler:compileExpression(statement.incrementBy, funcDepth, 1)[1];
     local incrementReg = compiler:allocRegister(false);
     compiler:addStatement(compiler:copyRegisters(scope, {incrementReg}, {incrementExprReg}), {incrementReg}, {incrementExprReg}, false);
     compiler:freeRegister(incrementExprReg);
 
-    local a7bX9 = compiler:allocRegister(false);
-    compiler:addStatement(compiler:setRegister(scope, a7bX9, Ast.NumberExpression(0)), {a7bX9}, {}, false);
-    local incrementIsNegReg = compiler:allocRegister(false);
-    compiler:addStatement(compiler:setRegister(scope, incrementIsNegReg, Ast.LessThanExpression(compiler:register(scope, incrementReg), compiler:register(scope, a7bX9))), {incrementIsNegReg}, {incrementReg, a7bX9}, false);
-    compiler:freeRegister(a7bX9);
+    local incrementIsNegReg = nil
+    if not isConstantPositiveStep and not isConstantNegativeStep then
+        -- Only compute direction check for dynamic step values
+        local a7bX9 = compiler:allocRegister(false);
+        compiler:addStatement(compiler:setRegister(scope, a7bX9, Ast.NumberExpression(0)), {a7bX9}, {}, false);
+        incrementIsNegReg = compiler:allocRegister(false);
+        compiler:addStatement(compiler:setRegister(scope, incrementIsNegReg, Ast.LessThanExpression(compiler:register(scope, incrementReg), compiler:register(scope, a7bX9))), {incrementIsNegReg}, {incrementReg, a7bX9}, false);
+        compiler:freeRegister(a7bX9);
+    end
 
     local currentReg = compiler:allocRegister(true);
     compiler:addStatement(compiler:setRegister(scope, currentReg, Ast.SubExpression(compiler:register(scope, initialReg), compiler:register(scope, incrementReg))), {currentReg}, {initialReg, incrementReg}, false);
@@ -552,22 +566,33 @@ function Statements.ForStatement(compiler, statement, funcDepth)
     scope = checkBlock.scope;
 
     -- Define function to emit increment/check logic
+    -- PERF-OPT: Simplified for constant step directions
     local function emitIncrementCheck()
         compiler:addStatement(compiler:setRegister(scope, currentReg, Ast.AddExpression(compiler:register(scope, currentReg), compiler:register(scope, incrementReg))), {currentReg}, {currentReg, incrementReg}, false);
+        
         local z2pR6 = compiler:allocRegister(false);
-        local m3kQ8 = compiler:allocRegister(false);
-        compiler:addStatement(compiler:setRegister(scope, m3kQ8, Ast.NotExpression(compiler:register(scope, incrementIsNegReg))), {m3kQ8}, {incrementIsNegReg}, false);
-        compiler:addStatement(compiler:setRegister(scope, z2pR6, Ast.LessThanOrEqualsExpression(compiler:register(scope, currentReg), compiler:register(scope, finalReg))), {z2pR6}, {currentReg, finalReg}, false);
-        compiler:addStatement(compiler:setRegister(scope, z2pR6, Ast.AndExpression(compiler:register(scope, m3kQ8), compiler:register(scope, z2pR6))), {z2pR6}, {z2pR6, m3kQ8}, false);
-        compiler:addStatement(compiler:setRegister(scope, m3kQ8, Ast.GreaterThanOrEqualsExpression(compiler:register(scope, currentReg), compiler:register(scope, finalReg))), {m3kQ8}, {currentReg, finalReg}, false);
-        compiler:addStatement(compiler:setRegister(scope, m3kQ8, Ast.AndExpression(compiler:register(scope, incrementIsNegReg), compiler:register(scope, m3kQ8))), {m3kQ8}, {m3kQ8, incrementIsNegReg}, false);
-        compiler:addStatement(compiler:setRegister(scope, z2pR6, Ast.OrExpression(compiler:register(scope, m3kQ8), compiler:register(scope, z2pR6))), {z2pR6}, {z2pR6, m3kQ8}, false);
-        compiler:freeRegister(m3kQ8);
-
-        -- Logic to set POS: if valid, inner; else final
         local innerBlockId = Ast.NumberExpression(innerBlock.id)
         local finalBlockId = Ast.NumberExpression(finalBlock.id)
+        
+        if isConstantPositiveStep then
+            -- PERF-OPT: Constant positive step - simplified check: current <= final
+            compiler:addStatement(compiler:setRegister(scope, z2pR6, Ast.LessThanOrEqualsExpression(compiler:register(scope, currentReg), compiler:register(scope, finalReg))), {z2pR6}, {currentReg, finalReg}, false);
+        elseif isConstantNegativeStep then
+            -- PERF-OPT: Constant negative step - simplified check: current >= final
+            compiler:addStatement(compiler:setRegister(scope, z2pR6, Ast.GreaterThanOrEqualsExpression(compiler:register(scope, currentReg), compiler:register(scope, finalReg))), {z2pR6}, {currentReg, finalReg}, false);
+        else
+            -- Dynamic step: full direction-aware check
+            local m3kQ8 = compiler:allocRegister(false);
+            compiler:addStatement(compiler:setRegister(scope, m3kQ8, Ast.NotExpression(compiler:register(scope, incrementIsNegReg))), {m3kQ8}, {incrementIsNegReg}, false);
+            compiler:addStatement(compiler:setRegister(scope, z2pR6, Ast.LessThanOrEqualsExpression(compiler:register(scope, currentReg), compiler:register(scope, finalReg))), {z2pR6}, {currentReg, finalReg}, false);
+            compiler:addStatement(compiler:setRegister(scope, z2pR6, Ast.AndExpression(compiler:register(scope, m3kQ8), compiler:register(scope, z2pR6))), {z2pR6}, {z2pR6, m3kQ8}, false);
+            compiler:addStatement(compiler:setRegister(scope, m3kQ8, Ast.GreaterThanOrEqualsExpression(compiler:register(scope, currentReg), compiler:register(scope, finalReg))), {m3kQ8}, {currentReg, finalReg}, false);
+            compiler:addStatement(compiler:setRegister(scope, m3kQ8, Ast.AndExpression(compiler:register(scope, incrementIsNegReg), compiler:register(scope, m3kQ8))), {m3kQ8}, {m3kQ8, incrementIsNegReg}, false);
+            compiler:addStatement(compiler:setRegister(scope, z2pR6, Ast.OrExpression(compiler:register(scope, m3kQ8), compiler:register(scope, z2pR6))), {z2pR6}, {z2pR6, m3kQ8}, false);
+            compiler:freeRegister(m3kQ8);
+        end
 
+        -- Logic to set POS: if valid, inner; else final
         compiler:addStatement(compiler:setRegister(scope, compiler.POS_REGISTER,
             Ast.OrExpression(
                 Ast.AndExpression(compiler:register(scope, z2pR6), innerBlockId),
@@ -602,7 +627,9 @@ function Statements.ForStatement(compiler, statement, funcDepth)
 
     compiler.registers[compiler.POS_REGISTER] = compiler.VAR_REGISTER;
     compiler:freeRegister(finalReg);
-    compiler:freeRegister(incrementIsNegReg);
+    if incrementIsNegReg then
+        compiler:freeRegister(incrementIsNegReg);
+    end
     compiler:freeRegister(incrementReg);
     compiler:freeRegister(currentReg, true);
 
@@ -644,6 +671,9 @@ function Statements.ForInStatement(compiler, statement, funcDepth)
 
     statement.__start_block = checkBlock;
     statement.__final_block = finalBlock;
+    
+    -- PERF-OPT: Track loop body as hot block for fast-path dispatch
+    compiler.hotLoopBlocks[bodyBlock.id] = true;
 
     compiler:addStatement(compiler:setPos(scope, checkBlock.id), {compiler.POS_REGISTER}, {}, false);
 

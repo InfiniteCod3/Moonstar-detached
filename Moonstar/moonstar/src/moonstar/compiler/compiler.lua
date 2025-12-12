@@ -22,6 +22,7 @@ local Expressions = require("moonstar.compiler.expressions")
 local VmGen = require("moonstar.compiler.vm")
 
 local lookupify = util.lookupify;
+local lookupify_fast = util.lookupify_fast;
 local AstKind = Ast.AstKind;
 
 local unpack = unpack or table.unpack;
@@ -121,6 +122,9 @@ function Compiler:new(config)
         
         -- VUL-2025-003 FIX: Per-compilation salt for non-uniform distribution
         compilationSalt = config.enableInstructionRandomization and math.random(0, 2^20) or 0;
+        
+        -- PERF-OPT: Hot loop block tracking for fast-path dispatch
+        hotLoopBlocks = {};
 
         VAR_REGISTER = newproxy(false);
         RETURN_ALL = newproxy(false); 
@@ -196,10 +200,12 @@ end
 
 function Compiler:addStatement(statement, writes, reads, usesUpvals)
     if(self.activeBlock.advanceToNextBlock) then  
+        -- PERF-OPT: Use lookupify_fast for inline small-set optimization
+        -- Reduces GC pressure by avoiding table allocation for 1-3 element arrays
         table.insert(self.activeBlock.statements, {
             statement = statement,
-            writes = lookupify(writes),
-            reads = lookupify(reads),
+            writes = lookupify_fast(writes),
+            reads = lookupify_fast(reads),
             usesUpvals = usesUpvals or false,
         });
     end

@@ -68,6 +68,10 @@ function VmConstantEncryptor.injectDecoder(compiler)
     local stateVar = funcScope:addVariable()
     local resultVar = funcScope:addVariable()
     local keyVar = funcScope:addVariable()
+    
+    -- PERF-OPT: Bit library variable for fast key extraction
+    -- Uses bit32 (LuaU/Roblox, Lua 5.2+) or bit (LuaJIT), nil for vanilla Lua 5.1
+    local bitLibVar = funcScope:addVariable()
 
     -- For Loop setup
     local forScope = Scope:new(funcScope)
@@ -76,10 +80,45 @@ function VmConstantEncryptor.injectDecoder(compiler)
     forScope:addReferenceToHigherScope(funcScope, resultVar)
     forScope:addReferenceToHigherScope(funcScope, bytesArg)
     forScope:addReferenceToHigherScope(funcScope, keyVar)
+    forScope:addReferenceToHigherScope(funcScope, bitLibVar)
 
     -- Helper to access globals via compiler env
     local function getGlobal(name)
         return Ast.IndexExpression(Ast.VariableExpression(compiler.scope, compiler.envVar), Ast.StringExpression(name))
+    end
+    
+    -- PERF-OPT: Build bit-based key extraction expression
+    -- When bit library available: bit.band(bit.rshift(state, 16), 255)
+    -- Fallback: ((state - (state % 65536)) / 65536) % 256
+    local function buildKeyExtraction()
+        local stateExpr = Ast.VariableExpression(funcScope, stateVar)
+        local bitVar = Ast.VariableExpression(funcScope, bitLibVar)
+        
+        -- Fast path: bit.band(bit.rshift(state, 16), 255)
+        local bitRshift = Ast.IndexExpression(bitVar, Ast.StringExpression("rshift"))
+        local bitBand = Ast.IndexExpression(bitVar, Ast.StringExpression("band"))
+        local fastPath = Ast.FunctionCallExpression(bitBand, {
+            Ast.FunctionCallExpression(bitRshift, {stateExpr, Ast.NumberExpression(16)}),
+            Ast.NumberExpression(255)
+        })
+        
+        -- Slow path: ((state - (state % 65536)) / 65536) % 256
+        local slowPath = Ast.ModExpression(
+            Ast.DivExpression(
+                Ast.SubExpression(
+                    stateExpr,
+                    Ast.ModExpression(stateExpr, Ast.NumberExpression(65536))
+                ),
+                Ast.NumberExpression(65536)
+            ),
+            Ast.NumberExpression(256)
+        )
+        
+        -- _bit and fastPath or slowPath
+        return Ast.OrExpression(
+            Ast.AndExpression(bitVar, fastPath),
+            slowPath
+        )
     end
 
     -- Function Body AST
@@ -93,6 +132,11 @@ function VmConstantEncryptor.injectDecoder(compiler)
             {},
             nil
         ),
+        
+        -- PERF-OPT: local _bit = bit32 or bit (runtime detection for LuaU/LuaJIT/Lua5.1)
+        Ast.LocalVariableDeclaration(funcScope, {bitLibVar}, {
+            Ast.OrExpression(getGlobal("bit32"), getGlobal("bit"))
+        }),
 
         -- local result = {}
         Ast.LocalVariableDeclaration(funcScope, {resultVar}, {Ast.TableConstructorExpression({})}),
@@ -120,19 +164,9 @@ function VmConstantEncryptor.injectDecoder(compiler)
                     )}
                 ),
 
-                -- local key = math.floor(state / 65536) % 256
-                Ast.LocalVariableDeclaration(forScope, {keyVar}, {
-                    Ast.ModExpression(
-                        Ast.DivExpression(
-                            Ast.SubExpression(
-                                Ast.VariableExpression(funcScope, stateVar),
-                                Ast.ModExpression(Ast.VariableExpression(funcScope, stateVar), Ast.NumberExpression(65536))
-                            ),
-                            Ast.NumberExpression(65536)
-                        ),
-                        Ast.NumberExpression(256)
-                    )
-                }),
+                -- PERF-OPT: local key = _bit and bit.band(bit.rshift(state, 16), 255) or ((state - (state % 65536)) / 65536) % 256
+                -- Uses bit operations when available (LuaU/LuaJIT), falls back to math for vanilla Lua 5.1
+                Ast.LocalVariableDeclaration(forScope, {keyVar}, {buildKeyExtraction()}),
 
                 -- result[i] = string.char(...)
                  Ast.AssignmentStatement(
