@@ -91,21 +91,25 @@ end
 --  - Inclusion is driven by StepConfig.Enabled flags (or defaults), not by arbitrary arrays.
 --  - No dynamic reordering beyond this deterministic template.
 local CANONICAL_ORDER = {
+	"GlobalVirtualization",
 	"AntiTamper",
 	"WrapInFunction",
 	"ConstantFolding",
+	"JitStringDecryptor",
 	"EncryptStrings",
 	"SplitStrings",
 	"ConstantArray",
 	"LayeredStringDecrypt",
 	"NumbersToExpressions",
 	"ProxifyLocals",
+	"AddVararg",
 	"ControlFlowRestructuring",
 	"ControlFlowFlattening",
 	"OpaquePredicates",
 	"StructuredJunk",
 	"Vmify",
-	"DebugInfoRemover",
+	"Vmify2",
+	"VmProfileRandomizer",
 	"StagedConstantDecode",
 	"PolymorphicLayout",
 	"LocalLifetimeSplitting",
@@ -115,22 +119,25 @@ local CANONICAL_ORDER = {
 -- Default enablement for steps when using the canonical schema (may be refined by presets).
 -- These defaults are intentionally conservative; presets should override explicitly.
 local DEFAULT_ENABLED = {
+	GlobalVirtualization     = false,
 	AntiTamper               = false,
 	WrapInFunction           = false,
 	ConstantFolding          = false,
+	JitStringDecryptor       = false,
 	EncryptStrings           = false,
 	SplitStrings             = false,
 	ConstantArray            = false,
 	LayeredStringDecrypt     = false,
 	NumbersToExpressions     = false,
 	ProxifyLocals            = false,
+	AddVararg                = false,
 	ControlFlowRestructuring = false,
 	ControlFlowFlattening    = false,
 	OpaquePredicates         = false,
 	StructuredJunk           = false,
 	Vmify                    = false,
 	Vmify2                   = false,
-	DebugInfoRemover         = false,
+	VmProfileRandomizer      = false,
 	StagedConstantDecode     = false,
 	PolymorphicLayout        = false,
 	LocalLifetimeSplitting   = false,
@@ -234,23 +241,11 @@ function Pipeline:getSteps()
 end
 
 function Pipeline:setOption(name, value)
-	if Pipeline.DefaultSettings[name] ~= nil then
-		self[name] = value;
+	assert(false, "TODO");
+	if(Pipeline.DefaultSettings[name] ~= nil) then
 		
-		-- Special handling for settings that require component updates
-		if name == "LuaVersion" then
-			self:setLuaVersion(value);
-		elseif name == "PrettyPrint" then
-			self.unparser = Unparser:new({
-				LuaVersion = self.LuaVersion;
-				PrettyPrint = value;
-			});
-		end
-		
-		logger:debug(string.format("Pipeline option '%s' set to '%s'", name, tostring(value)));
 	else
-		logger:error(string.format("\"%s\" is not a valid setting. Valid settings: %s", 
-			name, table.concat(util.keys(Pipeline.DefaultSettings), ", ")));
+		logger:error(string.format("\"%s\" is not a valid setting"));
 	end
 end
 

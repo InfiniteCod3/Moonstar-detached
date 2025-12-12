@@ -65,19 +65,17 @@ function visitBlock(block, previsit, postvisit, data, isFunctionBlock)
 		end
 	end
 	
-	-- PERF: Build new statements array in O(n) instead of using O(n) table.remove/insert
-	-- operations per statement which caused O(n²) complexity. The postvisit callback can
-	-- return multiple statements (e.g., statement splitting), so we collect all returned
-	-- statements into a new array in a single pass.
-	local oldStatements = block.statements;
-	local newStatements = {};
-	for i = 1, #oldStatements do
-		local returnedStatements = {visitStatement(oldStatements[i], previsit, postvisit, data)};
-		for j = 1, #returnedStatements do
-			newStatements[#newStatements + 1] = returnedStatements[j];
+	local i = 1;
+	while i <= #block.statements do
+		local statement = table.remove(block.statements, i);
+		i = i - 1;
+		local returnedStatements = {visitStatement(statement, previsit, postvisit, data)};
+		for j, statement in ipairs(returnedStatements) do
+			i = i + 1;
+			table.insert(block.statements, i, statement);
 		end
+		i = i + 1;
 	end
-	block.statements = newStatements;
 
 	if(type(postvisit) == "function") then
 		block = postvisit(block, data) or block;

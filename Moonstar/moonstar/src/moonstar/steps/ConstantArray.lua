@@ -2,19 +2,10 @@
 --
 -- ConstantArray.lua
 --
--- This Step extracts all constants (strings, numbers, booleans) and stores them in an array.
--- Array access is obfuscated through wrapper functions with random offsets and index transformations.
---
--- Implemented Features:
--- - Global Wrapper Function: Single wrapper with offset-based array indexing
--- - Local Wrapper Functions: Per-scope wrappers with configurable count, offsets, and decoy arguments
--- - Index Obfuscation: Non-linear index transformation using a random salt
--- - String Encoding: Base64 encoding with shuffled character set
--- - Number Encoding: XOR-based encoding for numeric constants
--- - Anti-Deobfuscation: Runtime lookup table generation to prevent static analysis
---
--- Future Enhancement Ideas:
--- - Proxy Object for indexing: Transform ARR[X] to use metatable __add (e.g., ARR + X yields value)
+-- This Script provides a Simple Obfuscation Step that wraps the entire Script into a function
+
+-- TODO: Wrapper Functions
+-- TODO: Proxy Object for indexing: e.g: ARR[X] becomes ARR + X
 
 local Step = require("moonstar.step");
 local Ast = require("moonstar.ast");

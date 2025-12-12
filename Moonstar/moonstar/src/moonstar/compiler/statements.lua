@@ -2,8 +2,6 @@ local Ast = require("moonstar.ast");
 local AstKind = Ast.AstKind;
 local logger = require("logger");
 local util = require("moonstar.util");
-local Inlining = require("moonstar.compiler.inlining");
-local ConditionalFusion = require("moonstar.compiler.conditional_fusion");
 
 local unpack = unpack or table.unpack;
 
@@ -18,12 +16,6 @@ local isComparisonOp = {
 
 local function emitConditionalJump(compiler, condition, trueBlock, falseBlock, funcDepth)
     local scope = compiler.activeBlock.scope
-
-    -- P22: Try Conditional Fusion for and/or chains first
-    -- This eliminates intermediate registers for compound conditions like (a > 5 and b < 10)
-    if ConditionalFusion.tryEmitFusedConditional(compiler, condition, trueBlock, falseBlock, funcDepth) then
-        return -- Fusion handled the entire conditional
-    end
 
     if isComparisonOp[condition.kind] then
         -- Fused instruction path: Directly use the comparison in the jump logic
@@ -57,56 +49,6 @@ local function emitConditionalJump(compiler, condition, trueBlock, falseBlock, f
     end
 end
 
-
--- P6: Loop Unrolling helper functions
--- Check if an expression is a compile-time constant number
-local function isConstantNumber(expr)
-    if expr.kind == AstKind.NumberExpression then
-        return true, expr.value
-    elseif expr.kind == AstKind.NegateExpression and expr.expression.kind == AstKind.NumberExpression then
-        return true, -expr.expression.value
-    end
-    return false, nil
-end
-
--- Check if a block contains break, return, continue, or goto statements
--- These would prevent loop unrolling
-local function containsLoopControl(node)
-    if not node then return false end
-    
-    local kind = node.kind
-    if kind == AstKind.BreakStatement or 
-       kind == AstKind.ContinueStatement or 
-       kind == AstKind.ReturnStatement then
-        return true
-    end
-    
-    -- Recursively check blocks
-    if kind == AstKind.Block then
-        for _, stat in ipairs(node.statements) do
-            if containsLoopControl(stat) then
-                return true
-            end
-        end
-    elseif kind == AstKind.IfStatement then
-        if containsLoopControl(node.body) then return true end
-        for _, eif in ipairs(node.elseifs or {}) do
-            if containsLoopControl(eif.body) then return true end
-        end
-        if containsLoopControl(node.elsebody) then return true end
-    elseif kind == AstKind.DoStatement then
-        if containsLoopControl(node.body) then return true end
-    -- Don't recurse into nested loops - they have their own break/continue targets
-    elseif kind == AstKind.WhileStatement or 
-           kind == AstKind.RepeatStatement or 
-           kind == AstKind.ForStatement or 
-           kind == AstKind.ForInStatement then
-        return false  -- Nested loop has its own control flow
-    end
-    
-    return false
-end
-
 local Statements = {}
 
 function Statements.ReturnStatement(compiler, statement, funcDepth)
@@ -114,68 +56,6 @@ function Statements.ReturnStatement(compiler, statement, funcDepth)
     local entries = {};
     local regs = {};
 
-    -- P7: Tail Call Optimization
-    -- If returning a single function call, emit a proper tail call
-    if compiler.enableTailCallOptimization and #statement.args == 1 then
-        local arg = statement.args[1]
-        if arg.kind == AstKind.FunctionCallExpression or arg.kind == AstKind.PassSelfFunctionCallExpression then
-            -- Compile the function call as a tail call
-            -- We need to build the function call and return it directly
-            local baseReg = compiler:compileExpression(arg.base, funcDepth, 1)[1]
-            local callArgs = {}
-            local callRegs = { baseReg }
-            
-            -- Handle self-calls
-            if arg.kind == AstKind.PassSelfFunctionCallExpression then
-                table.insert(callArgs, compiler:register(scope, baseReg))
-            end
-            
-            -- Compile arguments
-            for i, expr in ipairs(arg.args) do
-                if i == #arg.args and (expr.kind == AstKind.FunctionCallExpression or expr.kind == AstKind.PassSelfFunctionCallExpression or expr.kind == AstKind.VarargExpression) then
-                    local reg = compiler:compileExpression(expr, funcDepth, compiler.RETURN_ALL)[1]
-                    table.insert(callArgs, Ast.FunctionCallExpression(
-                        compiler:unpack(scope),
-                        {compiler:register(scope, reg)}))
-                    table.insert(callRegs, reg)
-                else
-                    local argExpr, argReg = compiler:compileOperand(scope, expr, funcDepth)
-                    table.insert(callArgs, argExpr)
-                    if argReg then table.insert(callRegs, argReg) end
-                end
-            end
-            
-            -- Build the tail call expression
-            local tailCallExpr
-            if arg.kind == AstKind.PassSelfFunctionCallExpression then
-                tailCallExpr = Ast.FunctionCallExpression(
-                    Ast.IndexExpression(compiler:register(scope, baseReg), Ast.StringExpression(arg.passSelfFunctionName)),
-                    callArgs
-                )
-            else
-                tailCallExpr = Ast.FunctionCallExpression(
-                    compiler:register(scope, baseReg),
-                    callArgs
-                )
-            end
-            
-            -- Emit the return with the tail call
-            compiler:addStatement(compiler:setReturn(scope, Ast.TableConstructorExpression({
-                Ast.TableEntry(tailCallExpr)
-            })), {compiler.RETURN_REGISTER}, callRegs, true)
-            compiler:addStatement(compiler:setPos(scope, nil), {compiler.POS_REGISTER}, {}, false)
-            compiler.activeBlock.advanceToNextBlock = false
-            
-            -- Free registers
-            for _, reg in ipairs(callRegs) do
-                compiler:freeRegister(reg, false)
-            end
-            
-            return
-        end
-    end
-
-    -- Original path for non-tail-call returns
     for i, expr in ipairs(statement.args) do
         if i == #statement.args and (expr.kind == AstKind.FunctionCallExpression or expr.kind == AstKind.PassSelfFunctionCallExpression or expr.kind == AstKind.VarargExpression) then
             local reg = compiler:compileExpression(expr, funcDepth, compiler.RETURN_ALL)[1];
@@ -327,13 +207,6 @@ end
 
 function Statements.LocalFunctionDeclaration(compiler, statement, funcDepth)
     local scope = compiler.activeBlock.scope;
-    
-    -- P12: Track function for potential inlining
-    -- Only track non-upvalue local functions as they are simpler to inline
-    if compiler.enableFunctionInlining and not compiler:isUpvalue(statement.scope, statement.id) then
-        Inlining.trackFunction(compiler, statement.scope, statement.id, statement)
-    end
-    
     if(compiler:isUpvalue(statement.scope, statement.id)) then
         local varReg = compiler:getVarRegister(statement.scope, statement.id, funcDepth, nil);
         scope:addReferenceToHigherScope(compiler.scope, compiler.allocUpvalFunction);
@@ -640,67 +513,6 @@ end
 
 function Statements.ForStatement(compiler, statement, funcDepth)
     local scope = compiler.activeBlock.scope;
-    
-    -- P6: Loop Unrolling
-    -- Check if we can unroll this loop
-    if compiler.enableLoopUnrolling then
-        local isStartConst, startVal = isConstantNumber(statement.initialValue)
-        local isEndConst, endVal = isConstantNumber(statement.finalValue)
-        local isStepConst, stepVal = isConstantNumber(statement.incrementBy)
-        
-        -- All bounds must be constant, step must not be zero
-        if isStartConst and isEndConst and isStepConst and stepVal ~= 0 then
-            -- Calculate iteration count
-            local iterations = 0
-            if stepVal > 0 and endVal >= startVal then
-                iterations = math.floor((endVal - startVal) / stepVal) + 1
-            elseif stepVal < 0 and startVal >= endVal then
-                iterations = math.floor((startVal - endVal) / (-stepVal)) + 1
-            end
-            
-            -- Check if iteration count is within the threshold
-            if iterations > 0 and iterations <= compiler.maxUnrollIterations then
-                -- Check if loop variable is NOT an upvalue (upvalues need special handling per iteration)
-                local isUpval = compiler:isUpvalue(statement.scope, statement.id)
-                
-                -- Check if body contains break/return/continue
-                local hasControlFlow = containsLoopControl(statement.body)
-                
-                -- Only unroll if conditions are met
-                if not isUpval and not hasControlFlow then
-                    -- Register for the scope function depth
-                    if not compiler.scopeFunctionDepths[statement.scope] then
-                        compiler.scopeFunctionDepths[statement.scope] = funcDepth
-                    end
-                    
-                    -- Emit unrolled iterations
-                    for i = startVal, endVal, stepVal do
-                        -- Allocate register for loop variable
-                        local varReg = compiler:getVarRegister(statement.scope, statement.id, funcDepth, nil)
-                        
-                        -- Set loop variable to constant value
-                        compiler:addStatement(
-                            compiler:setRegister(scope, varReg, Ast.NumberExpression(i)),
-                            {varReg},
-                            {},
-                            false
-                        )
-                        
-                        -- Compile the loop body for this iteration
-                        compiler:compileBlock(statement.body, funcDepth)
-                        
-                        -- Update scope reference for next iteration
-                        scope = compiler.activeBlock.scope
-                    end
-                    
-                    -- Loop unrolling complete - no need for normal loop handling
-                    return
-                end
-            end
-        end
-    end
-    
-    -- Normal loop handling (fallback when unrolling not possible)
     local checkBlock = compiler:createBlock();
     local innerBlock = compiler:createBlock();
     local finalBlock = compiler:createBlock();

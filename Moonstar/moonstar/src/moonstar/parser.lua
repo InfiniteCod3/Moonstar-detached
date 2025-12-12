@@ -274,7 +274,7 @@ function Parser:statement(scope, currentLoop)
 	
 	-- Function Declaration
 	if(consume(self, TokenKind.Keyword, "function")) then
-		-- Parse function name (handles dotted names like a.b.c and method syntax a:b)
+		-- TODO: Parse Function Declaration Name
 		local obj = self:funcName(scope);
 		local baseScope = obj.scope;
 		local baseId = obj.id;
@@ -947,7 +947,7 @@ function Parser:expressionLiteral(scope)
 end
 
 function Parser:tableConstructor(scope)
-	-- Parse table constructor: { [key] = value, name = value, value, ... }
+	-- TODO: Parse Table Literals
 	local entries = {};
 	
 	expect(self, TokenKind.Symbol, "{");

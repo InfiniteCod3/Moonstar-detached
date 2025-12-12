@@ -851,162 +851,124 @@ function Unparser:unparseExpression(expression, tabbing)
 	
 	k = AstKind.FunctionCallExpression;
 	if(expression.kind == k) then
-		-- PERFORMANCE: Use table.concat instead of O(N²) string concatenation
-		local parts = {};
-		
 		if not (expression.base.kind == AstKind.IndexExpression or expression.base.kind == AstKind.VariableExpression) then
-			table.insert(parts, "(");
-			table.insert(parts, self:unparseExpression(expression.base, tabbing));
-			table.insert(parts, ")");
+			code = "(" .. self:unparseExpression(expression.base, tabbing) .. ")";
 		else
-			table.insert(parts, self:unparseExpression(expression.base, tabbing));
+			code = self:unparseExpression(expression.base, tabbing);
 		end
 
-		table.insert(parts, "(");
+		code = code .. "(";
 
-		local numArgs = #expression.args;
-		for i = 1, numArgs do
+		for i, arg in ipairs(expression.args) do
 			if i > 1 then
-				table.insert(parts, ",");
-				table.insert(parts, self:optionalWhitespace());
+				code = code .. "," .. self:optionalWhitespace();
 			end
-			table.insert(parts, self:unparseExpression(expression.args[i], tabbing));
+			code = code .. self:unparseExpression(arg, tabbing);
 		end
 
-		table.insert(parts, ")");
-		return table.concat(parts);
+		code = code .. ")";
+		return code;
 	end
 	
 	
 	k = AstKind.PassSelfFunctionCallExpression;
 	if(expression.kind == k) then
-		-- PERFORMANCE: Use table.concat instead of O(N²) string concatenation
-		local parts = {};
-		
 		if not (expression.base.kind == AstKind.IndexExpression or expression.base.kind == AstKind.VariableExpression) then
-			table.insert(parts, "(");
-			table.insert(parts, self:unparseExpression(expression.base, tabbing));
-			table.insert(parts, ")");
+			code = "(" .. self:unparseExpression(expression.base, tabbing) .. ")";
 		else
-			table.insert(parts, self:unparseExpression(expression.base, tabbing));
+			code = self:unparseExpression(expression.base, tabbing);
 		end
 
-		table.insert(parts, ":");
-		table.insert(parts, expression.passSelfFunctionName);
-		table.insert(parts, "(");
+		code = code .. ":" .. expression.passSelfFunctionName;
 
-		local numArgs = #expression.args;
-		for i = 1, numArgs do
+		code = code .. "(";
+
+		for i, arg in ipairs(expression.args) do
 			if i > 1 then
-				table.insert(parts, ",");
-				table.insert(parts, self:optionalWhitespace());
+				code = code .. "," .. self:optionalWhitespace();
 			end
-			table.insert(parts, self:unparseExpression(expression.args[i], tabbing));
+			code = code .. self:unparseExpression(arg, tabbing);
 		end
 
-		table.insert(parts, ")");
-		return table.concat(parts);
+		code = code .. ")";
+		return code;
 	end
 	
 	k = AstKind.FunctionLiteralExpression;
 	if(expression.kind == k) then
-		-- PERFORMANCE: Use table.concat instead of O(N²) string concatenation
-		local parts = {"function", "("};
+		code = "function" .. "(";
 
-		local numArgs = #expression.args;
-		for i = 1, numArgs do
+		for i, arg in ipairs(expression.args) do
 			if i > 1 then
-				table.insert(parts, ",");
-				table.insert(parts, self:optionalWhitespace());
+				code = code .. "," .. self:optionalWhitespace();
 			end
-			local arg = expression.args[i];
 			if(arg.kind == AstKind.VarargExpression) then
-				table.insert(parts, "...");
+				code = code .. "...";
 			else
-				table.insert(parts, getVarNameSafe(arg.scope, arg.id, "FunctionDeclarationArg"));
+				code = code .. getVarNameSafe(arg.scope, arg.id, "FunctionDeclarationArg");
 			end
 		end
-		table.insert(parts, ")");
+		code = code .. ")";
 
 		local bodyCode = self:unparseBlock(expression.body, tabbing);
-		table.insert(parts, self:newline(false));
-		table.insert(parts, bodyCode);
-		table.insert(parts, self:newline(false));
-		table.insert(parts, self:whitespaceIfNeeded2(bodyCode, self:tabs(tabbing, true)));
-		table.insert(parts, "end");
-		return table.concat(parts);
+		code = code .. self:newline(false) .. bodyCode .. self:newline(false) .. self:whitespaceIfNeeded2(bodyCode, self:tabs(tabbing, true)) .. "end";
+		return code;
 	end
 	
 	k = AstKind.TableConstructorExpression;
 	if(expression.kind == k) then
 		if(#expression.entries == 0) then return "{}" end;
 
-		local numEntries = #expression.entries;
-		local inlineTable = numEntries <= 3;
+		local inlineTable = #expression.entries <= 3;
 		local tableTabbing = tabbing + 1;
 		
-		-- PERFORMANCE: Use table.concat instead of O(N²) string concatenation
-		-- This gives ~14x speedup for large tables (10k entries)
-		local parts = {"{"};
+		code = "{";
 		if inlineTable then
-			table.insert(parts, self:optionalWhitespace());
+			code = code .. self:optionalWhitespace();
 		else
-			table.insert(parts, self:optionalWhitespace(self:newline() .. self:tabs(tableTabbing)));
+			code = code .. self:optionalWhitespace(self:newline() .. self:tabs(tableTabbing));
 		end
 		
 		local p = false;
-		for i = 1, numEntries do
-			local entry = expression.entries[i];
+		for i, entry in ipairs(expression.entries) do
 			p = true;
 			local sep = self.prettyPrint and "," or (math.random(1, 2) == 1 and "," or ";");
 			if i > 1 and not inlineTable then
-				table.insert(parts, sep);
-				table.insert(parts, self:optionalWhitespace(self:newline() .. self:tabs(tableTabbing)));
+				code = code .. sep .. self:optionalWhitespace(self:newline() .. self:tabs(tableTabbing));
 			elseif i > 1 then
-				table.insert(parts, sep);
-				table.insert(parts, self:optionalWhitespace());
+				code = code .. sep .. self:optionalWhitespace();
 			end
 			if(entry.kind == AstKind.KeyedTableEntry) then
 				if(entry.key.kind == AstKind.StringExpression and self:isValidIdentifier(entry.key.value)) then
-					table.insert(parts, entry.key.value);
+					code = code .. entry.key.value;
 				else
-					table.insert(parts, "[");
-					table.insert(parts, self:unparseExpression(entry.key, tableTabbing));
-					table.insert(parts, "]");
+					code = code .. "[" .. self:unparseExpression(entry.key, tableTabbing) .. "]";
 				end
-				table.insert(parts, self:optionalWhitespace());
-				table.insert(parts, "=");
-				table.insert(parts, self:optionalWhitespace());
-				table.insert(parts, self:unparseExpression(entry.value, tableTabbing));
+				code = code .. self:optionalWhitespace() .. "=" .. self:optionalWhitespace() .. self:unparseExpression(entry.value, tableTabbing);
 			else
-				table.insert(parts, self:unparseExpression(entry.value, tableTabbing));
+				code = code .. self:unparseExpression(entry.value, tableTabbing);
 			end
 		end
 
 		if inlineTable then
-			table.insert(parts, self:optionalWhitespace());
-			table.insert(parts, "}");
-			return table.concat(parts);
+			return code .. self:optionalWhitespace() .. "}";
 		end
 		
-		table.insert(parts, self:optionalWhitespace((p and "," or "") .. self:newline() .. self:tabs(tabbing)));
-		table.insert(parts, "}");
-		return table.concat(parts);
+		return code .. self:optionalWhitespace((p and "," or "") .. self:newline() .. self:tabs(tabbing)) .. "}";
 	end
 
 	if (self.luaVersion == LuaVersion.LuaU) then
 		k = AstKind.IfElseExpression
 		if(expression.kind == k) then
-			-- PERFORMANCE: Use table.concat instead of repeated string concatenation
-			local parts = {
-				"if ",
-				self:unparseExpression(expression.condition),
-				" then ",
-				self:unparseExpression(expression.true_value),
-				" else ",
-				self:unparseExpression(expression.false_value)
-			};
-			return table.concat(parts)
+			code = "if ";
+
+			code = code .. self:unparseExpression(expression.condition);
+			code = code .. " then ";
+			code = code .. self:unparseExpression(expression.true_value);
+			code = code .. " else ";
+			code = code .. self:unparseExpression(expression.false_value);
+
+			return code
 		end
 	end
 

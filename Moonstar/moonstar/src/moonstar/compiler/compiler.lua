@@ -1,13 +1,9 @@
--- init.lua
--- Core compiler state, block management, and main compilation orchestration
--- This is the main entry point for the compiler module
+
+-- compiler.lua
+-- This Script contains the new Compiler
 
 -- The max Number of variables used as registers
 local MAX_REGS = 150;
-
--- P4: Number of spill registers (local variables for registers MAX_REGS to MAX_REGS + SPILL_REGS - 1)
--- These provide faster access than table indexing for overflow registers
-local SPILL_REGS = 10;
 
 local Compiler = {};
 
@@ -17,19 +13,13 @@ local logger = require("logger");
 local util = require("moonstar.util");
 local visitast = require("moonstar.visitast")
 local randomStrings = require("moonstar.randomStrings")
+local InternalVariableNamer = require("moonstar.internalVariableNamer")
 local VmConstantEncryptor = require("moonstar.compiler.vmConstantEncryptor")
 
 -- Refactored modules
 local Statements = require("moonstar.compiler.statements")
 local Expressions = require("moonstar.compiler.expressions")
 local VmGen = require("moonstar.compiler.vm")
-local Registers = require("moonstar.compiler.registers")
-local Upvalues = require("moonstar.compiler.upvalues")
-
-local InlineCache = require("moonstar.compiler.inline_cache")
-local Inlining = require("moonstar.compiler.inlining")
-local TablePresizing = require("moonstar.compiler.table_presizing")
-local VarargOptimization = require("moonstar.compiler.vararg_optimization")
 
 local lookupify = util.lookupify;
 local AstKind = Ast.AstKind;
@@ -129,169 +119,8 @@ function Compiler:new(config)
         -- VM string encryption config
         encryptVmStrings = config.encryptVmStrings or false;
         
-        -- VM dispatch mode config
-        -- Options: "bst" (binary search tree), "table" (O(1) hash table), "auto" (choose based on block count), "inline" (direct inline for tiny scripts)
-        vmDispatchMode = config.vmDispatchMode or "auto";
-        vmDispatchTableThreshold = config.vmDispatchTableThreshold or 100; -- Use table dispatch when block count < threshold in auto mode
-        
-        -- MAJOR RUNTIME OPTIMIZATION #1: Direct Inline Dispatch
-        -- For very small scripts, inline all block code directly into the dispatch to eliminate ALL function call overhead
-        -- This generates: if pos == 1 then <block1> elseif pos == 2 then <block2> else ... end
-        enableDirectInlineDispatch = config.enableDirectInlineDispatch ~= false; -- Default: true (enabled in auto mode)
-        directInlineMaxBlocks = config.directInlineMaxBlocks or 8; -- Max blocks for direct inline mode
-        
-        -- P2: Aggressive Block Inlining config
-        -- These options control how aggressively the compiler inlines blocks to reduce dispatch overhead
-        enableAggressiveInlining = config.enableAggressiveInlining ~= false; -- Default: true (enabled)
-        inlineThresholdNormal = config.inlineThresholdNormal or 12;  -- Max statements for normal block inlining
-        inlineThresholdHot = config.inlineThresholdHot or 25;        -- Max statements for hot path (loop) block inlining
-        maxInlineDepth = config.maxInlineDepth or 10;                -- Max inline chain depth to prevent code explosion
-        
-        -- P3: Constant Hoisting config
-        -- Hoist frequently-accessed globals to local variables outside the dispatch loop
-        enableConstantHoisting = config.enableConstantHoisting ~= false; -- Default: true (enabled)
-        constantHoistThreshold = config.constantHoistThreshold or 3;     -- Min access count to hoist a global
-        
-        -- P3: Runtime tracking for global accesses
-        globalAccessCounts = {};   -- name -> count of accesses
-        hoistedGlobals = {};       -- name -> variable info for hoisted globals
-        hoistedGlobalRegs = {};    -- reg -> true for hoisted global registers (don't free)
-        
         -- VUL-2025-003 FIX: Per-compilation salt for non-uniform distribution
         compilationSalt = config.enableInstructionRandomization and math.random(0, 2^20) or 0;
-
-        -- P4: Spill register variables (for registers MAX_REGS to MAX_REGS + SPILL_REGS - 1)
-        -- These are declared as local variables instead of using table indexing
-        spillVars = {};
-        
-        -- MAJOR RUNTIME OPTIMIZATION #2: Register Pool Pre-allocation
-        -- Pre-size the overflow table to enable LuaU/LuaJIT array optimization
-        -- Consecutive integer indices 1..N are stored in an array part, which is ~3x faster
-        enableRegisterPreallocation = config.enableRegisterPreallocation ~= false; -- Default: true
-        registerPreallocSize = config.registerPreallocSize or 50; -- Pre-allocate space for 50 overflow registers
-
-        -- P5: Specialized Instruction Patterns config
-        -- Optimize common patterns like string concatenation chains and increment/decrement
-        enableSpecializedPatterns = config.enableSpecializedPatterns ~= false; -- Default: true (enabled)
-        strCatChainThreshold = config.strCatChainThreshold or 3; -- Min operands for table.concat optimization
-
-        -- P6: Loop Unrolling config
-        -- Unroll small numeric for loops with constant bounds
-        enableLoopUnrolling = config.enableLoopUnrolling or false; -- Default: false (disabled for security, enable for performance)
-        maxUnrollIterations = config.maxUnrollIterations or 8; -- Max iterations to unroll a loop
-
-        -- P7: Tail Call Optimization config
-        -- Emit proper tail calls for return statements with a single function call
-        enableTailCallOptimization = config.enableTailCallOptimization ~= false; -- Default: true (enabled)
-
-        -- P8: Dead Code Elimination config
-        -- Remove unreachable blocks, dead stores, and redundant jumps
-        enableDeadCodeElimination = config.enableDeadCodeElimination ~= false; -- Default: true (enabled)
-
-        -- S1: Opcode Shuffling config
-        -- Randomize block external IDs with gaps to confuse static analysis
-        enableOpcodeShuffling = config.enableOpcodeShuffling or false; -- Default: false (disabled)
-        opcodeMap = {}; -- Maps internal block ID -> external block ID
-        reverseOpcodeMap = {}; -- Maps external block ID -> internal block ID
-        nextShuffledId = 1; -- Counter for generating shuffled IDs
-
-        -- S2: Dynamic Register Remapping config
-        -- Permute register indices at compile time, inject ghost registers
-        enableRegisterRemapping = config.enableRegisterRemapping or false; -- Default: false (disabled)
-        ghostRegisterDensity = config.ghostRegisterDensity or 15; -- Percentage (0-100) of statements to inject ghost writes
-        registerShuffleMap = nil; -- Will be initialized if enabled
-        registerReverseMap = nil; -- Will be initialized if enabled
-        ghostRegisters = {}; -- Track ghost register allocations
-        ghostRegisterCounter = 0; -- Count of ghost registers allocated
-
-        -- S4: Multi-Layer String Encryption config
-        -- Chain XOR → Caesar → Substitution encryption for enhanced security
-        enableMultiLayerEncryption = config.enableMultiLayerEncryption or false; -- Default: false (use single-layer LCG)
-        encryptionLayers = config.encryptionLayers or 3; -- Number of encryption layers (1-5)
-
-        -- S6: Instruction Polymorphism config
-        -- Generate semantically equivalent but syntactically different code patterns
-        enableInstructionPolymorphism = config.enableInstructionPolymorphism or false; -- Default: false (disabled)
-        polymorphismRate = config.polymorphismRate or 50; -- Percentage (0-100) of expressions to transform
-
-        -- P11: Peephole Optimization config
-        -- Apply local pattern optimizations to instruction sequences
-        enablePeepholeOptimization = config.enablePeepholeOptimization ~= false; -- Default: true (enabled)
-        maxPeepholeIterations = config.maxPeepholeIterations or 5; -- Max optimization iterations per block
-
-        -- P15: Extended Strength Reduction config
-        -- Additional patterns: x * 4 -> (x + x) + (x + x), x / 2 -> x * 0.5, x % (2^n) -> bit ops
-        enableStrengthReduction = config.enableStrengthReduction ~= false; -- Default: true (enabled)
-
-        -- P9: Inline Caching for Globals config
-        -- Cache resolved global lookups for hot paths
-        enableInlineCaching = config.enableInlineCaching or false; -- Default: false (disabled)
-        inlineCacheThreshold = config.inlineCacheThreshold or 5; -- Min accesses to cache a global
-
-        -- P10: Loop Invariant Code Motion (LICM) config
-        -- Hoist invariant computations out of loops
-        enableLICM = config.enableLICM or false; -- Default: false (disabled)
-        licmMinIterations = config.licmMinIterations or 2; -- Min loop iterations to apply LICM
-
-        -- P14: Common Subexpression Elimination (CSE) config
-        -- Reuse previously computed expression results
-        enableCSE = config.enableCSE or false; -- Default: false (disabled)
-        maxCSEIterations = config.maxCSEIterations or 3; -- Max optimization iterations
-
-        -- P12: Small Function Inlining config
-        -- Inline small local functions at call sites
-        enableFunctionInlining = config.enableFunctionInlining or false; -- Default: false (disabled)
-        maxInlineFunctionSize = config.maxInlineFunctionSize or 10; -- Max statements in function body
-        maxInlineParameters = config.maxInlineParameters or 5; -- Max parameters for inlining
-        maxInlineDepth = config.maxInlineDepth or 3; -- Max nesting depth for inline expansions
-
-        -- P17: Table Pre-sizing config
-        -- Emit table constructors with size hints when known
-        enableTablePresizing = config.enableTablePresizing or false; -- Default: false (disabled)
-        tablePresizeArrayThreshold = config.tablePresizeArrayThreshold or 4; -- Min array elements to add size hint
-        tablePresizeHashThreshold = config.tablePresizeHashThreshold or 4; -- Min hash elements to add size hint
-
-        -- P18: Vararg Optimization config
-        -- Optimize common vararg patterns for better performance
-        enableVarargOptimization = config.enableVarargOptimization or false; -- Default: false (disabled)
-
-        -- P19: Copy Propagation config
-        -- Eliminate redundant register copies by forward-substituting values
-        enableCopyPropagation = config.enableCopyPropagation or false; -- Default: false (disabled)
-        maxCopyPropagationIterations = config.maxCopyPropagationIterations or 3; -- Max optimization iterations
-
-        -- P20: Allocation Sinking config
-        -- Defer/eliminate memory allocations to reduce GC pressure
-        enableAllocationSinking = config.enableAllocationSinking or false; -- Default: false (disabled)
-
-        -- P21: Register Locality Optimization config
-        -- Groups registers that are live at the same time into contiguous ranges
-        -- Improves cache locality and reduces trace compilation overhead
-        enableRegisterLocality = config.enableRegisterLocality or false; -- Default: false (disabled)
-
-        -- P22: Conditional Fusion config
-        -- Fuses and/or chains of comparisons into direct branching
-        -- Eliminates intermediate register allocations for boolean results
-        enableConditionalFusion = config.enableConditionalFusion or false; -- Default: false (disabled)
-
-        -- D1: Encrypted Block IDs config
-        -- XOR-encrypt block IDs with per-compilation seed to prevent pattern matching
-        enableEncryptedBlockIds = config.enableEncryptedBlockIds or false; -- Default: false (disabled)
-        blockIdEncryptionSeed = nil; -- Generated at compile time if enabled
-        blockSeedVar = nil; -- Variable for storing seed in generated code
-        bitVar = nil; -- Reference to bit library (bit32 or bit)
-
-        -- D2: Randomized BST Comparison Order config
-        -- Randomly flip comparison operators in BST dispatch for obfuscation
-        enableRandomizedBSTOrder = config.enableRandomizedBSTOrder or false; -- Default: false (disabled)
-        bstRandomizationRate = config.bstRandomizationRate or 50; -- Percentage (0-100) of nodes to randomize
-
-        -- D3: Hybrid Hot-Path Dispatch config
-        -- Use table dispatch for hot blocks (loops), BST for cold blocks
-        enableHybridDispatch = config.enableHybridDispatch or false; -- Default: false (disabled)
-        hybridHotBlockThreshold = config.hybridHotBlockThreshold or 2; -- Min iterations to consider "hot"
-        maxHybridHotBlocks = config.maxHybridHotBlocks or 20; -- Max blocks to put in hot table
-        hotBlockIds = nil; -- Set of hot block IDs for hybrid dispatch
 
         VAR_REGISTER = newproxy(false);
         RETURN_ALL = newproxy(false); 
@@ -300,7 +129,6 @@ function Compiler:new(config)
         UPVALUE = newproxy(false);
 
         MAX_REGS = MAX_REGS; -- Expose MAX_REGS
-        SPILL_REGS = SPILL_REGS; -- P4: Expose SPILL_REGS
 
         BIN_OPS = lookupify{
             AstKind.LessThanExpression,
@@ -325,75 +153,29 @@ function Compiler:new(config)
     return compiler;
 end
 
--- ============================================================================
--- Block Management
--- ============================================================================
-
 function Compiler:createBlock()
-    -- Internal ID is always sequential for ordering
-    local internalId = #self.blocks + 1;
-    
-    local externalId;
-    
-    -- S1: Opcode Shuffling - generate randomized external IDs with gaps
-    if self.enableOpcodeShuffling then
-        repeat
-            -- Generate external ID with random gaps
-            -- Format: (random 4-digit * 1000) + sequential counter
-            -- This creates large gaps that prevent pattern-based deobfuscation
-            local randomBase = math.random(1000, 9999)
-            externalId = randomBase * 1000 + self.nextShuffledId
-            self.nextShuffledId = self.nextShuffledId + 1
-        until not self.usedBlockIds[externalId];
-        
-        -- Store mappings for S1
-        self.opcodeMap[internalId] = externalId
-        self.reverseOpcodeMap[externalId] = internalId
-        
-    elseif self.enableInstructionRandomization then
+    local id;
+    if self.enableInstructionRandomization then
         -- VUL-2025-003 FIX: Non-uniform distribution to prevent statistical fingerprinting
         repeat
             -- Use exponential distribution with random base and exponent
             local base = math.random(0, 2^20)
             local exp = math.random(0, 5)
-            externalId = (base * (2^exp)) % (2^25)
+            id = (base * (2^exp)) % (2^25)
             
             -- Add per-compilation salt to prevent signature matching
-            externalId = (externalId + self.compilationSalt) % (2^25)
-        until not self.usedBlockIds[externalId];
+            id = (id + self.compilationSalt) % (2^25)
+        until not self.usedBlockIds[id];
     else
         -- OPTIMIZATION: Use sequential IDs when randomization is disabled
         -- This reduces bytecode size (smaller numbers) and potentially improves dispatch slightly
-        externalId = internalId;
+        id = #self.blocks + 1;
     end
-    
-    -- D1: Encrypt block external ID with XOR seed (compile-time encryption)
-    -- This makes the block IDs appear random and prevents pattern matching
-    if self.enableEncryptedBlockIds and self.blockIdEncryptionSeed then
-        -- Use host Lua's bit library for compile-time XOR
-        local bxor = bit32 and bit32.bxor or (bit and bit.bxor) or function(a, b)
-            -- Portable XOR fallback for compile-time (host Lua may lack bit libraries)
-            local result = 0
-            local bitval = 1
-            while a > 0 or b > 0 do
-                local abit = a % 2
-                local bbit = b % 2
-                if abit ~= bbit then result = result + bitval end
-                a = math.floor(a / 2)
-                b = math.floor(b / 2)
-                bitval = bitval * 2
-            end
-            return result
-        end
-        externalId = bxor(externalId, self.blockIdEncryptionSeed)
-    end
-    
-    self.usedBlockIds[externalId] = true;
+    self.usedBlockIds[id] = true;
 
     local scope = Scope:new(self.containerFuncScope);
     local block = {
-        id = externalId; -- Use external ID for dispatch (what appears in bytecode)
-        internalId = internalId; -- Internal ID for ordering (used for optimization passes)
+        id = id;
         statements = {
 
         };
@@ -413,307 +195,15 @@ function Compiler:setActiveBlock(block)
 end
 
 function Compiler:addStatement(statement, writes, reads, usesUpvals)
-    if(self.activeBlock.advanceToNextBlock) then
-        local writesLookup = lookupify(writes)
-        local readsLookup = lookupify(reads)
-        
-        -- PERFORMANCE: Pre-compute numeric register IDs once at creation time
-        -- This avoids repeated pairs() iterations in optimization passes
-        local numericWriteReg = nil
-        local numericReadRegs = {}
-        
-        for _, reg in ipairs(writes) do
-            if type(reg) == "number" then
-                numericWriteReg = reg  -- Usually only one write register
-                break
-            end
-        end
-        
-        for _, reg in ipairs(reads) do
-            if type(reg) == "number" then
-                table.insert(numericReadRegs, reg)
-            end
-        end
-        
+    if(self.activeBlock.advanceToNextBlock) then  
         table.insert(self.activeBlock.statements, {
             statement = statement,
-            writes = writesLookup,
-            reads = readsLookup,
+            writes = lookupify(writes),
+            reads = lookupify(reads),
             usesUpvals = usesUpvals or false,
-            -- PERFORMANCE: Pre-computed numeric register info
-            numericWriteReg = numericWriteReg,
-            numericReadRegs = numericReadRegs,
         });
     end
 end
-
--- ============================================================================
--- Register Module Delegation
--- ============================================================================
-
-function Compiler:freeRegister(id, force)
-    return Registers.freeRegister(self, id, force)
-end
-
-function Compiler:isVarRegister(id)
-    return Registers.isVarRegister(self, id)
-end
-
-function Compiler:allocRegister(isVar, forceNumeric)
-    return Registers.allocRegister(self, isVar, forceNumeric)
-end
-
-function Compiler:getVarRegister(scope, id, functionDepth, potentialId)
-    return Registers.getVarRegister(self, scope, id, functionDepth, potentialId)
-end
-
-function Compiler:getRegisterVarId(id)
-    return Registers.getRegisterVarId(self, id)
-end
-
-function Compiler:isSafeExpression(expr)
-    return Registers.isSafeExpression(self, expr)
-end
-
-function Compiler:isLiteral(expr)
-    return Registers.isLiteral(self, expr)
-end
-
-function Compiler:compileOperand(scope, expr, funcDepth)
-    return Registers.compileOperand(self, scope, expr, funcDepth)
-end
-
-function Compiler:register(scope, id)
-    return Registers.register(self, scope, id)
-end
-
-function Compiler:registerList(scope, ids)
-    return Registers.registerList(self, scope, ids)
-end
-
-function Compiler:registerAssignment(scope, id)
-    return Registers.registerAssignment(self, scope, id)
-end
-
-function Compiler:setRegister(scope, id, val, compoundArg)
-    return Registers.setRegister(self, scope, id, val, compoundArg)
-end
-
-function Compiler:setRegisters(scope, ids, vals)
-    return Registers.setRegisters(self, scope, ids, vals)
-end
-
-function Compiler:copyRegisters(scope, to, from)
-    return Registers.copyRegisters(self, scope, to, from)
-end
-
-function Compiler:resetRegisters()
-    return Registers.resetRegisters(self)
-end
-
-function Compiler:pos(scope)
-    return Registers.pos(self, scope)
-end
-
-function Compiler:posAssignment(scope)
-    return Registers.posAssignment(self, scope)
-end
-
-function Compiler:args(scope)
-    return Registers.args(self, scope)
-end
-
-function Compiler:unpack(scope)
-    return Registers.unpack(self, scope)
-end
-
-function Compiler:env(scope)
-    return Registers.env(self, scope)
-end
-
-function Compiler:jmp(scope, to)
-    return Registers.jmp(self, scope, to)
-end
-
-function Compiler:setPos(scope, val)
-    return Registers.setPos(self, scope, val)
-end
-
-function Compiler:setReturn(scope, val)
-    return Registers.setReturn(self, scope, val)
-end
-
-function Compiler:getReturn(scope)
-    return Registers.getReturn(self, scope)
-end
-
-function Compiler:returnAssignment(scope)
-    return Registers.returnAssignment(self, scope)
-end
-
-function Compiler:pushRegisterUsageInfo()
-    return Registers.pushRegisterUsageInfo(self)
-end
-
-function Compiler:popRegisterUsageInfo()
-    return Registers.popRegisterUsageInfo(self)
-end
-
--- ============================================================================
--- P3: Constant Hoisting Module (Enhanced with P9: Inline Caching)
--- Hoist frequently-used globals to local variables outside the dispatch loop
--- P9 adds intelligent caching for immutable globals (math, string, table, etc.)
--- ============================================================================
-
--- Track a global access (Phase 1: counting)
-function Compiler:trackGlobalAccess(name)
-    if not self.enableConstantHoisting and not self.enableInlineCaching then return end
-    self.globalAccessCounts[name] = (self.globalAccessCounts[name] or 0) + 1
-end
-
--- Get the hoisted global variable expression if it exists (Phase 2: usage)
--- Returns the register ID if the global is hoisted, nil otherwise
-function Compiler:getHoistedGlobal(name)
-    if not self.enableConstantHoisting and not self.enableInlineCaching then return nil end
-    return self.hoistedGlobals[name]
-end
-
--- Emit hoisted global declarations (called before the dispatch loop in vm.lua)
--- Creates local variables for frequently-accessed globals
--- P9 Enhancement: Immutable globals have lower thresholds for caching
-function Compiler:emitHoistedGlobals()
-    if not self.enableConstantHoisting and not self.enableInlineCaching then return {} end
-    
-    local hoistStatements = {}
-    local threshold = self.constantHoistThreshold or 3
-    local inlineCacheThreshold = self.inlineCacheThreshold or 5
-    local scope = self.containerFuncScope
-    
-    -- P9: Apply inline caching enhancement before sorting
-    if self.enableInlineCaching then
-        InlineCache.enhanceHoisting(self)
-    end
-    
-    -- Sort globals by access count for deterministic output
-    local sortedGlobals = {}
-    for name, count in pairs(self.globalAccessCounts) do
-        -- P9: Immutable globals (from InlineCache whitelist) have lower threshold
-        local effectiveThreshold = threshold
-        if self.enableInlineCaching and InlineCache.isImmutable(name) then
-            effectiveThreshold = 2 -- Immutable globals are cheap to cache
-        end
-        
-        if count >= effectiveThreshold then
-            table.insert(sortedGlobals, {
-                name = name,
-                count = count,
-                isImmutable = self.enableInlineCaching and InlineCache.isImmutable(name)
-            })
-        end
-    end
-    table.sort(sortedGlobals, function(a, b)
-        -- P9: Prioritize immutable globals
-        if a.isImmutable ~= b.isImmutable then
-            return a.isImmutable -- true sorts before false
-        end
-        if a.count ~= b.count then return a.count > b.count end
-        return a.name < b.name
-    end)
-    
-    -- Create hoisted variables for each frequent global
-    for _, entry in ipairs(sortedGlobals) do
-        local name = entry.name
-        
-        -- Add variable to containerFuncScope
-        local hoistVar = scope:addVariable()
-        
-        -- Create initialization: local _hoisted = _ENV["globalName"]
-        -- Handle nested globals like "table.insert" -> _ENV["table"]["insert"]
-        local initExpr
-        if name:find(".", 1, true) then
-            -- Nested global: a.b.c -> _ENV["a"]["b"]["c"]
-            local parts = {}
-            for part in name:gmatch("[^.]+") do
-                table.insert(parts, part)
-            end
-            
-            initExpr = Ast.IndexExpression(
-                Ast.VariableExpression(self.scope, self.envVar),
-                Ast.StringExpression(parts[1])
-            )
-            for i = 2, #parts do
-                initExpr = Ast.IndexExpression(initExpr, Ast.StringExpression(parts[i]))
-            end
-            
-            -- Add reference to env
-            scope:addReferenceToHigherScope(self.scope, self.envVar)
-        else
-            -- Simple global: _ENV["name"]
-            scope:addReferenceToHigherScope(self.scope, self.envVar)
-            initExpr = Ast.IndexExpression(
-                Ast.VariableExpression(self.scope, self.envVar),
-                Ast.StringExpression(name)
-            )
-        end
-        
-        -- Create the declaration statement
-        local declStat = Ast.LocalVariableDeclaration(scope, {hoistVar}, {initExpr})
-        table.insert(hoistStatements, declStat)
-        
-        -- Store the hoisted variable for later reference
-        self.hoistedGlobals[name] = hoistVar
-    end
-    
-    return hoistStatements
-end
-
--- ============================================================================
--- Upvalue Module Delegation
--- ============================================================================
-
-function Compiler:isUpvalue(scope, id)
-    return Upvalues.isUpvalue(self, scope, id)
-end
-
-function Compiler:makeUpvalue(scope, id)
-    return Upvalues.makeUpvalue(self, scope, id)
-end
-
-function Compiler:createUpvaluesGcFunc()
-    return Upvalues.createUpvaluesGcFunc(self)
-end
-
-function Compiler:createFreeUpvalueFunc()
-    return Upvalues.createFreeUpvalueFunc(self)
-end
-
-function Compiler:createUpvaluesProxyFunc()
-    return Upvalues.createUpvaluesProxyFunc(self)
-end
-
-function Compiler:createAllocUpvalFunction()
-    return Upvalues.createAllocUpvalFunction(self)
-end
-
-function Compiler:setUpvalueMember(scope, idExpr, valExpr, compoundConstructor)
-    return Upvalues.setUpvalueMember(self, scope, idExpr, valExpr, compoundConstructor)
-end
-
-function Compiler:getUpvalueMember(scope, idExpr)
-    return Upvalues.getUpvalueMember(self, scope, idExpr)
-end
-
--- ============================================================================
--- VM Generation Delegation
--- ============================================================================
-
-function Compiler:emitContainerFuncBody()
-    return VmGen.emitContainerFuncBody(self);
-end
-
--- ============================================================================
--- Main Compilation Methods
--- ============================================================================
 
 function Compiler:compile(ast)
     self.blocks = {};
@@ -728,25 +218,6 @@ function Compiler:compile(ast)
 
     self.upvalVars = {};
     self.registerUsageStack = {};
-
-    -- P3: Reset global access tracking
-    self.globalAccessCounts = {};
-    self.hoistedGlobals = {};
-    self.hoistedGlobalRegs = {};
-
-    -- P4: Reset spill register variables
-    self.spillVars = {};
-
-    -- S2: Initialize register remapping if enabled
-    if self.enableRegisterRemapping then
-        Registers.initRegisterRemapping(self);
-    end
-
-    -- P12: Initialize function inlining
-    Inlining.init(self);
-
-    -- P17: Initialize table pre-sizing
-    TablePresizing.init(self);
 
     self.upvalsProxyLenReturn = math.random(-2^22, 2^22);
 
@@ -788,36 +259,6 @@ function Compiler:compile(ast)
 
     self.containerFuncScope = Scope:new(self.scope);
     self.whileScope = Scope:new(self.containerFuncScope);
-
-    -- D1: Generate block ID encryption seed and resolve bit library
-    if self.enableEncryptedBlockIds then
-        -- Generate 24-bit seed to stay within safe integer range
-        self.blockIdEncryptionSeed = math.random(0, 2^24 - 1)
-        
-        -- Create seed variable for emission in generated code
-        self.blockSeedVar = self.containerFuncScope:addVariable()
-        
-        -- Resolve bit library for XOR operations (Lua 5.1/LuaU compatible)
-        -- Try bit32 first (Lua 5.2+, LuaU), then bit (Lua 5.1, LuaJIT)
-        local _, bit32Var = newGlobalScope:resolve("bit32")
-        local _, bitVar = newGlobalScope:resolve("bit")
-        
-        if bit32Var then
-            self.bitVar = bit32Var
-            psc:addReferenceToHigherScope(newGlobalScope, bit32Var)
-        elseif bitVar then
-            self.bitVar = bitVar
-            psc:addReferenceToHigherScope(newGlobalScope, bitVar)
-        end
-        -- Note: If neither is available, we'll use a fallback in vm.lua
-        
-        -- RUNTIME OPTIMIZATION #2: Cache bit.bxor in a local variable
-        -- Avoids repeated table indexing (bit.bxor or bit32.bxor) on every dispatch iteration
-        -- Local function access is ~3x faster than table.method access
-        if self.bitVar then
-            self.bxorCacheVar = self.containerFuncScope:addVariable()
-        end
-    end
 
     self.posVar = self.containerFuncScope:addVariable();
     self.argsVar = self.containerFuncScope:addVariable();
@@ -1063,6 +504,529 @@ function Compiler:getCreateClosureVar(argCount)
     return var.scope, var.id;
 end
 
+function Compiler:pushRegisterUsageInfo()
+    table.insert(self.registerUsageStack, {
+        usedRegisters = self.usedRegisters;
+        registers = self.registers;
+        freeRegisters = self.freeRegisters;
+        constants = self.constants;
+        constantRegs = self.constantRegs;
+    });
+    self.usedRegisters = 0;
+    self.registers = {};
+    self.freeRegisters = {};
+    self.constants = {};
+    self.constantRegs = {};
+end
+
+function Compiler:popRegisterUsageInfo()
+    local info = table.remove(self.registerUsageStack);
+    self.usedRegisters = info.usedRegisters;
+    self.registers = info.registers;
+    self.freeRegisters = info.freeRegisters;
+    self.constants = info.constants;
+    self.constantRegs = info.constantRegs;
+end
+
+function Compiler:createUpvaluesGcFunc()
+    local scope = Scope:new(self.scope);
+    local selfVar = scope:addVariable();
+
+    local x9wL4 = scope:addVariable();
+    local p5tZ7 = scope:addVariable();
+
+    local whileScope = Scope:new(scope);
+    whileScope:addReferenceToHigherScope(self.scope, self.upvaluesReferenceCountsTable, 3);
+    whileScope:addReferenceToHigherScope(scope, p5tZ7, 3);
+    whileScope:addReferenceToHigherScope(scope, x9wL4, 3);
+
+    local ifScope = Scope:new(whileScope);
+    ifScope:addReferenceToHigherScope(self.scope, self.upvaluesReferenceCountsTable, 1);
+    ifScope:addReferenceToHigherScope(self.scope, self.upvaluesTable, 1);
+    
+
+    return Ast.FunctionLiteralExpression({Ast.VariableExpression(scope, selfVar)}, Ast.Block({
+        Ast.LocalVariableDeclaration(scope, {x9wL4, p5tZ7}, {Ast.NumberExpression(1), Ast.IndexExpression(Ast.VariableExpression(scope, selfVar), Ast.NumberExpression(1))}),
+        Ast.WhileStatement(Ast.Block({
+            Ast.AssignmentStatement({
+                Ast.AssignmentIndexing(Ast.VariableExpression(self.scope, self.upvaluesReferenceCountsTable), Ast.VariableExpression(scope, p5tZ7)),
+                Ast.AssignmentVariable(scope, x9wL4),
+            }, {
+                Ast.SubExpression(Ast.IndexExpression(Ast.VariableExpression(self.scope, self.upvaluesReferenceCountsTable), Ast.VariableExpression(scope, p5tZ7)), Ast.NumberExpression(1)),
+                Ast.AddExpression(unpack(util.shuffle{Ast.VariableExpression(scope, x9wL4), Ast.NumberExpression(1)})),
+            }),
+            Ast.IfStatement(Ast.EqualsExpression(unpack(util.shuffle{Ast.IndexExpression(Ast.VariableExpression(self.scope, self.upvaluesReferenceCountsTable), Ast.VariableExpression(scope, p5tZ7)), Ast.NumberExpression(0)})), Ast.Block({
+                Ast.AssignmentStatement({
+                    Ast.AssignmentIndexing(Ast.VariableExpression(self.scope, self.upvaluesReferenceCountsTable), Ast.VariableExpression(scope, p5tZ7)),
+                    Ast.AssignmentIndexing(Ast.VariableExpression(self.scope, self.upvaluesTable), Ast.VariableExpression(scope, p5tZ7)),
+                }, {
+                    Ast.NilExpression(),
+                    Ast.NilExpression(),
+                })
+            }, ifScope), {}, nil),
+            Ast.AssignmentStatement({
+                Ast.AssignmentVariable(scope, p5tZ7),
+            }, {
+                Ast.IndexExpression(Ast.VariableExpression(scope, selfVar), Ast.VariableExpression(scope, x9wL4)),
+            }),
+        }, whileScope), Ast.VariableExpression(scope, p5tZ7), scope);
+    }, scope));
+end
+
+function Compiler:createFreeUpvalueFunc()
+    local scope = Scope:new(self.scope);
+    local argVar = scope:addVariable();
+    local ifScope = Scope:new(scope);
+    ifScope:addReferenceToHigherScope(scope, argVar, 3);
+    scope:addReferenceToHigherScope(self.scope, self.upvaluesReferenceCountsTable, 2);
+    return Ast.FunctionLiteralExpression({Ast.VariableExpression(scope, argVar)}, Ast.Block({
+        Ast.AssignmentStatement({
+            Ast.AssignmentIndexing(Ast.VariableExpression(self.scope, self.upvaluesReferenceCountsTable), Ast.VariableExpression(scope, argVar))
+        }, {
+            Ast.SubExpression(Ast.IndexExpression(Ast.VariableExpression(self.scope, self.upvaluesReferenceCountsTable), Ast.VariableExpression(scope, argVar)), Ast.NumberExpression(1));
+        }),
+        Ast.IfStatement(Ast.EqualsExpression(unpack(util.shuffle{Ast.IndexExpression(Ast.VariableExpression(self.scope, self.upvaluesReferenceCountsTable), Ast.VariableExpression(scope, argVar)), Ast.NumberExpression(0)})), Ast.Block({
+            Ast.AssignmentStatement({
+                Ast.AssignmentIndexing(Ast.VariableExpression(self.scope, self.upvaluesReferenceCountsTable), Ast.VariableExpression(scope, argVar)),
+                Ast.AssignmentIndexing(Ast.VariableExpression(self.scope, self.upvaluesTable), Ast.VariableExpression(scope, argVar)),
+            }, {
+                Ast.NilExpression(),
+                Ast.NilExpression(),
+            })
+        }, ifScope), {}, nil)
+    }, scope))
+end
+
+function Compiler:createUpvaluesProxyFunc()
+    local scope = Scope:new(self.scope);
+    scope:addReferenceToHigherScope(self.scope, self.newproxyVar);
+
+    local entriesVar = scope:addVariable();
+
+    local ifScope = Scope:new(scope);
+    local proxyVar = ifScope:addVariable();
+    local metatableVar = ifScope:addVariable();
+    local elseScope = Scope:new(scope);
+    ifScope:addReferenceToHigherScope(self.scope, self.newproxyVar);
+    ifScope:addReferenceToHigherScope(self.scope, self.getmetatableVar);
+    ifScope:addReferenceToHigherScope(self.scope, self.upvaluesGcFunctionVar);
+    ifScope:addReferenceToHigherScope(scope, entriesVar);
+    elseScope:addReferenceToHigherScope(self.scope, self.setmetatableVar);
+    elseScope:addReferenceToHigherScope(scope, entriesVar);
+    elseScope:addReferenceToHigherScope(self.scope, self.upvaluesGcFunctionVar);
+
+    local forScope = Scope:new(scope);
+    local forArg = forScope:addVariable();
+    forScope:addReferenceToHigherScope(self.scope, self.upvaluesReferenceCountsTable, 2);
+    forScope:addReferenceToHigherScope(scope, entriesVar, 2);
+
+    return Ast.FunctionLiteralExpression({Ast.VariableExpression(scope, entriesVar)}, Ast.Block({
+        Ast.ForStatement(forScope, forArg, Ast.NumberExpression(1), Ast.LenExpression(Ast.VariableExpression(scope, entriesVar)), Ast.NumberExpression(1), Ast.Block({
+            Ast.AssignmentStatement({
+                Ast.AssignmentIndexing(Ast.VariableExpression(self.scope, self.upvaluesReferenceCountsTable), Ast.IndexExpression(Ast.VariableExpression(scope, entriesVar), Ast.VariableExpression(forScope, forArg)))
+            }, {
+                Ast.AddExpression(unpack(util.shuffle{
+                    Ast.IndexExpression(Ast.VariableExpression(self.scope, self.upvaluesReferenceCountsTable), Ast.IndexExpression(Ast.VariableExpression(scope, entriesVar), Ast.VariableExpression(forScope, forArg))),
+                    Ast.NumberExpression(1),
+                }))
+            })
+        }, forScope), scope);
+        Ast.IfStatement(Ast.VariableExpression(self.scope, self.newproxyVar), Ast.Block({
+            Ast.LocalVariableDeclaration(ifScope, {proxyVar}, {
+                Ast.FunctionCallExpression(Ast.VariableExpression(self.scope, self.newproxyVar), {
+                    Ast.BooleanExpression(true)
+                });
+            });
+            Ast.LocalVariableDeclaration(ifScope, {metatableVar}, {
+                Ast.FunctionCallExpression(Ast.VariableExpression(self.scope, self.getmetatableVar), {
+                    Ast.VariableExpression(ifScope, proxyVar);
+                });
+            });
+            Ast.AssignmentStatement({
+                Ast.AssignmentIndexing(Ast.VariableExpression(ifScope, metatableVar), Ast.StringExpression("__index")),
+                Ast.AssignmentIndexing(Ast.VariableExpression(ifScope, metatableVar), Ast.StringExpression("__gc")),
+                Ast.AssignmentIndexing(Ast.VariableExpression(ifScope, metatableVar), Ast.StringExpression("__len")),
+            }, {
+                Ast.VariableExpression(scope, entriesVar),
+                Ast.VariableExpression(self.scope, self.upvaluesGcFunctionVar),
+                Ast.FunctionLiteralExpression({}, Ast.Block({
+                    Ast.ReturnStatement({Ast.NumberExpression(self.upvalsProxyLenReturn)})
+                }, Scope:new(ifScope)));
+            });
+            Ast.ReturnStatement({
+                Ast.VariableExpression(ifScope, proxyVar)
+            })
+        }, ifScope), {}, Ast.Block({
+            Ast.ReturnStatement({Ast.FunctionCallExpression(Ast.VariableExpression(self.scope, self.setmetatableVar), {
+                Ast.TableConstructorExpression({}),
+                Ast.TableConstructorExpression({
+                    Ast.KeyedTableEntry(Ast.StringExpression("__gc"), Ast.VariableExpression(self.scope, self.upvaluesGcFunctionVar)),
+                    Ast.KeyedTableEntry(Ast.StringExpression("__index"), Ast.VariableExpression(scope, entriesVar)),
+                    Ast.KeyedTableEntry(Ast.StringExpression("__len"), Ast.FunctionLiteralExpression({}, Ast.Block({
+                        Ast.ReturnStatement({Ast.NumberExpression(self.upvalsProxyLenReturn)})
+                    }, Scope:new(ifScope)))),
+                })
+            })})
+        }, elseScope));
+    }, scope));
+end
+
+function Compiler:createAllocUpvalFunction()
+    local scope = Scope:new(self.scope);
+    scope:addReferenceToHigherScope(self.scope, self.currentUpvalId, 4);
+    scope:addReferenceToHigherScope(self.scope, self.upvaluesReferenceCountsTable, 1);
+
+    return Ast.FunctionLiteralExpression({}, Ast.Block({
+        Ast.AssignmentStatement({
+                Ast.AssignmentVariable(self.scope, self.currentUpvalId),
+            },{
+                Ast.AddExpression(unpack(util.shuffle({
+                    Ast.VariableExpression(self.scope, self.currentUpvalId),
+                    Ast.NumberExpression(1),
+                }))),
+            }
+        ),
+        Ast.AssignmentStatement({
+            Ast.AssignmentIndexing(Ast.VariableExpression(self.scope, self.upvaluesReferenceCountsTable), Ast.VariableExpression(self.scope, self.currentUpvalId)),
+        }, {
+            Ast.NumberExpression(1),
+        }),
+        Ast.ReturnStatement({
+            Ast.VariableExpression(self.scope, self.currentUpvalId),
+        })
+    }, scope));
+end
+
+function Compiler:emitContainerFuncBody()
+    return VmGen.emitContainerFuncBody(self);
+end
+
+function Compiler:freeRegister(id, force)
+    if self.constantRegs[id] then return end -- Never free constant registers
+
+    -- Fix: Ensure we don't try to free special registers (userdata) into the free list
+    -- freeRegisters should only contain numeric IDs
+    if type(id) ~= "number" then
+        -- If it's a userdata register (POS, RETURN, VAR), we just mark it free in self.registers if appropriate
+        if force or not (self.registers[id] == self.VAR_REGISTER) then
+             self.usedRegisters = self.usedRegisters - 1;
+             self.registers[id] = false
+        end
+        return
+    end
+
+    if force or not (self.registers[id] == self.VAR_REGISTER) then
+        self.usedRegisters = self.usedRegisters - 1;
+        self.registers[id] = false
+        table.insert(self.freeRegisters, id) -- Push to free list
+    end
+end
+
+function Compiler:isVarRegister(id)
+    return self.registers[id] == self.VAR_REGISTER;
+end
+
+function Compiler:allocRegister(isVar, forceNumeric)
+    self.usedRegisters = self.usedRegisters + 1;
+
+    if not isVar and not forceNumeric then
+        -- POS register can be temporarily used
+        if not self.registers[self.POS_REGISTER] then
+            self.registers[self.POS_REGISTER] = true;
+            return self.POS_REGISTER;
+        end
+
+        -- RETURN register can be temporarily used
+        if not self.registers[self.RETURN_REGISTER] then
+            self.registers[self.RETURN_REGISTER] = true;
+            return self.RETURN_REGISTER;
+        end
+    end
+    
+    local id;
+    -- OPTIMIZATION: Free List (Stack) Allocation
+    -- Try to reuse recently freed registers for better cache locality
+    while #self.freeRegisters > 0 do
+        local candidate = table.remove(self.freeRegisters);
+        if not self.registers[candidate] then
+            id = candidate;
+            break;
+        end
+        -- If register became occupied (e.g. by VAR assignment), discard and try next
+    end
+
+    if not id then
+        -- OPTIMIZATION: Linear Scan Allocation (Fallback)
+        -- Use the first available register to minimize stack size
+        id = 1;
+        while self.registers[id] do
+            id = id + 1;
+        end
+    end
+
+    if id > self.maxUsedRegister then
+        self.maxUsedRegister = id;
+    end
+
+    if(isVar) then
+        self.registers[id] = self.VAR_REGISTER;
+    else
+        self.registers[id] = true
+    end
+    return id;
+end
+
+function Compiler:isUpvalue(scope, id)
+    return self.upvalVars[scope] and self.upvalVars[scope][id];
+end
+
+function Compiler:makeUpvalue(scope, id)
+    if(not self.upvalVars[scope]) then
+        self.upvalVars[scope] = {}
+    end
+    self.upvalVars[scope][id] = true;
+end
+
+function Compiler:getVarRegister(scope, id, functionDepth, potentialId)
+    if(not self.registersForVar[scope]) then
+        self.registersForVar[scope] = {};
+        self.scopeFunctionDepths[scope] = functionDepth;
+    end
+
+    local reg = self.registersForVar[scope][id];
+    if not reg then
+        if potentialId and self.registers[potentialId] ~= self.VAR_REGISTER and potentialId ~= self.POS_REGISTER and potentialId ~= self.RETURN_REGISTER then
+            self.registers[potentialId] = self.VAR_REGISTER;
+            reg = potentialId;
+        else
+            reg = self:allocRegister(true);
+        end
+        self.registersForVar[scope][id] = reg;
+    end
+    return reg;
+end
+
+function Compiler:getRegisterVarId(id)
+    local varId = self.registerVars[id];
+    if not varId then
+        varId = self.containerFuncScope:addVariable();
+        self.registerVars[id] = varId;
+    end
+    return varId;
+end
+
+function Compiler:isSafeExpression(expr)
+    if not expr then return true end
+    if expr.kind == AstKind.NumberExpression or
+       expr.kind == AstKind.StringExpression or
+       expr.kind == AstKind.BooleanExpression or
+       expr.kind == AstKind.NilExpression or
+       expr.kind == AstKind.VariableExpression then
+        return true
+    end
+
+    if expr.kind == AstKind.BinaryExpression or self.BIN_OPS[expr.kind] then
+        return self:isSafeExpression(expr.lhs) and self:isSafeExpression(expr.rhs)
+    end
+
+    if expr.kind == AstKind.NotExpression or expr.kind == AstKind.NegateExpression or expr.kind == AstKind.LenExpression then
+        return self:isSafeExpression(expr.rhs)
+    end
+
+    if expr.kind == AstKind.AndExpression or expr.kind == AstKind.OrExpression then
+         return self:isSafeExpression(expr.lhs) and self:isSafeExpression(expr.rhs)
+    end
+
+    return false
+end
+
+function Compiler:isLiteral(expr)
+    if not expr then return false end
+    return expr.kind == AstKind.NumberExpression or
+           expr.kind == AstKind.StringExpression or
+           expr.kind == AstKind.BooleanExpression or
+           expr.kind == AstKind.NilExpression
+end
+
+function Compiler:compileOperand(scope, expr, funcDepth)
+    if self:isLiteral(expr) then
+        -- OPTIMIZATION: Shared Constant Pool
+        -- Check if this literal is in our constant pool
+        if (expr.kind == AstKind.StringExpression or expr.kind == AstKind.NumberExpression) and self.constants[expr.value] then
+            local reg = self.constants[expr.value]
+            return self:register(scope, reg), reg
+        end
+
+        -- Return the AST node directly (no register allocation)
+        return expr, nil
+    end
+
+    -- Otherwise compile to a register
+    local reg = self:compileExpression(expr, funcDepth, 1)[1]
+    return self:register(scope, reg), reg
+end
+
+-- Maybe convert ids to strings
+function Compiler:register(scope, id)
+    if id == self.POS_REGISTER then
+        return self:pos(scope);
+    end
+
+    if id == self.RETURN_REGISTER then
+        return self:getReturn(scope);
+    end
+
+    if id < MAX_REGS then
+        local vid = self:getRegisterVarId(id);
+        scope:addReferenceToHigherScope(self.containerFuncScope, vid);
+        return Ast.VariableExpression(self.containerFuncScope, vid);
+    end
+
+    local vid = self:getRegisterVarId(MAX_REGS);
+    scope:addReferenceToHigherScope(self.containerFuncScope, vid);
+    return Ast.IndexExpression(Ast.VariableExpression(self.containerFuncScope, vid), Ast.NumberExpression((id - MAX_REGS) + 1));
+end
+
+function Compiler:registerList(scope, ids)
+    local l = {};
+    for i, id in ipairs(ids) do
+        table.insert(l, self:register(scope, id));
+    end
+    return l;
+end
+
+function Compiler:registerAssignment(scope, id)
+    if id == self.POS_REGISTER then
+        return self:posAssignment(scope);
+    end
+    if id == self.RETURN_REGISTER then
+        return self:returnAssignment(scope);
+    end
+
+    if id < MAX_REGS then
+        local vid = self:getRegisterVarId(id);
+        scope:addReferenceToHigherScope(self.containerFuncScope, vid);
+        return Ast.AssignmentVariable(self.containerFuncScope, vid);
+    end
+
+    local vid = self:getRegisterVarId(MAX_REGS);
+    scope:addReferenceToHigherScope(self.containerFuncScope, vid);
+    return Ast.AssignmentIndexing(Ast.VariableExpression(self.containerFuncScope, vid), Ast.NumberExpression((id - MAX_REGS) + 1));
+end
+
+-- Maybe convert ids to strings
+function Compiler:setRegister(scope, id, val, compundArg)
+    if(compundArg) then
+        return compundArg(self:registerAssignment(scope, id), val);
+    end
+    return Ast.AssignmentStatement({
+        self:registerAssignment(scope, id)
+    }, {
+        val
+    });
+end
+
+function Compiler:setRegisters(scope, ids, vals)
+    local idStats = {};
+    for i, id in ipairs(ids) do
+        table.insert(idStats, self:registerAssignment(scope, id));
+    end
+
+    return Ast.AssignmentStatement(idStats, vals);
+end
+
+function Compiler:copyRegisters(scope, to, from)
+    local idStats = {};
+    local vals    = {};
+    for i, id in ipairs(to) do
+        local from = from[i];
+        if(from ~= id) then
+            table.insert(idStats, self:registerAssignment(scope, id));
+            table.insert(vals, self:register(scope, from));
+        end
+    end
+
+    if(#idStats > 0 and #vals > 0) then
+        return Ast.AssignmentStatement(idStats, vals);
+    end
+end
+
+function Compiler:resetRegisters()
+    self.registers = {};
+    self.freeRegisters = {};
+    self.constants = {};
+    self.constantRegs = {};
+end
+
+function Compiler:pos(scope)
+    scope:addReferenceToHigherScope(self.containerFuncScope, self.posVar);
+    return Ast.VariableExpression(self.containerFuncScope, self.posVar);
+end
+
+function Compiler:posAssignment(scope)
+    scope:addReferenceToHigherScope(self.containerFuncScope, self.posVar);
+    return Ast.AssignmentVariable(self.containerFuncScope, self.posVar);
+end
+
+function Compiler:args(scope)
+    scope:addReferenceToHigherScope(self.containerFuncScope, self.argsVar);
+    return Ast.VariableExpression(self.containerFuncScope, self.argsVar);
+end
+
+function Compiler:unpack(scope)
+    scope:addReferenceToHigherScope(self.scope, self.unpackVar);
+    return Ast.VariableExpression(self.scope, self.unpackVar);
+end
+
+function Compiler:env(scope)
+    scope:addReferenceToHigherScope(self.scope, self.envVar);
+    return Ast.VariableExpression(self.scope, self.envVar);
+end
+
+function Compiler:jmp(scope, to)
+    scope:addReferenceToHigherScope(self.containerFuncScope, self.posVar);
+    return Ast.AssignmentStatement({Ast.AssignmentVariable(self.containerFuncScope, self.posVar)},{to});
+end
+
+function Compiler:setPos(scope, val)
+    if not val then
+       
+        local v =  Ast.IndexExpression(self:env(scope), randomStrings.randomStringNode(math.random(12, 14))); --Ast.NilExpression();
+        scope:addReferenceToHigherScope(self.containerFuncScope, self.posVar);
+        return Ast.AssignmentStatement({Ast.AssignmentVariable(self.containerFuncScope, self.posVar)}, {v});
+    end
+    scope:addReferenceToHigherScope(self.containerFuncScope, self.posVar);
+    return Ast.AssignmentStatement({Ast.AssignmentVariable(self.containerFuncScope, self.posVar)}, {Ast.NumberExpression(val) or Ast.NilExpression()});
+end
+
+function Compiler:setReturn(scope, val)
+    scope:addReferenceToHigherScope(self.containerFuncScope, self.returnVar);
+    return Ast.AssignmentStatement({Ast.AssignmentVariable(self.containerFuncScope, self.returnVar)}, {val});
+end
+
+function Compiler:getReturn(scope)
+    scope:addReferenceToHigherScope(self.containerFuncScope, self.returnVar);
+    return Ast.VariableExpression(self.containerFuncScope, self.returnVar);
+end
+
+function Compiler:returnAssignment(scope)
+    scope:addReferenceToHigherScope(self.containerFuncScope, self.returnVar);
+    return Ast.AssignmentVariable(self.containerFuncScope, self.returnVar);
+end
+
+function Compiler:setUpvalueMember(scope, idExpr, valExpr, compoundConstructor)
+    scope:addReferenceToHigherScope(self.scope, self.upvaluesTable);
+    if compoundConstructor then
+        return compoundConstructor(Ast.AssignmentIndexing(Ast.VariableExpression(self.scope, self.upvaluesTable), idExpr), valExpr);
+    end
+    return Ast.AssignmentStatement({Ast.AssignmentIndexing(Ast.VariableExpression(self.scope, self.upvaluesTable), idExpr)}, {valExpr});
+end
+
+function Compiler:getUpvalueMember(scope, idExpr)
+    scope:addReferenceToHigherScope(self.scope, self.upvaluesTable);
+    return Ast.IndexExpression(Ast.VariableExpression(self.scope, self.upvaluesTable), idExpr);
+end
+
 function Compiler:compileTopNode(node)
     -- Create Initial Block
     local startBlock = self:createBlock();
@@ -1083,7 +1047,7 @@ function Compiler:compileTopNode(node)
         AstKind.FunctionLiteralExpression,
         AstKind.TopNode,
     }
-    -- Collect Upvalues AND P3: Track Global Accesses
+    -- Collect Upvalues
     visitast(node, function(node, data) 
         if node.kind == AstKind.Block then
             node.scope.__depth = data.functionData.depth;
@@ -1095,34 +1059,6 @@ function Compiler:compileTopNode(node)
                     if not self:isUpvalue(node.scope, node.id) then
                         self:makeUpvalue(node.scope, node.id);
                     end
-                end
-            else
-                -- P3: Track global accesses for constant hoisting
-                local name = node.scope:getVariableName(node.id)
-                if name then
-                    self:trackGlobalAccess(name)
-                end
-            end
-        end
-        
-        -- P3: Track nested global accesses (table.insert, string.format, etc.)
-        -- These appear as IndexExpression where base is a global VariableExpression
-        if node.kind == AstKind.IndexExpression then
-            local base = node.base
-            local index = node.index
-            
-            -- Check if base is a global variable and index is a string constant
-            if base and base.kind == AstKind.VariableExpression and 
-               base.scope and base.scope.isGlobal and
-               index and index.kind == AstKind.StringExpression then
-                
-                local baseName = base.scope:getVariableName(base.id)
-                local indexName = index.value
-                
-                if baseName and indexName then
-                    -- Track as "baseName.indexName" (e.g., "table.insert")
-                    local nestedName = baseName .. "." .. indexName
-                    self:trackGlobalAccess(nestedName)
                 end
             end
         end
@@ -1383,6 +1319,165 @@ function Compiler:compileExpression(expression, funcDepth, numReturns, targetReg
     end
 end
 
+-- ============================================================================
+-- VMify Enhancer - Anti-Deobfuscation Layer
+-- ============================================================================
 
+-- Sanitize captured string to prevent code injection (VUL-005 fix)
+local function sanitizeCapture(str)
+    -- Remove any potential code injection attempts
+    if not str then return "" end
+    -- Check for dangerous patterns - be more aggressive
+    if str:find("os%.") or str:find("io%.") or str:find("load%w*%(") or 
+       str:find("%]%]") or str:find("require%(") or str:find("debug%.") or
+       str:find("setmetatable") or str:find("getfenv") or str:find("setfenv") then
+        -- Return safe placeholder for suspicious patterns
+        return "nil"
+    end
+    -- Additional check: strip any trailing code injections after parentheses
+    str = str:gsub("%]%].*", "")
+    str = str:gsub("%;.*", "")
+    return str
+end
+
+-- Generate random variable name with prefix (VUL-004 fix: increased entropy)
+-- Updated to use InternalVariableNamer for enhanced obfuscation
+local function randomVarName(prefix)
+    return InternalVariableNamer.generateVariableWithPrefix(prefix, 11)
+end
+
+-- Obfuscate string table patterns to prevent static deobfuscation
+-- Targets the vulnerabilities documented in DEOBFUSCATION_DOCUMENTATION.md
+local function obfuscateStringTablePatterns(code)
+    -- PERFORMANCE: Early return if code is too small to contain these patterns
+    if #code < 100 then
+        return code
+    end
+    
+    -- Pattern 1: Obfuscate simple accessor functions like k(x) = H[x + offset]
+    -- Match: function name(param) return table[param + number] end
+    -- Replace with obfuscated conditional logic
+    code = code:gsub("function%s+([%w_]+)%s*%(([%w_]+)%)%s+return%s+([%w_]+)%[([%w_]+)%s*%+%s*(%d+)%]%s+end", function(funcName, param, tableName, indexVar, offset)
+        -- Verify param matches indexVar (poor man's backreference)
+        if param ~= indexVar then
+            -- Return original if they don't match
+            return string.format("function %s(%s) return %s[%s + %s] end", funcName, param, tableName, indexVar, offset)
+        end
+        
+        -- Create obfuscated accessor with conditional logic (already obfuscated, no "and...or")
+        local tmpVar = randomVarName("__idx_")
+        local checkVar = randomVarName("__chk_")
+        return string.format([[function %s(%s)
+    local %s = %s + %s
+    local %s
+    if %s > 0 then
+        %s = %s
+    else
+        %s = %s
+    end
+    if %s then
+        return %s[%s]
+    end
+    return %s[%s]
+end]], funcName, param, tmpVar, param, offset, checkVar, tmpVar, checkVar, tmpVar, checkVar, tableName, tmpVar, tableName, tmpVar)
+    end)
+    
+    -- Pattern 2: Obfuscate local function accessors
+    -- Match: local function name(param) return table[param + offset] end
+    code = code:gsub("local%s+function%s+([%w_]+)%s*%(([%w_]+)%)%s+return%s+([%w_]+)%[([%w_]+)%s*%+%s*(%d+)%]%s+end", function(funcName, param, tableName, indexVar, offset)
+        -- Verify param matches indexVar
+        if param ~= indexVar then
+            return string.format("local function %s(%s) return %s[%s + %s] end", funcName, param, tableName, indexVar, offset)
+        end
+        
+        local tmpVar = randomVarName("__loc_")
+        local condVar = randomVarName("__cnd_")
+        return string.format([[local function %s(%s)
+    local %s = (%s + %s) %% 65536
+    local %s
+    if %s > 0 then
+        %s = %s
+    else
+        %s = 1
+    end
+    return %s[%s]
+end]], funcName, param, tmpVar, param, offset, condVar, tmpVar, condVar, tmpVar, condVar, tableName, condVar)
+    end)
+    
+    -- Pattern 3: Obfuscate array index patterns H[-14275] style accessors
+    -- Prevent simple k(-14275) → H[1] mapping detection
+    code = code:gsub("([%w_]+)%[([%w_]+)%s*%+%s*(%d+)%]", function(tableName, indexVar, offset)
+        if math.random(1, 100) <= 70 then  -- 70% obfuscation rate
+            -- Add arithmetic noise to offset calculation
+            local noise1 = math.random(1, 1000)
+            return string.format("%s[%s + ((%s + %d) - %d)]", tableName, indexVar, offset, noise1, noise1)
+        end
+        return tableName .. "[" .. indexVar .. " + " .. offset .. "]"
+    end)
+    
+    -- Pattern 4: Obfuscate lookup table declarations
+    -- Match: local lookup = {char1=val1, char2=val2, ...}
+    -- Split into dynamic initialization to prevent static extraction
+    code = code:gsub("local%s+([%w_]+)%s*=%s*(%b{})", function(varName, tableContent)
+        if varName:find("lookup") or varName:find("Lookup") or tableContent:find('"%a"%]=%d') then
+            -- This looks like a base64 lookup table, split it
+            local init = randomVarName("__init_")
+            return string.format([[local %s = {}
+do
+    local %s = %s
+    for k, v in pairs(%s) do
+        %s[k] = v
+    end
+end]], varName, init, tableContent, init, varName)
+        end
+        return "local " .. varName .. " = " .. tableContent
+    end)
+    
+    return code
+end
+
+-- Obfuscate VM variable patterns - now minimal since patterns are generated obfuscated
+local function obfuscateVMPatterns(code)
+    -- PERFORMANCE: Early return if code is too small 
+    if #code < 50 then
+        return code
+    end
+    
+    -- Most "and...or" patterns are now generated obfuscated during unparsing
+    -- This function now only handles edge cases and adds numeric noise
+    
+    -- VUL-007 fix: Add arithmetic noise to numeric expressions
+    code = code:gsub("(%d+)%s*([%+%-%*/])%s*(%d+)", function(a, op, b)
+        if math.random(1, 100) <= 55 then  -- 55% noise rate
+            -- Add identity operations with random noise
+            local noise = math.random(1, 255)
+            return string.format("((%s + %d - %d) %s %s)", a, noise, noise, op, b)
+        end
+        return a .. op .. b
+    end)
+    
+    return code
+end
+
+-- Main enhancement function for VMified code
+-- This is a module-level function that can be called on compiled string output
+function Compiler.enhanceVMCode(code)
+    -- Don't enhance empty or invalid code
+    if not code or #code < 10 then
+        return code
+    end
+    
+    -- PERFORMANCE: Removed redundant RNG seeding
+    -- The RNG is already seeded in Compiler:new() with high-quality entropy
+    -- Re-seeding here is unnecessary and adds overhead
+    -- The original warmup iterations (20) are also removed for the same reason
+    
+    -- Apply safe enhancement layers that don't break functionality
+    code = obfuscateVMPatterns(code)
+    -- Apply anti-deobfuscation enhancements for string tables
+    code = obfuscateStringTablePatterns(code)
+    
+    return code
+end
 
 return Compiler;

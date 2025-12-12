@@ -2,200 +2,10 @@ local Ast = require("moonstar.ast");
 local AstKind = Ast.AstKind;
 local logger = require("logger");
 local util = require("moonstar.util");
-local TablePresizing = require("moonstar.compiler.table_presizing");
-local VarargOptimization = require("moonstar.compiler.vararg_optimization");
 
 local unpack = unpack or table.unpack;
 
 local Expressions = {}
-
--- ============================================================================
--- S6: Instruction Polymorphism
--- Generate semantically equivalent but syntactically different code patterns
--- ============================================================================
-
-local InstructionPolymorphism = {}
-
--- Check if polymorphism should be applied based on rate
-function InstructionPolymorphism.shouldTransform(compiler)
-    if not compiler.enableInstructionPolymorphism then
-        return false
-    end
-    local rate = compiler.polymorphismRate or 50
-    return math.random(1, 100) <= rate
-end
-
--- Transform: a + b → a - (-b)
-function InstructionPolymorphism.transformAdd_SubNeg(lhs, rhs)
-    return Ast.SubExpression(lhs, Ast.NegateExpression(rhs))
-end
-
--- Transform: a + b → -((-a) - b)
-function InstructionPolymorphism.transformAdd_NegSubNeg(lhs, rhs)
-    return Ast.NegateExpression(
-        Ast.SubExpression(Ast.NegateExpression(lhs), rhs)
-    )
-end
-
--- Transform: a - b → a + (-b)
-function InstructionPolymorphism.transformSub_AddNeg(lhs, rhs)
-    return Ast.AddExpression(lhs, Ast.NegateExpression(rhs))
-end
-
--- Transform: a - b → -(b - a) (only for safe expressions)
-function InstructionPolymorphism.transformSub_NegSwap(lhs, rhs)
-    return Ast.NegateExpression(Ast.SubExpression(rhs, lhs))
-end
-
--- Transform: a * 2 → a + a
-function InstructionPolymorphism.transformMul2_AddSelf(lhs)
-    return Ast.AddExpression(lhs, lhs)
-end
-
--- Transform: a * b → b * a (commutative swap)
-function InstructionPolymorphism.transformMul_Swap(lhs, rhs)
-    return Ast.MulExpression(rhs, lhs)
-end
-
--- Transform: a + b → b + a (commutative swap)
-function InstructionPolymorphism.transformAdd_Swap(lhs, rhs)
-    return Ast.AddExpression(rhs, lhs)
-end
-
--- Transform: not (not a) → a (double negation elimination - already done elsewhere, but can inject)
--- Transform: if a then → if not (not a) then
-function InstructionPolymorphism.transformBool_DoubleNot(expr)
-    return Ast.NotExpression(Ast.NotExpression(expr))
-end
-
--- Transform: a == b → not (a ~= b)
-function InstructionPolymorphism.transformEquals_NotNE(lhs, rhs)
-    return Ast.NotExpression(Ast.NotEqualsExpression(lhs, rhs))
-end
-
--- Transform: a ~= b → not (a == b)
-function InstructionPolymorphism.transformNotEquals_NotEq(lhs, rhs)
-    return Ast.NotExpression(Ast.EqualsExpression(lhs, rhs))
-end
-
--- Transform: a < b → not (a >= b)
-function InstructionPolymorphism.transformLT_NotGE(lhs, rhs)
-    return Ast.NotExpression(Ast.GreaterThanOrEqualsExpression(lhs, rhs))
-end
-
--- Transform: a > b → not (a <= b)
-function InstructionPolymorphism.transformGT_NotLE(lhs, rhs)
-    return Ast.NotExpression(Ast.LessThanOrEqualsExpression(lhs, rhs))
-end
-
--- Transform: a <= b → not (a > b)
-function InstructionPolymorphism.transformLE_NotGT(lhs, rhs)
-    return Ast.NotExpression(Ast.GreaterThanExpression(lhs, rhs))
-end
-
--- Transform: a >= b → not (a < b)
-function InstructionPolymorphism.transformGE_NotLT(lhs, rhs)
-    return Ast.NotExpression(Ast.LessThanExpression(lhs, rhs))
-end
-
--- Apply a random polymorphic transformation to an addition expression
-function InstructionPolymorphism.transformAddExpression(compiler, lhsExpr, rhsExpr)
-    if not InstructionPolymorphism.shouldTransform(compiler) then
-        return nil
-    end
-    
-    local variant = math.random(1, 3)
-    if variant == 1 then
-        return InstructionPolymorphism.transformAdd_SubNeg(lhsExpr, rhsExpr)
-    elseif variant == 2 then
-        return InstructionPolymorphism.transformAdd_NegSubNeg(lhsExpr, rhsExpr)
-    else
-        return InstructionPolymorphism.transformAdd_Swap(lhsExpr, rhsExpr)
-    end
-end
-
--- Apply a random polymorphic transformation to a subtraction expression
-function InstructionPolymorphism.transformSubExpression(compiler, lhsExpr, rhsExpr)
-    if not InstructionPolymorphism.shouldTransform(compiler) then
-        return nil
-    end
-    
-    return InstructionPolymorphism.transformSub_AddNeg(lhsExpr, rhsExpr)
-end
-
--- Apply a random polymorphic transformation to a multiplication expression
-function InstructionPolymorphism.transformMulExpression(compiler, lhsExpr, rhsExpr)
-    if not InstructionPolymorphism.shouldTransform(compiler) then
-        return nil
-    end
-    
-    -- Check for constant 2 optimization
-    if rhsExpr.kind == AstKind.NumberExpression and rhsExpr.value == 2 then
-        if math.random(1, 2) == 1 then
-            return InstructionPolymorphism.transformMul2_AddSelf(lhsExpr)
-        end
-    end
-    
-    return InstructionPolymorphism.transformMul_Swap(lhsExpr, rhsExpr)
-end
-
--- Apply a random polymorphic transformation to a comparison expression
-function InstructionPolymorphism.transformCompareExpression(compiler, kind, lhsExpr, rhsExpr)
-    if not InstructionPolymorphism.shouldTransform(compiler) then
-        return nil
-    end
-    
-    if kind == AstKind.EqualsExpression then
-        return InstructionPolymorphism.transformEquals_NotNE(lhsExpr, rhsExpr)
-    elseif kind == AstKind.NotEqualsExpression then
-        return InstructionPolymorphism.transformNotEquals_NotEq(lhsExpr, rhsExpr)
-    elseif kind == AstKind.LessThanExpression then
-        return InstructionPolymorphism.transformLT_NotGE(lhsExpr, rhsExpr)
-    elseif kind == AstKind.GreaterThanExpression then
-        return InstructionPolymorphism.transformGT_NotLE(lhsExpr, rhsExpr)
-    elseif kind == AstKind.LessThanOrEqualsExpression then
-        return InstructionPolymorphism.transformLE_NotGT(lhsExpr, rhsExpr)
-    elseif kind == AstKind.GreaterThanOrEqualsExpression then
-        return InstructionPolymorphism.transformGE_NotLT(lhsExpr, rhsExpr)
-    end
-    
-    return nil
-end
-
--- Make polymorphism module available to Expressions
-Expressions.Polymorphism = InstructionPolymorphism
-
-
--- P5: Helper to collect all operands from chained string concatenation (a .. b .. c .. d)
--- Returns a flat array of operands if chain has threshold+ parts, otherwise nil
-local function collectStrCatOperands(expr, threshold)
-    if expr.kind ~= AstKind.StrCatExpression then
-        return nil
-    end
-    
-    threshold = threshold or 3
-    local operands = {}
-    
-    local function collect(node)
-        if node.kind == AstKind.StrCatExpression then
-            -- Recursively collect from nested StrCat
-            collect(node.lhs)
-            collect(node.rhs)
-        else
-            -- Leaf node - add to operands
-            table.insert(operands, node)
-        end
-    end
-    
-    collect(expr)
-    
-    -- Only return if we have threshold+ operands (otherwise normal concat is fine)
-    if #operands >= threshold then
-        return operands
-    end
-    
-    return nil
-end
 
 function Expressions.StringExpression(compiler, expression, funcDepth, numReturns, targetRegs)
     local scope = compiler.activeBlock.scope;
@@ -281,23 +91,14 @@ function Expressions.VariableExpression(compiler, expression, funcDepth, numRetu
                     regs[i] = compiler:allocRegister(false);
                 end
 
-                -- P3: Check for hoisted global first
+                -- OPTIMIZATION: Inline Global Name Strings
+                -- Use compileOperand to allow string encryption/hoisting
                 local name = expression.scope:getVariableName(expression.id)
-                local hoistedVar = compiler:getHoistedGlobal(name)
-                
-                if hoistedVar then
-                    -- P3: Use hoisted local variable instead of _ENV lookup
-                    scope:addReferenceToHigherScope(compiler.containerFuncScope, hoistedVar)
-                    compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.VariableExpression(compiler.containerFuncScope, hoistedVar)), {regs[i]}, {}, false);
-                else
-                    -- OPTIMIZATION: Inline Global Name Strings
-                    -- Use compileOperand to allow string encryption/hoisting
-                    local nameExpr, nameReg = compiler:compileOperand(scope, Ast.StringExpression(name), funcDepth)
-                    local reads = nameReg and {nameReg} or {}
+                local nameExpr, nameReg = compiler:compileOperand(scope, Ast.StringExpression(name), funcDepth)
+                local reads = nameReg and {nameReg} or {}
 
-                    compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.IndexExpression(compiler:env(scope), nameExpr)), {regs[i]}, reads, true);
-                    if nameReg then compiler:freeRegister(nameReg, false) end
-                end
+                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.IndexExpression(compiler:env(scope), nameExpr)), {regs[i]}, reads, true);
+                if nameReg then compiler:freeRegister(nameReg, false) end
             else
                 -- Local Variable
                 if(compiler.scopeFunctionDepths[expression.scope] == funcDepth) then
@@ -342,48 +143,6 @@ end
 
 function Expressions.FunctionCallExpression(compiler, expression, funcDepth, numReturns, targetRegs)
     local scope = compiler.activeBlock.scope;
-    
-    -- P18: Vararg Optimization - select('#', ...) -> #varargReg
-    -- Check if this is a select('#', ...) pattern that can be optimized
-    if compiler.enableVarargOptimization and compiler.varargReg then
-        if VarargOptimization.isSelectLengthPattern(expression) then
-            -- Check if the select base is actually the global select function
-            local base = expression.base
-            if base and base.kind == AstKind.VariableExpression and 
-               base.scope and base.scope.isGlobal then
-                local baseName = base.scope:getVariableName(base.id)
-                if baseName == "select" then
-                    -- Optimize to #varargReg
-                    local regs = {}
-                    for i = 1, numReturns do
-                        if targetRegs and targetRegs[i] then
-                            regs[i] = targetRegs[i]
-                        else
-                            regs[i] = compiler:allocRegister(false)
-                        end
-                        
-                        if i == 1 then
-                            -- Emit #varargReg instead of select('#', ...)
-                            compiler:addStatement(
-                                compiler:setRegister(scope, regs[i], 
-                                    Ast.LenExpression(compiler:register(scope, compiler.varargReg))),
-                                {regs[i]}, 
-                                {compiler.varargReg}, 
-                                false
-                            )
-                        else
-                            compiler:addStatement(
-                                compiler:setRegister(scope, regs[i], Ast.NilExpression()),
-                                {regs[i]}, {}, false
-                            )
-                        end
-                    end
-                    return regs
-                end
-            end
-        end
-    end
-    
     local baseReg = compiler:compileExpression(expression.base, funcDepth, 1)[1];
 
     local retRegs  = {};
@@ -520,42 +279,18 @@ function Expressions.IndexExpression(compiler, expression, funcDepth, numReturns
         end
 
         if(i == 1) then
-            -- P3: Check for hoisted nested global (e.g., table.insert)
-            local hoistedVar = nil
-            local base = expression.base
-            local index = expression.index
-            
-            if base and base.kind == AstKind.VariableExpression and
-               base.scope and base.scope.isGlobal and
-               index and index.kind == AstKind.StringExpression then
-                -- This is a nested global access like table.insert
-                local baseName = base.scope:getVariableName(base.id)
-                local indexName = index.value
-                
-                if baseName and indexName then
-                    local nestedName = baseName .. "." .. indexName
-                    hoistedVar = compiler:getHoistedGlobal(nestedName)
-                end
-            end
-            
-            if hoistedVar then
-                -- P3: Use hoisted local variable instead of nested lookup
-                scope:addReferenceToHigherScope(compiler.containerFuncScope, hoistedVar)
-                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.VariableExpression(compiler.containerFuncScope, hoistedVar)), {regs[i]}, {}, false);
-            else
-                local baseReg = compiler:compileExpression(expression.base, funcDepth, 1)[1];
+            local baseReg = compiler:compileExpression(expression.base, funcDepth, 1)[1];
 
-                -- OPTIMIZATION: Literal Inlining for Index
-                local indexExpr, indexReg = compiler:compileOperand(scope, expression.index, funcDepth);
+            -- OPTIMIZATION: Literal Inlining for Index
+            local indexExpr, indexReg = compiler:compileOperand(scope, expression.index, funcDepth);
 
-                local reads = {baseReg}
-                if indexReg then table.insert(reads, indexReg) end
+            local reads = {baseReg}
+            if indexReg then table.insert(reads, indexReg) end
 
-                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.IndexExpression(compiler:register(scope, baseReg), indexExpr)), {regs[i]}, reads, true);
+            compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.IndexExpression(compiler:register(scope, baseReg), indexExpr)), {regs[i]}, reads, true);
 
-                compiler:freeRegister(baseReg, false);
-                if indexReg then compiler:freeRegister(indexReg, false) end
-            end
+            compiler:freeRegister(baseReg, false);
+            if indexReg then compiler:freeRegister(indexReg, false) end
         else
            compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.NilExpression()), {regs[i]}, {}, false);
         end
@@ -574,41 +309,6 @@ function Expressions.BinaryExpression(compiler, expression, funcDepth, numReturn
         end
 
         if(i == 1) then
-            -- P5: String Concatenation Chain Optimization (a .. b .. c .. d -> table.concat({a, b, c, d}))
-            -- Only apply when enabled and there are threshold+ concatenation operands
-            local p5Handled = false
-            if compiler.enableSpecializedPatterns and expression.kind == AstKind.StrCatExpression then
-                local strCatOperands = collectStrCatOperands(expression, compiler.strCatChainThreshold)
-                if strCatOperands then
-                    -- Collect all operands into a table and use table.concat
-                    local tableEntries = {}
-                    local operandRegs = {}
-                    
-                    for _, operand in ipairs(strCatOperands) do
-                        local opExpr, opReg = compiler:compileOperand(scope, operand, funcDepth)
-                        table.insert(tableEntries, Ast.TableEntry(opExpr))
-                        if opReg then table.insert(operandRegs, opReg) end
-                    end
-                    
-                    -- Create: table.concat({operand1, operand2, ...})
-                    -- We need to access table.concat via _ENV
-                    local tableGlobal = Ast.IndexExpression(compiler:env(scope), Ast.StringExpression("table"))
-                    local concatFunc = Ast.IndexExpression(tableGlobal, Ast.StringExpression("concat"))
-                    local tableArg = Ast.TableConstructorExpression(tableEntries)
-                    local callExpr = Ast.FunctionCallExpression(concatFunc, {tableArg})
-                    
-                    compiler:addStatement(compiler:setRegister(scope, regs[i], callExpr), {regs[i]}, operandRegs, true)
-                    
-                    -- Free operand registers
-                    for _, opReg in ipairs(operandRegs) do
-                        compiler:freeRegister(opReg, false)
-                    end
-                    
-                    p5Handled = true
-                end
-            end
-            
-            if not p5Handled then
             -- OPTIMIZATION: Literal Inlining
             local lhsExpr, lhsReg = compiler:compileOperand(scope, expression.lhs, funcDepth);
             local rhsExpr, rhsReg = compiler:compileOperand(scope, expression.rhs, funcDepth);
@@ -697,63 +397,6 @@ function Expressions.BinaryExpression(compiler, expression, funcDepth, numReturn
                     local reads = lhsReg and {lhsReg} or {}
                     compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.MulExpression(lhsExpr, lhsExpr)), {regs[i]}, reads, true);
                     identityFound = true
-                elseif expression.kind == AstKind.DivExpression then
-                    -- P15: x / 2 -> x * 0.5 (multiplication is generally faster)
-                    local reads = lhsReg and {lhsReg} or {}
-                    compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.MulExpression(lhsExpr, Ast.NumberExpression(0.5))), {regs[i]}, reads, true);
-                    identityFound = true
-                end
-            end
-            
-            -- P15: Extended Strength Reduction for powers of 2
-            if not identityFound and compiler.enableStrengthReduction and
-               rhsExpr.kind == AstKind.NumberExpression then
-                local rhsVal = rhsExpr.value
-                
-                -- P15: x * 4 -> (x + x) + (x + x)
-                if expression.kind == AstKind.MulExpression and rhsVal == 4 then
-                    local reads = lhsReg and {lhsReg} or {}
-                    local double = Ast.AddExpression(lhsExpr, lhsExpr)
-                    compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.AddExpression(double, double)), {regs[i]}, reads, true);
-                    identityFound = true
-                    
-                -- P15: x * 8 -> ((x + x) + (x + x)) + ((x + x) + (x + x))
-                elseif expression.kind == AstKind.MulExpression and rhsVal == 8 then
-                    local reads = lhsReg and {lhsReg} or {}
-                    local double = Ast.AddExpression(lhsExpr, lhsExpr)
-                    local quad = Ast.AddExpression(double, double)
-                    compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.AddExpression(quad, quad)), {regs[i]}, reads, true);
-                    identityFound = true
-                    
-                -- P15: x / 4 -> x * 0.25
-                elseif expression.kind == AstKind.DivExpression and rhsVal == 4 then
-                    local reads = lhsReg and {lhsReg} or {}
-                    compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.MulExpression(lhsExpr, Ast.NumberExpression(0.25))), {regs[i]}, reads, true);
-                    identityFound = true
-                    
-                -- P15: x / 8 -> x * 0.125
-                elseif expression.kind == AstKind.DivExpression and rhsVal == 8 then
-                    local reads = lhsReg and {lhsReg} or {}
-                    compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.MulExpression(lhsExpr, Ast.NumberExpression(0.125))), {regs[i]}, reads, true);
-                    identityFound = true
-                    
-                -- P15: x ^ 3 -> x * x * x
-                elseif expression.kind == AstKind.PowExpression and rhsVal == 3 then
-                    local reads = lhsReg and {lhsReg} or {}
-                    local squared = Ast.MulExpression(lhsExpr, lhsExpr)
-                    compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.MulExpression(squared, lhsExpr)), {regs[i]}, reads, true);
-                    identityFound = true
-                    
-                -- P15: x ^ 4 -> (x * x) * (x * x)
-                elseif expression.kind == AstKind.PowExpression and rhsVal == 4 then
-                    local reads = lhsReg and {lhsReg} or {}
-                    local squared = Ast.MulExpression(lhsExpr, lhsExpr)
-                    compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.MulExpression(squared, squared)), {regs[i]}, reads, true);
-                    identityFound = true
-                    
-                -- P15: x ^ 0.5 -> math.sqrt(x) (only if math.sqrt is available)
-                -- Note: Skipping this optimization as it requires global access
-                -- and math.sqrt may not always be faster in VM context
                 end
             end
 
@@ -780,38 +423,11 @@ function Expressions.BinaryExpression(compiler, expression, funcDepth, numReturn
                 if lhsReg and (not reused or lhsReg ~= targetReg) then table.insert(reads, lhsReg) end
                 if rhsReg and (not reused or rhsReg ~= targetReg) then table.insert(reads, rhsReg) end
 
-                -- S6: Instruction Polymorphism - Apply random equivalent transformations
-                local finalExpr = Ast[expression.kind](lhsExpr, rhsExpr)
-                
-                if compiler.enableInstructionPolymorphism then
-                    local polyExpr = nil
-                    
-                    if expression.kind == AstKind.AddExpression then
-                        polyExpr = InstructionPolymorphism.transformAddExpression(compiler, lhsExpr, rhsExpr)
-                    elseif expression.kind == AstKind.SubExpression then
-                        polyExpr = InstructionPolymorphism.transformSubExpression(compiler, lhsExpr, rhsExpr)
-                    elseif expression.kind == AstKind.MulExpression then
-                        polyExpr = InstructionPolymorphism.transformMulExpression(compiler, lhsExpr, rhsExpr)
-                    elseif expression.kind == AstKind.EqualsExpression or
-                           expression.kind == AstKind.NotEqualsExpression or
-                           expression.kind == AstKind.LessThanExpression or
-                           expression.kind == AstKind.GreaterThanExpression or
-                           expression.kind == AstKind.LessThanOrEqualsExpression or
-                           expression.kind == AstKind.GreaterThanOrEqualsExpression then
-                        polyExpr = InstructionPolymorphism.transformCompareExpression(compiler, expression.kind, lhsExpr, rhsExpr)
-                    end
-                    
-                    if polyExpr then
-                        finalExpr = polyExpr
-                    end
-                end
-
-                compiler:addStatement(compiler:setRegister(scope, targetReg, finalExpr), {targetReg}, reads, true);
+                compiler:addStatement(compiler:setRegister(scope, targetReg, Ast[expression.kind](lhsExpr, rhsExpr)), {targetReg}, reads, true);
             end
 
             if rhsReg and (not reused or targetReg ~= rhsReg) then compiler:freeRegister(rhsReg, false) end
             if lhsReg and (not reused or targetReg ~= lhsReg) then compiler:freeRegister(lhsReg, false) end
-            end -- P5: end of if not p5Handled
         else
             compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.NilExpression()), {regs[i]}, {}, false);
         end
@@ -1128,60 +744,36 @@ function Expressions.TableConstructorExpression(compiler, expression, funcDepth,
         end
 
         if(i == 1) then
-            -- P17: Table Pre-sizing optimization
-            -- Check if we can use table.create for large static tables
-            local usePresize, presizeExpr, presizeHint = TablePresizing.optimizeTableConstructor(expression, compiler, scope)
-            
-            -- Track if we used presizing optimization (to skip normal processing)
-            local usedPresizeOptimization = false
-            
-            if usePresize and presizeHint then
-                -- For large tables, emit table.create first, then fill entries
-                -- This is a more complex optimization, so for now we'll emit a comment
-                -- about the size and use the normal path
-                -- Full implementation would create table, then assign entries separately
-                -- For simplicity, we'll add the table.create with fallback pattern for empty large tables
-                if #expression.entries == 0 then
-                    -- Empty large table - use table.create pattern directly
-                    scope:addReferenceToHigherScope(compiler.scope, compiler.envVar)
-                    compiler:addStatement(compiler:setRegister(scope, regs[i], presizeExpr), {regs[i]}, {}, true);
-                    -- Mark that we used the presize optimization, skip normal processing
-                    usedPresizeOptimization = true
-                end
-            end
-            
-            if not usedPresizeOptimization then
-                local entries = {};
-                local entryRegs = {};
-                for i, entry in ipairs(expression.entries) do
-                    if(entry.kind == AstKind.TableEntry) then
-                        local value = entry.value;
-                        if i == #expression.entries and (value.kind == AstKind.FunctionCallExpression or value.kind == AstKind.PassSelfFunctionCallExpression or value.kind == AstKind.VarargExpression) then
-                            local reg = compiler:compileExpression(entry.value, funcDepth, compiler.RETURN_ALL)[1];
-                            table.insert(entries, Ast.TableEntry(Ast.FunctionCallExpression(
-                                compiler:unpack(scope),
-                                {compiler:register(scope, reg)})));
-                            table.insert(entryRegs, reg);
-                        else
-                            -- OPTIMIZATION: Inline literals/vars/safe-expressions for array part
-                            local valExpr, valReg = compiler:compileOperand(scope, entry.value, funcDepth);
-                            table.insert(entries, Ast.TableEntry(valExpr));
-                            if valReg then table.insert(entryRegs, valReg) end
-                        end
+            local entries = {};
+            local entryRegs = {};
+            for i, entry in ipairs(expression.entries) do
+                if(entry.kind == AstKind.TableEntry) then
+                    local value = entry.value;
+                    if i == #expression.entries and (value.kind == AstKind.FunctionCallExpression or value.kind == AstKind.PassSelfFunctionCallExpression or value.kind == AstKind.VarargExpression) then
+                        local reg = compiler:compileExpression(entry.value, funcDepth, compiler.RETURN_ALL)[1];
+                        table.insert(entries, Ast.TableEntry(Ast.FunctionCallExpression(
+                            compiler:unpack(scope),
+                            {compiler:register(scope, reg)})));
+                        table.insert(entryRegs, reg);
                     else
-                        -- OPTIMIZATION: Literal Inlining for Table Constructor Keys/Values
-                        local keyExpr, keyReg = compiler:compileOperand(scope, entry.key, funcDepth);
+                        -- OPTIMIZATION: Inline literals/vars/safe-expressions for array part
                         local valExpr, valReg = compiler:compileOperand(scope, entry.value, funcDepth);
-
-                        table.insert(entries, Ast.KeyedTableEntry(keyExpr, valExpr));
-                        if keyReg then table.insert(entryRegs, keyReg) end
+                        table.insert(entries, Ast.TableEntry(valExpr));
                         if valReg then table.insert(entryRegs, valReg) end
                     end
+                else
+                    -- OPTIMIZATION: Literal Inlining for Table Constructor Keys/Values
+                    local keyExpr, keyReg = compiler:compileOperand(scope, entry.key, funcDepth);
+                    local valExpr, valReg = compiler:compileOperand(scope, entry.value, funcDepth);
+
+                    table.insert(entries, Ast.KeyedTableEntry(keyExpr, valExpr));
+                    if keyReg then table.insert(entryRegs, keyReg) end
+                    if valReg then table.insert(entryRegs, valReg) end
                 end
-                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.TableConstructorExpression(entries)), {regs[i]}, entryRegs, false);
-                for i, reg in ipairs(entryRegs) do
-                    compiler:freeRegister(reg, false);
-                end
+            end
+            compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.TableConstructorExpression(entries)), {regs[i]}, entryRegs, false);
+            for i, reg in ipairs(entryRegs) do
+                compiler:freeRegister(reg, false);
             end
         else
             compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.NilExpression()), {regs[i]}, {}, false);

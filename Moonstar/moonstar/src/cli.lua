@@ -44,7 +44,6 @@ local sourceFile;
 local outFile;
 local luaVersion;
 local prettyPrint;
-local compressionMode;
 
 Prometheus.colors.enabled = true;
 
@@ -92,12 +91,6 @@ while i <= #arg do
             luaVersion = "LuaU";
         elseif curr == "--pretty" then
             prettyPrint = true;
-        elseif curr == "--compress" then
-            compressionMode = "default";
-        elseif curr == "--compress-fast" then
-            compressionMode = "fast";
-        elseif curr == "--compress-balanced" then
-            compressionMode = "balanced";
         elseif curr == "--saveerrors" then
             -- Override error callback
             Prometheus.Logger.errorCallback =  function(...)
@@ -137,21 +130,6 @@ end
 -- Add Option to override Lua Version
 config.LuaVersion = luaVersion or config.LuaVersion;
 config.PrettyPrint = prettyPrint ~= nil and prettyPrint or config.PrettyPrint;
-
--- Add compression if --compress, --compress-fast, or --compress-balanced flag was specified
-if compressionMode then
-    local PresetsModule = require("presets.init");
-    if compressionMode == "default" then
-        -- Default (--compress): All algorithms (best ratio, slowest)
-        config.Compression = PresetsModule.deepCopy(PresetsModule.CompressionConfig.Default);
-    elseif compressionMode == "balanced" then
-        -- Balanced: BWT + RLE + Huffman (good balance)
-        config.Compression = PresetsModule.deepCopy(PresetsModule.CompressionConfig.Balanced);
-    else
-        -- Fast: Only RLE + Huffman (fastest, lower ratio)
-        config.Compression = PresetsModule.deepCopy(PresetsModule.CompressionConfig.Fast);
-    end
-end
 
 if not file_exists(sourceFile) then
     Prometheus.Logger:error(string.format("The File \"%s\" was not found!", sourceFile));
