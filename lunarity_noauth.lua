@@ -8,8 +8,6 @@ local HttpService = game:GetService("HttpService")
 local MarketplaceService = game:GetService("MarketplaceService")
 
 local LocalPlayer = Players.LocalPlayer
-local LOADER_SCRIPT_ID = "lunarity"
-local LoaderAccess = rawget(getgenv(), "LunarityAccess")
 
 local StatusRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Status")
 
@@ -52,54 +50,6 @@ local DangerGradientSequence = ColorSequence.new{
     ColorSequenceKeypoint.new(0, Color3.fromRGB(200, 150, 255)),
     ColorSequenceKeypoint.new(1, Theme.DangerDark)
 }
-
--- XOR encryption/decryption for payload obfuscation (matches loader)
-local function xorCrypt(input, key)
-    local output = {}
-    local keyLen = #key
-    for i = 1, #input do
-        local keyByte = string.byte(key, ((i - 1) % keyLen) + 1)
-        local inputByte = string.byte(input, i)
-        output[i] = string.char(bit32.bxor(inputByte, keyByte))
-    end
-    return table.concat(output)
-end
-
-local function base64Encode(data)
-    local b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-    local result = {}
-    local bytes = { string.byte(data, 1, #data) }
-    local i = 1
-    while i <= #bytes do
-        local b1 = bytes[i] or 0
-        local b2 = bytes[i + 1] or 0
-        local b3 = bytes[i + 2] or 0
-        local combined = bit32.bor(
-            bit32.lshift(b1, 16),
-            bit32.lshift(b2, 8),
-            b3
-        )
-        table.insert(result, string.sub(b64chars, bit32.rshift(combined, 18) % 64 + 1, bit32.rshift(combined, 18) % 64 + 1))
-        table.insert(result, string.sub(b64chars, bit32.rshift(combined, 12) % 64 + 1, bit32.rshift(combined, 12) % 64 + 1))
-        if i + 1 <= #bytes then
-            table.insert(result, string.sub(b64chars, bit32.rshift(combined, 6) % 64 + 1, bit32.rshift(combined, 6) % 64 + 1))
-        else
-            table.insert(result, "=")
-        end
-        if i + 2 <= #bytes then
-            table.insert(result, string.sub(b64chars, combined % 64 + 1, combined % 64 + 1))
-        else
-            table.insert(result, "=")
-        end
-        i = i + 3
-    end
-    return table.concat(result)
-end
-
-local function encryptPayload(plainText, key)
-    local encrypted = xorCrypt(plainText, key)
-    return base64Encode(encrypted)
-end
 
 -- Persistent Settings System
 local SETTINGS_KEY = "Lunarity_Settings_V1"
@@ -195,147 +145,9 @@ end
 
 local ScriptActive = true
 
-local HttpRequestInvoker
-
-do
-    if typeof(http_request) == "function" then
-        HttpRequestInvoker = http_request
-    elseif typeof(syn) == "table" and typeof(syn.request) == "function" then
-        HttpRequestInvoker = syn.request
-    elseif typeof(request) == "function" then
-        HttpRequestInvoker = request
-    elseif typeof(http) == "table" and typeof(http.request) == "function" then
-        HttpRequestInvoker = http.request
-    elseif HttpService and HttpService.RequestAsync then
-        HttpRequestInvoker = function(options)
-            return HttpService:RequestAsync(options)
-        end
-    end
-
-    local function buildValidateUrl()
-        if not LoaderAccess then
-            return nil
-        end
-        if typeof(LoaderAccess.validateUrl) == "string" then
-            return LoaderAccess.validateUrl
-        elseif typeof(LoaderAccess.baseUrl) == "string" then
-            return LoaderAccess.baseUrl .. "/validate"
-        end
-        return nil
-    end
-
-    local function requestLoaderValidation(refresh)
-        if not LoaderAccess then
-            return false, "Loader access token missing"
-        end
-        if not HttpRequestInvoker then
-            return false, "Executor lacks HTTP support"
-        end
-        local validateUrl = buildValidateUrl()
-        if not validateUrl then
-            return false, "Validation endpoint unavailable"
-        end
-
-        local payload = {
-            token = LoaderAccess.token,
-            scriptId = LOADER_SCRIPT_ID,
-            refresh = refresh ~= false,
-        }
-
-        local encodedOk, encodedPayload = pcall(HttpService.JSONEncode, HttpService, payload)
-        if not encodedOk then
-            return false, "Failed to encode validation payload"
-        end
-
-        -- Encrypt the payload if encryption key is available
-        local requestBody = encodedPayload
-        if LoaderAccess.encryptionKey then
-            requestBody = encryptPayload(encodedPayload, LoaderAccess.encryptionKey)
-        end
-
-        local success, response = pcall(HttpRequestInvoker, {
-            Url = validateUrl,
-            Method = "POST",
-            Headers = {
-                ["Content-Type"] = "application/json",
-                ["Accept"] = "application/json",
-                ["User-Agent"] = LoaderAccess.userAgent or "LunarityLoader/1.0",
-            },
-            Body = requestBody,
-        })
-
-        if not success then
-            return false, tostring(response)
-        end
-
-        local statusCode = response.StatusCode or response.Status or response.status_code
-        local bodyText = response.Body or response.body or ""
-        if statusCode and (statusCode < 200 or statusCode >= 300) then
-            return false, bodyText ~= "" and bodyText or ("HTTP " .. tostring(statusCode))
-        end
-
-        local decodeOk, decoded = pcall(HttpService.JSONDecode, HttpService, bodyText)
-        if not decodeOk then
-            return false, "Invalid JSON from worker"
-        end
-
-        if decoded.ok ~= true then
-            return false, decoded.reason or "Validation denied"
-        end
-
-        -- Dynamic token rotation: update the token if a new one was provided
-        if decoded.newToken and typeof(decoded.newToken) == "string" then
-            LoaderAccess.token = decoded.newToken
-        end
-
-        return true, decoded
-    end
-
-    local function enforceLoaderWhitelist()
-        if not LoaderAccess or LoaderAccess.scriptId ~= LOADER_SCRIPT_ID then
-            warn("[Lunarity] This build must be launched via the official loader.")
-            return false
-        end
-
-        local ok, response = requestLoaderValidation(true)
-        if not ok then
-            warn("[Lunarity] Loader validation failed: " .. tostring(response))
-            return false
-        end
-
-        if response.killSwitch then
-            warn("[Lunarity] Loader kill switch active. Aborting.")
-            return false
-        end
-
-        local refreshInterval = math.clamp(LoaderAccess.refreshInterval or 90, 30, 240)
-        task.spawn(function()
-            while ScriptActive do
-                task.wait(refreshInterval)
-                local valid, data = requestLoaderValidation(true)
-                if not valid or (data and data.killSwitch) then
-                    warn("[Lunarity] Access revoked or kill switch activated. Shutting down.")
-                    ScriptActive = false
-                    break
-                end
-            end
-        end)
-
-        getgenv().LunarityAccess = nil
-        return true
-    end
-
-    if not enforceLoaderWhitelist() then
-        return
-    end
-end
-
 -- // ============================
 -- // SCRIPT FUNCTIONALITY STARTS HERE
 -- // ============================
-
-local Authorized = true
-local AuthorizationMessage = "Loaded via official loader"
 
 local StatusRemoteConnection = nil
 
@@ -1767,3 +1579,4 @@ KeybindDisplay.InputChanged:Connect(function(input)
         keybindDragInput = input
     end
 end)
+

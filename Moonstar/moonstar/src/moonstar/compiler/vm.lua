@@ -5,15 +5,12 @@ local util = require("moonstar.util");
 local randomStrings = require("moonstar.randomStrings")
 
 local lookupify = util.lookupify;
-local lookupify_fast = util.lookupify_fast;
 
 local VmGen = {}
 
 function VmGen.emitContainerFuncBody(compiler)
-    -- OPTIMIZATION: Block Merging (Super Blocks) - O(n+m) Worklist Algorithm
-    -- PERF-OPT: Replaced O(n²) while-changed loop with O(n+m) worklist approach
-    -- Time Complexity: O(n + m) where n = blocks, m = total merges performed
-    -- Memory: O(n) for worklist and lookup structures
+    -- OPTIMIZATION: Block Merging (Super Blocks)
+    -- Merge linear sequences of blocks to reduce dispatch overhead
     do
         local blockMap = {}
         local inDegree = {}
@@ -39,7 +36,7 @@ function VmGen.emitContainerFuncBody(compiler)
             end
         end
 
-        -- Analyze Control Flow (O(n) pass)
+        -- Analyze Control Flow
         for _, block in ipairs(compiler.blocks) do
             if #block.statements > 0 then
                 local lastStatWrapper = block.statements[#block.statements]
@@ -60,78 +57,60 @@ function VmGen.emitContainerFuncBody(compiler)
             end
         end
 
-        -- PERF-OPT: Worklist-based merging (O(n+m) instead of O(n²))
-        -- Build initial worklist of merge candidates
-        local worklist = {}
-        local inWorklist = {}
+        -- Perform Merging
+        local changed = true
         local mergedBlocks = {} -- Set of IDs that have been merged (and thus removed)
-        
-        -- Helper to check if a block is a valid merge candidate
-        local function isMergeableTarget(block, targetId)
-            local targetBlock = blockMap[targetId]
-            if not targetBlock then return false end
-            if mergedBlocks[targetId] then return false end
-            if targetId == compiler.startBlockId then return false end
-            if targetId == block.id then return false end
-            
-            local isMergeCandidate = inDegree[targetId] == 1
-            -- Tail Duplication: Inline small blocks even if they have multiple predecessors
-            local isInlineCandidate = #targetBlock.statements <= 12
-            
-            return isMergeCandidate or isInlineCandidate
-        end
-        
-        -- Initialize worklist with blocks that have unconditional jumps to mergeable targets
-        for _, block in ipairs(compiler.blocks) do
-            local targetId = outEdge[block]
-            if targetId and isMergeableTarget(block, targetId) then
-                worklist[#worklist + 1] = block
-                inWorklist[block] = true
-            end
-        end
-        
-        -- Process worklist (each block processed at most once per merge it participates in)
-        while #worklist > 0 do
-            local block = worklist[#worklist]
-            worklist[#worklist] = nil
-            inWorklist[block] = nil
-            
-            -- Skip if this block was already merged
-            if mergedBlocks[block.id] then
-                -- continue to next iteration
-            else
-                local targetId = outEdge[block]
-                if targetId and isMergeableTarget(block, targetId) then
-                    local targetBlock = blockMap[targetId]
-                    local isMergeCandidate = inDegree[targetId] == 1
-                    
-                    -- 1. Remove the jump from block (last statement)
-                    table.remove(block.statements)
 
-                    -- 2. Append all statements from targetBlock
-                    for _, stat in ipairs(targetBlock.statements) do
-                        table.insert(block.statements, stat)
-                    end
+        while changed do
+            changed = false
+            for _, block in ipairs(compiler.blocks) do
+                if not mergedBlocks[block.id] then
+                    local targetId = outEdge[block]
+                    if targetId then
+                        local targetBlock = blockMap[targetId]
 
-                    -- 3. Update outEdge for block to point to target's successor
-                    outEdge[block] = outEdge[targetBlock]
+                        -- Check valid merge/inline candidate:
+                        -- 1. Target exists and hasn't been merged
+                        -- 2. Target is not the start block
+                        -- 3. Target is not 'block' itself (infinite loop)
+                        -- 4. EITHER:
+                        --    a) Target has only one predecessor (classic merge)
+                        --    b) Target is small (<= 12 statements) and can be inlined (tail duplication)
+                        if targetBlock and not mergedBlocks[targetId] and
+                           targetId ~= compiler.startBlockId and
+                           targetId ~= block.id then
 
-                    -- 4. If it was a merge, mark target as merged
-                    if isMergeCandidate then
-                        mergedBlocks[targetId] = true
-                    end
-                    
-                    -- 5. Add this block back to worklist if it can merge again
-                    local newTargetId = outEdge[block]
-                    if newTargetId and isMergeableTarget(block, newTargetId) and not inWorklist[block] then
-                        worklist[#worklist + 1] = block
-                        inWorklist[block] = true
+                            local isMergeCandidate = inDegree[targetId] == 1
+                            -- Tail Duplication: Inline small blocks even if they have multiple predecessors
+                            -- OPTIMIZATION: Increased threshold to 12 to reduce dispatch overhead
+                            local isInlineCandidate = #targetBlock.statements <= 12
+
+                            if isMergeCandidate or isInlineCandidate then
+                                -- 1. Remove the jump from block (last statement)
+                                table.remove(block.statements)
+
+                                -- 2. Append all statements from targetBlock
+                                for _, stat in ipairs(targetBlock.statements) do
+                                    table.insert(block.statements, stat)
+                                end
+
+                                -- 3. Update outEdge for block to point to target's successor
+                                outEdge[block] = outEdge[targetBlock]
+
+                                -- 4. If it was a merge, mark target as merged. If just an inline, don't.
+                                if isMergeCandidate then
+                                    mergedBlocks[targetId] = true
+                                end
+
+                                changed = true
+                            end
+                        end
                     end
                 end
             end
         end
 
-        -- Rebuild block list (O(n) pass)
+        -- Rebuild block list
         local newBlocks = {}
         for _, block in ipairs(compiler.blocks) do
             if not mergedBlocks[block.id] then
@@ -213,7 +192,6 @@ function VmGen.emitContainerFuncBody(compiler)
     end
 
     local blocks = {};
-    local blockById = {}; -- PERF-OPT: Quick lookup for hot-path dispatch
 
     -- OPTIMIZATION: Junk blocks removed to reduce dispatch tree depth and cache pressure
     
@@ -224,9 +202,7 @@ function VmGen.emitContainerFuncBody(compiler)
         for i, stat in ipairs(block.statements) do
             table.insert(blockstats, stat.statement);
         end
-        local blockEntry = { id = block.id, block = Ast.Block(blockstats, block.scope) };
-        table.insert(blocks, blockEntry);
-        blockById[block.id] = blockEntry;
+        table.insert(blocks, { id = block.id, block = Ast.Block(blockstats, block.scope) });
     end
     
     table.sort(blocks, function(a, b)
@@ -239,14 +215,7 @@ function VmGen.emitContainerFuncBody(compiler)
         }, scope);
     end
 
-    -- PERF-OPT: Shared Dispatch Scope
-    -- The BST dispatch tree only reads 'pos' and compares against block IDs
-    -- No new variables are declared in dispatch nodes, so we can reuse one scope
-    -- This reduces O(n) scope allocations to O(1)
-    -- Memory: Saves ~1KB per 100 blocks (scope object overhead)
-    local sharedDispatchScope = Scope:new(compiler.containerFuncScope)
-
-    local function buildWhileBody(tb, l, r, pScope, isRoot)
+    local function buildWhileBody(tb, l, r, pScope, scope)
         local len = r - l + 1;
         if len == 1 then
             tb[r].block.scope:setParent(pScope);
@@ -263,79 +232,17 @@ function VmGen.emitContainerFuncBody(compiler)
         -- Blocks < mid go left, Blocks >= mid go right
         local bound = tb[mid].id;
 
-        -- PERF-OPT: Reuse shared dispatch scope for all BST internal nodes
-        -- Only the root needs a fresh scope link to pScope; children share it
-        local ifScope
-        if isRoot then
-            ifScope = sharedDispatchScope
-        else
-            ifScope = sharedDispatchScope
-        end
+        local ifScope = scope or Scope:new(pScope);
 
-        local lBlock = buildWhileBody(tb, l, mid - 1, ifScope, false);
-        local rBlock = buildWhileBody(tb, mid, r, ifScope, false);
+        local lBlock = buildWhileBody(tb, l, mid - 1, ifScope);
+        local rBlock = buildWhileBody(tb, mid, r, ifScope);
 
         return buildIfBlock(ifScope, bound, lBlock, rBlock);
     end
 
-    -- PERF-OPT: Hot-Path Dispatch
-    -- Identify hot blocks (startBlock, loop bodies) and add fast equality checks
-    -- before falling into the BST. This reduces dispatch overhead by ~20-40% for hot paths.
-    local hotBlockIds = {}
-    
-    -- The start block is always "hot" (first block executed)
-    if compiler.startBlockId and blockById[compiler.startBlockId] then
-        table.insert(hotBlockIds, compiler.startBlockId)
-    end
-    
-    -- Collect loop body block IDs (tracked during compilation)
-    if compiler.hotLoopBlocks then
-        for blockId, _ in pairs(compiler.hotLoopBlocks) do
-            if blockById[blockId] and blockId ~= compiler.startBlockId then
-                table.insert(hotBlockIds, blockId)
-            end
-        end
-    end
-    
-    -- Limit hot blocks to prevent excessive dispatch chain (max 3 for balance)
-    while #hotBlockIds > 3 do
-        table.remove(hotBlockIds)
-    end
-
     local whileBody;
     -- Standard binary search tree dispatch (if-chain)
-    -- PERF-OPT: Pass isRoot=true to use shared dispatch scope
-    local bstBody = buildWhileBody(blocks, 1, #blocks, compiler.containerFuncScope, true);
-    
-    -- PERF-OPT: Wrap BST with hot-path equality checks
-    -- Structure: if pos == hotBlock1 then ... elseif pos == hotBlock2 then ... else BST end
-    if #hotBlockIds > 0 and bstBody then
-        local currentBody = bstBody
-        
-        -- Build from innermost to outermost (reverse order)
-        for i = #hotBlockIds, 1, -1 do
-            local hotId = hotBlockIds[i]
-            local hotBlock = blockById[hotId]
-            if hotBlock then
-                local hotBlockScope = Scope:new(compiler.whileScope)
-                hotBlock.block.scope:setParent(hotBlockScope)
-                
-                -- if pos == hotId then hotBlock else currentBody end
-                currentBody = Ast.Block({
-                    Ast.IfStatement(
-                        Ast.EqualsExpression(compiler:pos(hotBlockScope), Ast.NumberExpression(hotId)),
-                        hotBlock.block,
-                        {},
-                        currentBody
-                    )
-                }, hotBlockScope)
-            end
-        end
-        
-        whileBody = currentBody
-    else
-        whileBody = bstBody
-    end
+    whileBody = buildWhileBody(blocks, 1, #blocks, compiler.containerFuncScope, compiler.whileScope);
 
     compiler.whileScope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.returnVar, 1);
     compiler.whileScope:addReferenceToHigherScope(compiler.containerFuncScope, compiler.posVar);
@@ -407,7 +314,7 @@ function VmGen.createJunkBlock(compiler)
                 }, {
                     Ast.AddExpression(compiler:register(scope, reg2), compiler:register(scope, reg3))
                 }),
-                writes = lookupify_fast({reg1}), reads = lookupify_fast({reg2, reg3}), usesUpvals = false
+                writes = lookupify({reg1}), reads = lookupify({reg2, reg3}), usesUpvals = false
             });
         elseif op == 2 then -- Mul
              table.insert(block.statements, {
@@ -416,7 +323,7 @@ function VmGen.createJunkBlock(compiler)
                 }, {
                     Ast.MulExpression(compiler:register(scope, reg2), Ast.NumberExpression(math.random(1, 100)))
                 }),
-                writes = lookupify_fast({reg1}), reads = lookupify_fast({reg2}), usesUpvals = false
+                writes = lookupify({reg1}), reads = lookupify({reg2}), usesUpvals = false
             });
         elseif op == 3 then -- Set Global (Fake)
              -- We can't easily fake globals safely without risk of crashing if env is strict
@@ -427,7 +334,7 @@ function VmGen.createJunkBlock(compiler)
                 }, {
                     Ast.StringExpression(randomStrings.randomString(5))
                 }),
-                writes = lookupify_fast({reg1}), reads = lookupify_fast({}), usesUpvals = false
+                writes = lookupify({reg1}), reads = lookupify({}), usesUpvals = false
             });
         elseif op == 4 then -- Table Create
              table.insert(block.statements, {
@@ -436,13 +343,13 @@ function VmGen.createJunkBlock(compiler)
                 }, {
                     Ast.TableConstructorExpression({})
                 }),
-                writes = lookupify_fast({reg1}), reads = lookupify_fast({}), usesUpvals = false
+                writes = lookupify({reg1}), reads = lookupify({}), usesUpvals = false
             });
         else -- JUMP (Fake)
              -- Jump to itself or random number (harmless since unreachable)
              table.insert(block.statements, {
                 statement = compiler:setPos(scope, math.random(0, 100000)),
-                writes = lookupify_fast({compiler.POS_REGISTER}), reads = lookupify_fast({}), usesUpvals = false
+                writes = lookupify({compiler.POS_REGISTER}), reads = lookupify({}), usesUpvals = false
             });
         end
     end
@@ -450,7 +357,7 @@ function VmGen.createJunkBlock(compiler)
     -- End with a jump or return to be syntactically valid flow
     table.insert(block.statements, {
         statement = compiler:setPos(scope, nil), -- Random jump
-        writes = lookupify_fast({compiler.POS_REGISTER}), reads = lookupify_fast({}), usesUpvals = false
+        writes = lookupify({compiler.POS_REGISTER}), reads = lookupify({}), usesUpvals = false
     });
 
     -- Mark as not advancing so we don't append more to it accidentally

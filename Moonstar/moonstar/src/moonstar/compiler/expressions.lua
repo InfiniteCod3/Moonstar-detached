@@ -183,34 +183,15 @@ function Expressions.FunctionCallExpression(compiler, expression, funcDepth, num
         compiler:addStatement(compiler:setRegister(scope, retRegs[1], Ast.TableConstructorExpression{Ast.TableEntry(Ast.FunctionCallExpression(compiler:register(scope, baseReg), args))}), {retRegs[1]}, {baseReg, unpack(regs)}, true);
     else
         if(numReturns > 1) then
-            -- PERF-OPT: For small fixed return counts (2-3), use direct multi-assignment
-            -- instead of table wrapping. This avoids table allocation.
-            -- Pattern: a, b = func() instead of tmp = {func()}; a = tmp[1]; b = tmp[2]
-            if numReturns <= 3 then
-                -- Build multi-assignment: retReg1, retReg2, ... = func(args)
-                local lhsAssignments = {}
-                for i, reg in ipairs(retRegs) do
-                    table.insert(lhsAssignments, compiler:registerAssignment(scope, reg))
-                end
-                
-                compiler:addStatement(
-                    Ast.AssignmentStatement(lhsAssignments, {Ast.FunctionCallExpression(compiler:register(scope, baseReg), args)}),
-                    retRegs, -- writes
-                    {baseReg, unpack(regs)}, -- reads
-                    true -- usesUpvals
-                );
-            else
-                -- For 4+ returns, fall back to table wrapping (rare case)
-                local a7bX9 = compiler:allocRegister(false);
+            local a7bX9 = compiler:allocRegister(false);
 
-                compiler:addStatement(compiler:setRegister(scope, a7bX9, Ast.TableConstructorExpression{Ast.TableEntry(Ast.FunctionCallExpression(compiler:register(scope, baseReg), args))}), {a7bX9}, {baseReg, unpack(regs)}, true);
+            compiler:addStatement(compiler:setRegister(scope, a7bX9, Ast.TableConstructorExpression{Ast.TableEntry(Ast.FunctionCallExpression(compiler:register(scope, baseReg), args))}), {a7bX9}, {baseReg, unpack(regs)}, true);
 
-                for i, reg in ipairs(retRegs) do
-                    compiler:addStatement(compiler:setRegister(scope, reg, Ast.IndexExpression(compiler:register(scope, a7bX9), Ast.NumberExpression(i))), {reg}, {a7bX9}, false);
-                end
-
-                compiler:freeRegister(a7bX9, false);
+            for i, reg in ipairs(retRegs) do
+                compiler:addStatement(compiler:setRegister(scope, reg, Ast.IndexExpression(compiler:register(scope, a7bX9), Ast.NumberExpression(i))), {reg}, {a7bX9}, false);
             end
+
+            compiler:freeRegister(a7bX9, false);
         else
             compiler:addStatement(compiler:setRegister(scope, retRegs[1], Ast.FunctionCallExpression(compiler:register(scope, baseReg), args)), {retRegs[1]}, {baseReg, unpack(regs)}, true);
         end
@@ -263,25 +244,10 @@ function Expressions.PassSelfFunctionCallExpression(compiler, expression, funcDe
         if returnAll then
             compiler:addStatement(compiler:setRegister(scope, retRegs[1], Ast.TableConstructorExpression{Ast.TableEntry(Ast.FunctionCallExpression(compiler:register(scope, a7bX9), args))}), {retRegs[1]}, {a7bX9, unpack(regs)}, true);
         else
-            -- PERF-OPT: For small fixed return counts (2-3), use direct multi-assignment
-            if numReturns <= 3 then
-                local lhsAssignments = {}
-                for i, reg in ipairs(retRegs) do
-                    table.insert(lhsAssignments, compiler:registerAssignment(scope, reg))
-                end
-                
-                compiler:addStatement(
-                    Ast.AssignmentStatement(lhsAssignments, {Ast.FunctionCallExpression(compiler:register(scope, a7bX9), args)}),
-                    retRegs,
-                    {a7bX9, unpack(regs)},
-                    true
-                );
-            else
-                compiler:addStatement(compiler:setRegister(scope, a7bX9, Ast.TableConstructorExpression{Ast.TableEntry(Ast.FunctionCallExpression(compiler:register(scope, a7bX9), args))}), {a7bX9}, {a7bX9, unpack(regs)}, true);
+            compiler:addStatement(compiler:setRegister(scope, a7bX9, Ast.TableConstructorExpression{Ast.TableEntry(Ast.FunctionCallExpression(compiler:register(scope, a7bX9), args))}), {a7bX9}, {a7bX9, unpack(regs)}, true);
 
-                for i, reg in ipairs(retRegs) do
-                    compiler:addStatement(compiler:setRegister(scope, reg, Ast.IndexExpression(compiler:register(scope, a7bX9), Ast.NumberExpression(i))), {reg}, {a7bX9}, false);
-                end
+            for i, reg in ipairs(retRegs) do
+                compiler:addStatement(compiler:setRegister(scope, reg, Ast.IndexExpression(compiler:register(scope, a7bX9), Ast.NumberExpression(i))), {reg}, {a7bX9}, false);
             end
         end
 
