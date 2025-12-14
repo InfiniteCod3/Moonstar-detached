@@ -778,302 +778,64 @@ end
     ═══════════════════════════════════════════════════════════════════════════
 ]]
 
--- Color Scheme (Purple/Violet ImGUI Style)
-local Theme = {
-    Background = Color3.fromRGB(15, 15, 20),
-    BackgroundLight = Color3.fromRGB(25, 25, 35),
-    BackgroundDark = Color3.fromRGB(10, 10, 15),
-    Border = Color3.fromRGB(80, 60, 140),
-    Accent = Color3.fromRGB(130, 90, 200),
-    AccentHover = Color3.fromRGB(150, 110, 220),
-    AccentDark = Color3.fromRGB(100, 70, 160),
-    Text = Color3.fromRGB(220, 220, 230),
-    TextDim = Color3.fromRGB(140, 140, 160),
-    Success = Color3.fromRGB(90, 200, 120),
-    Error = Color3.fromRGB(200, 90, 90),
-    Warning = Color3.fromRGB(200, 160, 90),
-    Separator = Color3.fromRGB(50, 45, 70),
-}
+-- Load shared UI module
+local LunarityUI = loadstring(game:HttpGet("https://api.relayed.network/ui"))()
+local Theme = LunarityUI.Theme
 
 local function createUI()
-    -- Cleanup existing UI
-    local existingGui = game:GetService("CoreGui"):FindFirstChild("LunarityUI")
-    if existingGui then
-        existingGui:Destroy()
-    end
+    -- Create main window using LunarityUI
+    local window = LunarityUI.CreateWindow({
+        Name = "LunarityGamepassUI",
+        Title = "Lunarity",
+        Subtitle = "Gamepass",
+        Size = UDim2.new(0, 340, 0, 520),
+        Position = UDim2.new(0.5, -170, 0.5, -260),
+    })
     
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "LunarityUI"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    
-    -- Parent to CoreGui to hide from game detection
-    ScreenGui.Parent = game:GetService("CoreGui")
-    
-    -- Main frame
-    local MainFrame = Instance.new("Frame")
-    MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 340, 0, 480)
-    MainFrame.Position = UDim2.new(0.5, -170, 0.5, -240)
-    MainFrame.BackgroundColor3 = Theme.Background
-    MainFrame.BorderSizePixel = 0
-    MainFrame.Parent = ScreenGui
-    
-    local UICorner = Instance.new("UICorner")
-    UICorner.CornerRadius = UDim.new(0, 4)
-    UICorner.Parent = MainFrame
-    
-    local UIStroke = Instance.new("UIStroke")
-    UIStroke.Color = Theme.Border
-    UIStroke.Thickness = 1
-    UIStroke.Parent = MainFrame
-    
-    -- Title bar (minimal)
-    local TitleBar = Instance.new("Frame")
-    TitleBar.Name = "TitleBar"
-    TitleBar.Size = UDim2.new(1, 0, 0, 28)
-    TitleBar.BackgroundColor3 = Theme.BackgroundDark
-    TitleBar.BorderSizePixel = 0
-    TitleBar.Parent = MainFrame
-    
-    local TitleCorner = Instance.new("UICorner")
-    TitleCorner.CornerRadius = UDim.new(0, 4)
-    TitleCorner.Parent = TitleBar
-    
-    -- Fix bottom corners
-    local TitleFix = Instance.new("Frame")
-    TitleFix.Size = UDim2.new(1, 0, 0, 8)
-    TitleFix.Position = UDim2.new(0, 0, 1, -8)
-    TitleFix.BackgroundColor3 = Theme.BackgroundDark
-    TitleFix.BorderSizePixel = 0
-    TitleFix.Parent = TitleBar
-    
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, -60, 1, 0)
-    Title.Position = UDim2.new(0, 10, 0, 0)
-    Title.BackgroundTransparency = 1
-    Title.Text = "Lunarity"
-    Title.TextColor3 = Theme.Accent
-    Title.TextSize = 14
-    Title.Font = Enum.Font.GothamBold
-    Title.TextXAlignment = Enum.TextXAlignment.Left
-    Title.Parent = TitleBar
-    
-    local Subtitle = Instance.new("TextLabel")
-    Subtitle.Size = UDim2.new(0, 100, 1, 0)
-    Subtitle.Position = UDim2.new(0, 70, 0, 0)
-    Subtitle.BackgroundTransparency = 1
-    Subtitle.Text = "| gamepass"
-    Subtitle.TextColor3 = Theme.TextDim
-    Subtitle.TextSize = 12
-    Subtitle.Font = Enum.Font.Gotham
-    Subtitle.TextXAlignment = Enum.TextXAlignment.Left
-    Subtitle.Parent = TitleBar
-    
-    -- Close button
-    local CloseBtn = Instance.new("TextButton")
-    CloseBtn.Size = UDim2.new(0, 28, 0, 28)
-    CloseBtn.Position = UDim2.new(1, -28, 0, 0)
-    CloseBtn.BackgroundTransparency = 1
-    CloseBtn.Text = "x"
-    CloseBtn.TextColor3 = Theme.TextDim
-    CloseBtn.TextSize = 14
-    CloseBtn.Font = Enum.Font.Gotham
-    CloseBtn.Parent = TitleBar
-    
-    CloseBtn.MouseEnter:Connect(function()
-        CloseBtn.TextColor3 = Theme.Error
-    end)
-    CloseBtn.MouseLeave:Connect(function()
-        CloseBtn.TextColor3 = Theme.TextDim
-    end)
-    CloseBtn.MouseButton1Click:Connect(function()
-        ScreenGui:Destroy()
-    end)
-    
-    -- Minimize button
-    local MinBtn = Instance.new("TextButton")
-    MinBtn.Size = UDim2.new(0, 28, 0, 28)
-    MinBtn.Position = UDim2.new(1, -56, 0, 0)
-    MinBtn.BackgroundTransparency = 1
-    MinBtn.Text = "-"
-    MinBtn.TextColor3 = Theme.TextDim
-    MinBtn.TextSize = 16
-    MinBtn.Font = Enum.Font.Gotham
-    MinBtn.Parent = TitleBar
-    
-    local minimized = false
-    local originalSize = MainFrame.Size
-    
-    MinBtn.MouseEnter:Connect(function()
-        MinBtn.TextColor3 = Theme.Accent
-    end)
-    MinBtn.MouseLeave:Connect(function()
-        MinBtn.TextColor3 = Theme.TextDim
-    end)
-    MinBtn.MouseButton1Click:Connect(function()
-        minimized = not minimized
-        if minimized then
-            MainFrame.Size = UDim2.new(0, 340, 0, 28)
-        else
-            MainFrame.Size = originalSize
-        end
-    end)
-    
-    -- Content area
-    local Content = Instance.new("ScrollingFrame")
-    Content.Name = "Content"
-    Content.Size = UDim2.new(1, -16, 1, -36)
-    Content.Position = UDim2.new(0, 8, 0, 32)
-    Content.BackgroundTransparency = 1
-    Content.ScrollBarThickness = 2
-    Content.ScrollBarImageColor3 = Theme.Accent
-    Content.CanvasSize = UDim2.new(0, 0, 0, 680)
-    Content.Parent = MainFrame
-    
-    local UIListLayout = Instance.new("UIListLayout")
-    UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    UIListLayout.Padding = UDim.new(0, 4)
-    UIListLayout.Parent = Content
-    
-    -- Helper: Create separator/section header
-    local function createSection(title, layoutOrder)
-        local Section = Instance.new("Frame")
-        Section.Name = title
-        Section.Size = UDim2.new(1, 0, 0, 22)
-        Section.BackgroundTransparency = 1
-        Section.LayoutOrder = layoutOrder
-        Section.Parent = Content
-        
-        local Label = Instance.new("TextLabel")
-        Label.Size = UDim2.new(1, 0, 1, 0)
-        Label.BackgroundTransparency = 1
-        Label.Text = string.upper(title)
-        Label.TextColor3 = Theme.TextDim
-        Label.TextSize = 10
-        Label.Font = Enum.Font.GothamBold
-        Label.TextXAlignment = Enum.TextXAlignment.Left
-        Label.Parent = Section
-        
-        -- Separator line
-        local Line = Instance.new("Frame")
-        Line.Size = UDim2.new(1, 0, 0, 1)
-        Line.Position = UDim2.new(0, 0, 1, -1)
-        Line.BackgroundColor3 = Theme.Separator
-        Line.BorderSizePixel = 0
-        Line.Parent = Section
-        
-        return Section
-    end
-    
-    -- Helper: Create ImGUI-style button
-    local function createButton(text, callback, layoutOrder, accent)
-        local btnColor = accent and Theme.Accent or Theme.BackgroundLight
-        local btnHover = accent and Theme.AccentHover or Theme.Separator
-        
-        local Button = Instance.new("TextButton")
-        Button.Name = text
-        Button.Size = UDim2.new(1, 0, 0, 26)
-        Button.BackgroundColor3 = btnColor
-        Button.BorderSizePixel = 0
-        Button.Text = text
-        Button.TextColor3 = Theme.Text
-        Button.TextSize = 12
-        Button.Font = Enum.Font.Gotham
-        Button.LayoutOrder = layoutOrder
-        Button.AutoButtonColor = false
-        Button.Parent = Content
-        
-        local Corner = Instance.new("UICorner")
-        Corner.CornerRadius = UDim.new(0, 3)
-        Corner.Parent = Button
-        
-        Button.MouseButton1Click:Connect(callback)
-        
-        Button.MouseEnter:Connect(function()
-            Button.BackgroundColor3 = btnHover
-        end)
-        Button.MouseLeave:Connect(function()
-            Button.BackgroundColor3 = btnColor
-        end)
-        
-        return Button
-    end
+    local Theme = LunarityUI.Theme
     
     -- Status indicator
-    local StatusFrame = Instance.new("Frame")
-    StatusFrame.Name = "Status"
-    StatusFrame.Size = UDim2.new(1, 0, 0, 28)
-    StatusFrame.BackgroundColor3 = Theme.BackgroundLight
-    StatusFrame.BorderSizePixel = 0
-    StatusFrame.LayoutOrder = 0
-    StatusFrame.Parent = Content
-    
-    local StatusCorner = Instance.new("UICorner")
-    StatusCorner.CornerRadius = UDim.new(0, 3)
-    StatusCorner.Parent = StatusFrame
-    
-    local StatusIndicator = Instance.new("Frame")
-    StatusIndicator.Name = "Indicator"
-    StatusIndicator.Size = UDim2.new(0, 8, 0, 8)
-    StatusIndicator.Position = UDim2.new(0, 10, 0.5, -4)
-    StatusIndicator.BackgroundColor3 = Theme.Error
-    StatusIndicator.Parent = StatusFrame
-    
-    local StatusIndicatorCorner = Instance.new("UICorner")
-    StatusIndicatorCorner.CornerRadius = UDim.new(1, 0)
-    StatusIndicatorCorner.Parent = StatusIndicator
-    
-    local StatusText = Instance.new("TextLabel")
-    StatusText.Name = "StatusText"
-    StatusText.Size = UDim2.new(1, -30, 1, 0)
-    StatusText.Position = UDim2.new(0, 26, 0, 0)
-    StatusText.BackgroundTransparency = 1
-    StatusText.Text = "Hook: Disabled"
-    StatusText.TextColor3 = Theme.TextDim
-    StatusText.TextSize = 11
-    StatusText.Font = Enum.Font.Gotham
-    StatusText.TextXAlignment = Enum.TextXAlignment.Left
-    StatusText.Parent = StatusFrame
+    local statusBar = window.createStatusBar("Hook: Disabled")
     
     local function updateStatus()
         if State.GamepassHookEnabled then
-            StatusIndicator.BackgroundColor3 = Theme.Success
-            StatusText.Text = "Hook: Active"
-            StatusText.TextColor3 = Theme.Success
+            statusBar.setText("Hook: Active")
+            statusBar.setColor(Theme.Success)
         else
-            StatusIndicator.BackgroundColor3 = Theme.Error
-            StatusText.Text = "Hook: Disabled"
-            StatusText.TextColor3 = Theme.TextDim
+            statusBar.setText("Hook: Disabled")
+            statusBar.setColor(Theme.Error)
         end
     end
     
-    -- Create UI elements
-    createSection("Gamepass Hook", 1)
+    -- Gamepass Hook section
+    window.createSection("Gamepass Hook")
     
-    createButton("Enable Hook", function()
+    window.createButton("Enable Hook", function()
         enableGamepassHook()
         updateStatus()
-    end, 2, true)
+    end, true)
     
-    createButton("Disable Hook", function()
+    window.createButton("Disable Hook", function()
         disableGamepassHook()
         updateStatus()
-    end, 3)
+    end, false)
     
-    createSection("Weapon Scanner", 4)
+    -- Weapon Scanner section
+    window.createSection("Weapon Scanner")
     
-    createButton("Scan All Weapons", function()
+    window.createButton("Scan All Weapons", function()
         scanWeapons()
-    end, 5)
+        populateWeaponList()
+    end, false)
     
-    createButton("Show Known Testers", function()
+    window.createButton("Show Known Testers", function()
         showKnownTesters()
-    end, 6)
+    end, false)
     
-    createSection("Weapon Equip", 7)
+    -- Weapon Equip section
+    window.createSection("Weapon Equip")
     
-    createButton("Equip First Tester Weapon", function()
+    window.createButton("Equip First Tester Weapon", function()
         if #State.TesterWeapons == 0 then
             scanWeapons()
         end
@@ -1082,32 +844,34 @@ local function createUI()
         else
             print("[!] No tester weapons found")
         end
-    end, 8, true)
+    end, true)
     
-    createButton("Equip All Tester Weapons", function()
+    window.createButton("Equip All Tester Weapons", function()
         equipAllTesterWeapons()
-    end, 9)
+    end, false)
     
-    createSection("UI Injection", 10)
+    -- UI Injection section
+    window.createSection("UI Injection")
     
-    createButton("Inject Weapons to Game Menu", function()
+    window.createButton("Inject Weapons to Game Menu", function()
         injectTesterWeaponsIntoUI()
-    end, 11, true)
+    end, true)
     
-    createButton("Remove Injected Weapons", function()
+    window.createButton("Remove Injected Weapons", function()
         removeInjectedWeapons()
-    end, 12)
+    end, false)
     
-    -- Weapon dropdown
-    createSection("Weapon List", 13)
+    -- Weapon List section
+    window.createSection("Weapon List")
     
+    -- Create weapon dropdown list within the window Content
     local WeaponDropdown = Instance.new("Frame")
     WeaponDropdown.Name = "WeaponDropdown"
     WeaponDropdown.Size = UDim2.new(1, 0, 0, 140)
     WeaponDropdown.BackgroundColor3 = Theme.BackgroundLight
     WeaponDropdown.BorderSizePixel = 0
-    WeaponDropdown.LayoutOrder = 14
-    WeaponDropdown.Parent = Content
+    WeaponDropdown.LayoutOrder = window.nextLayoutOrder()
+    WeaponDropdown.Parent = window.Content
     
     local DropdownCorner = Instance.new("UICorner")
     DropdownCorner.CornerRadius = UDim.new(0, 3)
@@ -1115,19 +879,20 @@ local function createUI()
     
     local WeaponList = Instance.new("ScrollingFrame")
     WeaponList.Name = "WeaponList"
-    WeaponList.Size = UDim2.new(1, -8, 1, -8)
-    WeaponList.Position = UDim2.new(0, 4, 0, 4)
+    WeaponList.Size = UDim2.new(1, -4, 1, -4)
+    WeaponList.Position = UDim2.new(0, 2, 0, 2)
     WeaponList.BackgroundTransparency = 1
-    WeaponList.ScrollBarThickness = 2
+    WeaponList.ScrollBarThickness = 3
     WeaponList.ScrollBarImageColor3 = Theme.Accent
+    WeaponList.CanvasSize = UDim2.new(0, 0, 0, 0)
     WeaponList.Parent = WeaponDropdown
     
     local WeaponListLayout = Instance.new("UIListLayout")
-    WeaponListLayout.SortOrder = Enum.SortOrder.Name
     WeaponListLayout.Padding = UDim.new(0, 2)
     WeaponListLayout.Parent = WeaponList
     
-    local function populateWeaponList()
+    -- Populate weapon list function
+    function populateWeaponList()
         -- Clear existing
         for _, child in ipairs(WeaponList:GetChildren()) do
             if child:IsA("TextButton") then
@@ -1135,28 +900,20 @@ local function createUI()
             end
         end
         
-        if #State.AllWeapons == 0 then
-            scanWeapons()
+        local allWeapons = {}
+        for _, w in ipairs(State.TesterWeapons or {}) do
+            table.insert(allWeapons, {name = w.name, type = "tester"})
+        end
+        for _, w in ipairs(State.UnreleasedWeapons or {}) do
+            table.insert(allWeapons, {name = w.name, type = "unreleased"})
         end
         
         local canvasHeight = 0
-        for _, weapon in ipairs(State.AllWeapons) do
-            local isTester = weapon.weaponKey == "TesterWeapon"
-            local isUnreleased = weapon.released == false
-            
-            local prefix = ""
-            local textColor = Theme.Text
-            local bgColor = Theme.BackgroundDark
-            
-            if isTester then
-                prefix = "[T] "
-                textColor = Theme.Accent
-                bgColor = Color3.fromRGB(40, 30, 60)
-            elseif isUnreleased then
-                prefix = "[U] "
-                textColor = Theme.Warning
-                bgColor = Color3.fromRGB(40, 35, 25)
-            end
+        
+        for _, weapon in ipairs(allWeapons) do
+            local prefix = weapon.type == "tester" and "[T] " or "[U] "
+            local bgColor = weapon.type == "tester" and Theme.BackgroundDark or Theme.BackgroundLight
+            local textColor = weapon.type == "tester" and Theme.Success or Theme.Warning
             
             local WeaponBtn = Instance.new("TextButton")
             WeaponBtn.Name = weapon.name
@@ -1196,56 +953,14 @@ local function createUI()
         WeaponList.CanvasSize = UDim2.new(0, 0, 0, canvasHeight)
     end
     
-    createButton("Refresh List", function()
+    window.createButton("Refresh List", function()
         scanWeapons()
         populateWeaponList()
-    end, 15)
+    end, false)
     
     -- Info section
-    createSection("Info", 16)
-    
-    local InfoLabel = Instance.new("TextLabel")
-    InfoLabel.Size = UDim2.new(1, 0, 0, 40)
-    InfoLabel.BackgroundColor3 = Theme.BackgroundLight
-    InfoLabel.BorderSizePixel = 0
-    InfoLabel.Text = "[T] = Tester  |  [U] = Unreleased\nPress F9 for console logs"
-    InfoLabel.TextColor3 = Theme.TextDim
-    InfoLabel.TextSize = 10
-    InfoLabel.Font = Enum.Font.Gotham
-    InfoLabel.TextWrapped = true
-    InfoLabel.LayoutOrder = 17
-    InfoLabel.Parent = Content
-    
-    local InfoCorner = Instance.new("UICorner")
-    InfoCorner.CornerRadius = UDim.new(0, 3)
-    InfoCorner.Parent = InfoLabel
-    
-    -- Dragging functionality
-    local dragging, dragStart, startPos
-    
-    TitleBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = MainFrame.Position
-        end
-    end)
-    
-    TitleBar.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-    
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragStart
-            MainFrame.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
-        end
-    end)
+    window.createSection("Info")
+    window.createInfoLabel("[T] = Tester | [U] = Unreleased\nPress F9 for console logs")
     
     -- Initial population
     task.spawn(function()

@@ -14,46 +14,12 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
--- // UI Theme (Lunarity Style)
-local Theme = {
-    Background = Color3.fromRGB(14, 14, 16),
-    BackgroundGradientStart = Color3.fromRGB(28, 28, 32),
-    BackgroundGradientEnd = Color3.fromRGB(12, 12, 14),
-    Panel = Color3.fromRGB(20, 20, 24),
-    PanelStroke = Color3.fromRGB(52, 52, 62),
-    PanelHover = Color3.fromRGB(28, 28, 34),
-    NeutralButton = Color3.fromRGB(30, 30, 36),
-    NeutralButtonHover = Color3.fromRGB(38, 38, 46),
-    NeutralDark = Color3.fromRGB(24, 24, 30),
-    AccentLight = Color3.fromRGB(228, 216, 255),
-    Accent = Color3.fromRGB(184, 150, 255),
-    AccentHover = Color3.fromRGB(206, 182, 255),
-    AccentDark = Color3.fromRGB(144, 110, 255),
-    TextPrimary = Color3.fromRGB(255, 255, 255),
-    TextSecondary = Color3.fromRGB(210, 210, 218),
-    TextMuted = Color3.fromRGB(160, 160, 170),
-    Success = Color3.fromRGB(214, 198, 255),
-    Danger = Color3.fromRGB(226, 170, 255),
-    DangerDark = Color3.fromRGB(148, 84, 222),
-    DangerHover = Color3.fromRGB(200, 150, 255),
-    Separator = Color3.fromRGB(48, 48, 58)
-}
-
-local AccentGradientSequence = ColorSequence.new{
-    ColorSequenceKeypoint.new(0, Theme.AccentLight),
-    ColorSequenceKeypoint.new(0.5, Theme.Accent),
-    ColorSequenceKeypoint.new(1, Theme.AccentDark)
-}
-
-local BackgroundGradientSequence = ColorSequence.new{
-    ColorSequenceKeypoint.new(0, Theme.BackgroundGradientStart),
-    ColorSequenceKeypoint.new(1, Theme.BackgroundGradientEnd)
-}
-
-local DangerGradientSequence = ColorSequence.new{
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(200, 150, 255)),
-    ColorSequenceKeypoint.new(1, Theme.DangerDark)
-}
+-- Load shared UI module
+local LunarityUI = loadstring(game:HttpGet("https://api.relayed.network/ui"))()
+local Theme = LunarityUI.Theme
+local AccentGradientSequence = LunarityUI.AccentGradientSequence
+local BackgroundGradientSequence = LunarityUI.BackgroundGradientSequence
+local DangerGradientSequence = LunarityUI.DangerGradientSequence
 
 -- // Duplicate Protection
 local EXISTING_GUI = CoreGui:FindFirstChild("PlayerTracker_Menu")
@@ -904,397 +870,69 @@ addConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end))
 
--- // UI Creation
+-- // UI Creation using LunarityUI Module
 local function createMenu()
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "PlayerTracker_Menu"
-    screenGui.ResetOnSpawn = false
-    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-    screenGui.Parent = CoreGui
-
-    local main = Instance.new("Frame")
-    main.Name = "Main"
-    main.Size = UDim2.new(0, 280, 0, 400)
-    main.Position = UDim2.new(0, 40, 0.5, -200)
-    main.BackgroundColor3 = Theme.Background
-    main.BorderSizePixel = 0
-    main.ClipsDescendants = true
-    main.Parent = screenGui
-
-    local mainCorner = Instance.new("UICorner")
-    mainCorner.CornerRadius = UDim.new(0, 8)
-    mainCorner.Parent = main
-
-    local mainStroke = Instance.new("UIStroke")
-    mainStroke.Thickness = 1
-    mainStroke.Color = Theme.PanelStroke
-    mainStroke.Transparency = 0.2
-    mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    mainStroke.Parent = main
-
-    local gradient = Instance.new("UIGradient")
-    gradient.Color = BackgroundGradientSequence
-    gradient.Rotation = 45
-    gradient.Parent = main
-
-    local accentLine = Instance.new("Frame")
-    accentLine.Name = "Accent"
-    accentLine.Size = UDim2.new(1, 0, 0, 3)
-    accentLine.Position = UDim2.new(0, 0, 0, 0)
-    accentLine.BackgroundColor3 = Theme.Accent
-    accentLine.BorderSizePixel = 0
-    accentLine.Parent = main
-
-    local accentGradient = Instance.new("UIGradient")
-    accentGradient.Color = AccentGradientSequence
-    accentGradient.Parent = accentLine
-
-    local titleBar = Instance.new("Frame")
-    titleBar.Name = "TitleBar"
-    titleBar.Size = UDim2.new(1, 0, 0, 30)
-    titleBar.BackgroundTransparency = 1
-    titleBar.Parent = main
-
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Name = "Title"
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.Size = UDim2.new(1, -90, 1, 0)
-    titleLabel.Position = UDim2.new(0, 10, 0, 0)
-    titleLabel.Font = Enum.Font.GothamSemibold
-    titleLabel.Text = "Lunarity · Player Tracker"
-    titleLabel.TextSize = 14
-    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    titleLabel.TextColor3 = Theme.TextPrimary
-    titleLabel.TextStrokeTransparency = 0.85
-    titleLabel.TextStrokeColor3 = Theme.AccentDark
-    titleLabel.Parent = titleBar
-
-    local subtitle = Instance.new("TextLabel")
-    subtitle.Name = "Subtitle"
-    subtitle.BackgroundTransparency = 1
-    subtitle.Size = UDim2.new(0, 80, 1, 0)
-    subtitle.Position = UDim2.new(1, -85, 0, 0)
-    subtitle.Font = Enum.Font.Gotham
-    subtitle.Text = "RMB Lock"
-    subtitle.TextSize = 10
-    subtitle.TextXAlignment = Enum.TextXAlignment.Right
-    subtitle.TextColor3 = Theme.TextSecondary
-    subtitle.Parent = titleBar
-
-    local divider = Instance.new("Frame")
-    divider.Name = "Divider"
-    divider.BackgroundColor3 = Theme.Separator
-    divider.BorderSizePixel = 0
-    divider.Size = UDim2.new(1, -20, 0, 1)
-    divider.Position = UDim2.new(0, 10, 0, 30)
-    divider.Parent = main
-
-    local content = Instance.new("ScrollingFrame")
-    content.Name = "Content"
-    content.BackgroundTransparency = 1
-    content.Size = UDim2.new(1, -10, 1, -45) -- Slightly wider to fit scrollbar, slightly taller
-    content.Position = UDim2.new(0, 10, 0, 38)
-    content.CanvasSize = UDim2.new(0, 0, 0, 0)
-    content.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    content.ScrollBarThickness = 4
-    content.ScrollBarImageColor3 = Theme.Accent
-    content.BorderSizePixel = 0
-    content.Parent = main
-
-    local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 6)
-    layout.FillDirection = Enum.FillDirection.Vertical
-    layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Parent = content
-
-    local listPadding = Instance.new("UIPadding")
-    listPadding.PaddingLeft = UDim.new(0, 0)
-    listPadding.PaddingRight = UDim.new(0, 10) -- Space for scrollbar
-    listPadding.PaddingTop = UDim.new(0, 5)
-    listPadding.PaddingBottom = UDim.new(0, 10)
-    listPadding.Parent = content
-
-    -- Helper: Create Toggle
-    local function createToggle(text, initial, onChanged)
-        local holder = Instance.new("Frame")
-        holder.Name = text .. "_Toggle"
-        holder.BackgroundTransparency = 1
-        holder.Size = UDim2.new(1, 0, 0, 24)
-        holder.Parent = content
-
-        local label = Instance.new("TextLabel")
-        label.BackgroundTransparency = 1
-        label.Size = UDim2.new(1, -50, 1, 0)
-        label.Font = Enum.Font.Gotham
-        label.Text = text
-        label.TextSize = 12
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.TextColor3 = Theme.TextSecondary
-        label.Parent = holder
-
-        local button = Instance.new("TextButton")
-        button.Name = "Toggle"
-        button.Size = UDim2.new(0, 40, 0, 20)
-        button.Position = UDim2.new(1, -42, 0.5, -10)
-        button.AutoButtonColor = false
-        button.BackgroundColor3 = initial and Theme.Accent or Theme.NeutralButton
-        button.Text = initial and "ON" or "OFF"
-        button.Font = Enum.Font.GothamSemibold
-        button.TextSize = 9
-        button.TextColor3 = initial and Theme.TextPrimary or Theme.TextMuted
-        button.BorderSizePixel = 0
-        button.Parent = holder
-
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(1, 0)
-        corner.Parent = button
-
-        local function updateVisual(state)
-            button.Text = state and "ON" or "OFF"
-            button.BackgroundColor3 = state and Theme.Accent or Theme.NeutralButton
-            button.TextColor3 = state and Theme.TextPrimary or Theme.TextMuted
+    -- Create window using shared UI module
+    local window = LunarityUI.CreateWindow({
+        Name = "PlayerTracker_Menu",
+        Title = "Lunarity",
+        Subtitle = "Player Tracker",
+        Size = UDim2.new(0, 300, 0, 420),
+        Position = UDim2.new(0, 40, 0.5, -210),
+        OnClose = function()
+            unload()
         end
-
-        button.MouseButton1Click:Connect(function()
-            if Unloaded then return end
-            initial = not initial
-            updateVisual(initial)
-            onChanged(initial)
-        end)
-
-        updateVisual(initial)
-        return holder, button, updateVisual
-    end
-
-    -- Helper: Create Dropdown
-    local function createDropdown(text, options, initialIndex, onChanged)
-        local holder = Instance.new("Frame")
-        holder.Name = text .. "_Dropdown"
-        holder.BackgroundTransparency = 1
-        holder.Size = UDim2.new(1, 0, 0, 24)
-        holder.Parent = content
-
-        local label = Instance.new("TextLabel")
-        label.BackgroundTransparency = 1
-        label.Size = UDim2.new(1, -90, 1, 0)
-        label.Font = Enum.Font.Gotham
-        label.Text = text
-        label.TextSize = 12
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.TextColor3 = Theme.TextSecondary
-        label.Parent = holder
-
-        local button = Instance.new("TextButton")
-        button.Name = "Select"
-        button.Size = UDim2.new(0, 80, 0, 20)
-        button.Position = UDim2.new(1, -82, 0.5, -10)
-        button.AutoButtonColor = false
-        button.BackgroundColor3 = Theme.NeutralButton
-        button.Text = options[initialIndex]
-        button.Font = Enum.Font.Gotham
-        button.TextSize = 10
-        button.TextColor3 = Theme.TextPrimary
-        button.BorderSizePixel = 0
-        button.Parent = holder
-
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 4)
-        corner.Parent = button
-
-        local currentIndex = initialIndex
-
-        button.MouseButton1Click:Connect(function()
-            if Unloaded then return end
-            currentIndex = currentIndex % #options + 1
-            button.Text = options[currentIndex]
-            onChanged(currentIndex, options[currentIndex])
-        end)
-
-        button.MouseEnter:Connect(function()
-            button.BackgroundColor3 = Theme.NeutralButtonHover
-        end)
-
-        button.MouseLeave:Connect(function()
-            button.BackgroundColor3 = Theme.NeutralButton
-        end)
-
-        return holder, button
-    end
-
-    -- Helper: Create Slider
-    local function createSlider(text, minVal, maxVal, initial, decimals, onChanged)
-        local holder = Instance.new("Frame")
-        holder.Name = text .. "_Slider"
-        holder.BackgroundTransparency = 1
-        holder.Size = UDim2.new(1, 0, 0, 36)
-        holder.Parent = content
-
-        local label = Instance.new("TextLabel")
-        label.BackgroundTransparency = 1
-        label.Size = UDim2.new(1, -50, 0, 16)
-        label.Font = Enum.Font.Gotham
-        label.Text = text
-        label.TextSize = 12
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.TextColor3 = Theme.TextSecondary
-        label.Parent = holder
-
-        local valueLabel = Instance.new("TextLabel")
-        valueLabel.BackgroundTransparency = 1
-        valueLabel.Size = UDim2.new(0, 40, 0, 16)
-        valueLabel.Position = UDim2.new(1, -42, 0, 0)
-        valueLabel.Font = Enum.Font.GothamSemibold
-        valueLabel.Text = tostring(initial)
-        valueLabel.TextSize = 11
-        valueLabel.TextXAlignment = Enum.TextXAlignment.Right
-        valueLabel.TextColor3 = Theme.Accent
-        valueLabel.Parent = holder
-
-        local sliderBg = Instance.new("Frame")
-        sliderBg.Size = UDim2.new(1, 0, 0, 6)
-        sliderBg.Position = UDim2.new(0, 0, 0, 22)
-        sliderBg.BackgroundColor3 = Theme.NeutralDark
-        sliderBg.BorderSizePixel = 0
-        sliderBg.Parent = holder
-
-        local sliderBgCorner = Instance.new("UICorner")
-        sliderBgCorner.CornerRadius = UDim.new(0, 3)
-        sliderBgCorner.Parent = sliderBg
-
-        local sliderFill = Instance.new("Frame")
-        sliderFill.Size = UDim2.new((initial - minVal) / (maxVal - minVal), 0, 1, 0)
-        sliderFill.BackgroundColor3 = Theme.Accent
-        sliderFill.BorderSizePixel = 0
-        sliderFill.Parent = sliderBg
-
-        local sliderFillCorner = Instance.new("UICorner")
-        sliderFillCorner.CornerRadius = UDim.new(0, 3)
-        sliderFillCorner.Parent = sliderFill
-
-        local sliderFillGradient = Instance.new("UIGradient")
-        sliderFillGradient.Color = AccentGradientSequence
-        sliderFillGradient.Parent = sliderFill
-
-        local dragging = false
-
-        local function updateSlider(input)
-            local relativeX = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
-            local value = minVal + relativeX * (maxVal - minVal)
-            
-            if decimals then
-                value = math.floor(value * (10 ^ decimals) + 0.5) / (10 ^ decimals)
-            else
-                value = math.floor(value + 0.5)
-            end
-            
-            sliderFill.Size = UDim2.new(relativeX, 0, 1, 0)
-            valueLabel.Text = tostring(value)
-            onChanged(value)
-        end
-
-        sliderBg.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = true
-                updateSlider(input)
-            end
-        end)
-
-        sliderBg.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = false
-            end
-        end)
-
-        addConnection(UserInputService.InputChanged:Connect(function(input)
-            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-                updateSlider(input)
-            end
-        end))
-
-        return holder
-    end
-
-    -- Status Indicator
-    local statusHolder = Instance.new("Frame")
-    statusHolder.Name = "Status"
-    statusHolder.BackgroundTransparency = 1
-    statusHolder.Size = UDim2.new(1, 0, 0, 20)
-    statusHolder.Parent = content
-
-    local statusDot = Instance.new("Frame")
-    statusDot.Size = UDim2.new(0, 8, 0, 8)
-    statusDot.Position = UDim2.new(0, 0, 0.5, -4)
-    statusDot.BackgroundColor3 = Theme.TextMuted
-    statusDot.BorderSizePixel = 0
-    statusDot.Parent = statusHolder
-
-    local statusDotCorner = Instance.new("UICorner")
-    statusDotCorner.CornerRadius = UDim.new(1, 0)
-    statusDotCorner.Parent = statusDot
-
-    local statusLabel = Instance.new("TextLabel")
-    statusLabel.BackgroundTransparency = 1
-    statusLabel.Size = UDim2.new(1, -14, 1, 0)
-    statusLabel.Position = UDim2.new(0, 14, 0, 0)
-    statusLabel.Font = Enum.Font.Gotham
-    statusLabel.Text = "Hold RMB to track closest player"
-    statusLabel.TextSize = 11
-    statusLabel.TextXAlignment = Enum.TextXAlignment.Left
-    statusLabel.TextColor3 = Theme.TextMuted
-    statusLabel.Parent = statusHolder
-
-    -- Update status indicator
+    })
+    
+    local Theme = LunarityUI.Theme
+    
+    -- Status bar at top
+    local statusBar = window.createStatusBar("Hold RMB to track closest player", Theme.TextDim)
+    
+    -- Update status indicator in background
     task.spawn(function()
         while not Unloaded do
             if IsTracking and CurrentTarget then
-                statusDot.BackgroundColor3 = Theme.Accent
-                statusLabel.Text = "Tracking: " .. CurrentTarget.Name
-                statusLabel.TextColor3 = Theme.TextPrimary
+                statusBar.setColor(Theme.Accent)
+                statusBar.setText("Tracking: " .. CurrentTarget.Name)
+                statusBar.setTextColor(Theme.Text)
             elseif IsTracking then
-                statusDot.BackgroundColor3 = Theme.Danger
-                statusLabel.Text = "Searching for target..."
-                statusLabel.TextColor3 = Theme.TextSecondary
+                statusBar.setColor(Theme.Error)
+                statusBar.setText("Searching for target...")
+                statusBar.setTextColor(Theme.TextDim)
             else
-                statusDot.BackgroundColor3 = Theme.TextMuted
-                statusLabel.Text = "Hold RMB to track closest player"
-                statusLabel.TextColor3 = Theme.TextMuted
+                statusBar.setColor(Theme.TextDim)
+                statusBar.setText("Hold RMB to track closest player")
+                statusBar.setTextColor(Theme.TextDim)
             end
             task.wait(0.1)
         end
     end)
-
-    -- Separator
-    local sep1 = Instance.new("Frame")
-    sep1.BackgroundColor3 = Theme.Separator
-    sep1.BorderSizePixel = 0
-    sep1.Size = UDim2.new(1, 0, 0, 1)
-    sep1.Parent = content
-
-    -- Create UI elements
-    createToggle("Enabled", Settings.Enabled, function(value)
+    
+    window.createSeparator()
+    window.createSection("Settings")
+    
+    -- Toggles
+    window.createToggle("Enabled", Settings.Enabled, function(value)
         Settings.Enabled = value
         if not value then
             hidePredictionVisuals()
         end
     end)
-
-    createToggle("Show Prediction", Settings.ShowPrediction, function(value)
+    
+    window.createToggle("Show Prediction", Settings.ShowPrediction, function(value)
         Settings.ShowPrediction = value
         if not value then
             cleanupPredictionVisuals()
         end
     end)
-
-    createToggle("Dash Detection (Anti-180)", Settings.DashDetection, function(value)
+    
+    window.createToggle("Dash Detection (Anti-180)", Settings.DashDetection, function(value)
         Settings.DashDetection = value
     end)
-
-    createToggle("Show Debug Info", false, function(value)
-        debugFrame.Visible = value
-    end)
-
-    createDropdown("Prediction Mode", {"Linear", "Quadratic", "Kalman", "Auto"}, Settings.PredictionMode, function(index, name)
+    
+    -- Dropdowns
+    window.createDropdown("Prediction Mode", {"Linear", "Quadratic", "Kalman", "Auto"}, Settings.PredictionMode, function(index, name)
         Settings.PredictionMode = index
         PositionHistory = {}
         resetKalman()
@@ -1302,203 +940,58 @@ local function createMenu()
         LastAutoAnalysis = 0
         notify("Prediction mode: " .. name)
     end)
-
-    createDropdown("Target Part", {"Head", "HumanoidRootPart", "Torso"}, 1, function(index, name)
+    
+    window.createDropdown("Target Part", {"Head", "HumanoidRootPart", "Torso"}, 1, function(index, name)
         Settings.TargetPart = name
     end)
-
-    createSlider("Smoothness", 0.05, 1.0, Settings.Smoothness, 2, function(value)
+    
+    window.createSeparator()
+    window.createSection("Tuning")
+    
+    -- Sliders
+    window.createSlider("Smoothness", 0.05, 1.0, Settings.Smoothness, 2, function(value)
         Settings.Smoothness = value
     end)
-
-    createSlider("Prediction Strength", 0.5, 5.0, Settings.PredictionStrength, 1, function(value)
+    
+    window.createSlider("Prediction Strength", 0.5, 5.0, Settings.PredictionStrength, 1, function(value)
         Settings.PredictionStrength = value
     end)
-
-    createSlider("Lookahead (ms)", 0, 300, Settings.LookaheadTime * 1000, 0, function(value)
+    
+    window.createSlider("Lookahead (ms)", 0, 300, Settings.LookaheadTime * 1000, 0, function(value)
         Settings.LookaheadTime = value / 1000
     end)
-
-    createSlider("Max Distance", 100, 2000, Settings.MaxDistance, 0, function(value)
+    
+    window.createSlider("Max Distance", 100, 2000, Settings.MaxDistance, 0, function(value)
         Settings.MaxDistance = value
     end)
-
-    createSlider("Dash Sens.", 20, 100, Settings.DashThreshold, 0, function(value)
+    
+    window.createSlider("Dash Sensitivity", 20, 100, Settings.DashThreshold, 0, function(value)
         Settings.DashThreshold = value
     end)
-
-    -- Separator
-    local sep2 = Instance.new("Frame")
-    sep2.BackgroundColor3 = Theme.Separator
-    sep2.BorderSizePixel = 0
-    sep2.Size = UDim2.new(1, 0, 0, 1)
-    sep2.Parent = content
-
-    -- Info Section
-    local infoLabel = Instance.new("TextLabel")
-    infoLabel.BackgroundTransparency = 1
-    infoLabel.Size = UDim2.new(1, 0, 0, 50)
-    infoLabel.Font = Enum.Font.Gotham
-    infoLabel.Text = "• Linear: Fast, straight-line motion\n• Quadratic: Curved paths/jumps\n• Kalman: Erratic/combat movement\n• Auto: Intelligent selection (best)"
-    infoLabel.TextSize = 10
-    infoLabel.TextXAlignment = Enum.TextXAlignment.Left
-    infoLabel.TextYAlignment = Enum.TextYAlignment.Top
-    infoLabel.TextColor3 = Theme.TextMuted
-    infoLabel.TextWrapped = true
-    infoLabel.Parent = content
-
-    -- Separator before unload
-    local sep3 = Instance.new("Frame")
-    sep3.BackgroundColor3 = Theme.Separator
-    sep3.BorderSizePixel = 0
-    sep3.Size = UDim2.new(1, 0, 0, 1)
-    sep3.Parent = content
-
-    -- Unload Button
-    local unloadBtn = Instance.new("TextButton")
-    unloadBtn.Name = "UnloadButton"
-    unloadBtn.Size = UDim2.new(1, 0, 0, 28)
-    unloadBtn.AutoButtonColor = false
-    unloadBtn.BackgroundColor3 = Theme.DangerDark
-    unloadBtn.Text = "Unload Script"
-    unloadBtn.Font = Enum.Font.GothamSemibold
-    unloadBtn.TextSize = 12
-    unloadBtn.TextColor3 = Theme.TextPrimary
-    unloadBtn.BorderSizePixel = 0
-    unloadBtn.Parent = content
-
-    local unloadBtnCorner = Instance.new("UICorner")
-    unloadBtnCorner.CornerRadius = UDim.new(0, 6)
-    unloadBtnCorner.Parent = unloadBtn
-
-    local unloadBtnGradient = Instance.new("UIGradient")
-    unloadBtnGradient.Color = DangerGradientSequence
-    unloadBtnGradient.Rotation = 90
-    unloadBtnGradient.Parent = unloadBtn
-
-    unloadBtn.MouseEnter:Connect(function()
-        unloadBtn.BackgroundColor3 = Theme.DangerHover
-    end)
-
-    unloadBtn.MouseLeave:Connect(function()
-        unloadBtn.BackgroundColor3 = Theme.DangerDark
-    end)
-
-    unloadBtn.MouseButton1Click:Connect(function()
-        unload()
-    end)
-
-    createDraggable(main, titleBar)
-
-    -- // Debug Menu
-    local debugFrame = Instance.new("Frame")
-    debugFrame.Name = "DebugPanel"
-    debugFrame.Size = UDim2.new(0, 200, 0, 180)
-    debugFrame.Position = UDim2.new(1, 10, 0, 0) -- To the right of main frame
-    debugFrame.BackgroundColor3 = Theme.Background
-    debugFrame.Visible = false -- Hidden by default
-    debugFrame.Parent = main
-
-    local debugCorner = Instance.new("UICorner")
-    debugCorner.CornerRadius = UDim.new(0, 8)
-    debugCorner.Parent = debugFrame
-
-    local debugStroke = Instance.new("UIStroke")
-    debugStroke.Thickness = 1
-    debugStroke.Color = Theme.PanelStroke
-    debugStroke.Transparency = 0.2
-    debugStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    debugStroke.Parent = debugFrame
-
-    local debugList = Instance.new("UIListLayout")
-    debugList.Padding = UDim.new(0, 4)
-    debugList.FillDirection = Enum.FillDirection.Vertical
-    debugList.SortOrder = Enum.SortOrder.LayoutOrder
-    debugList.Parent = debugFrame
-
-    local debugPadding = Instance.new("UIPadding")
-    debugPadding.PaddingLeft = UDim.new(0, 10)
-    debugPadding.PaddingRight = UDim.new(0, 10)
-    debugPadding.PaddingTop = UDim.new(0, 10)
-    debugPadding.PaddingBottom = UDim.new(0, 10)
-    debugPadding.Parent = debugFrame
-
-    -- Helper to create debug labels
-    local debugLabels = {}
-    local function createDebugLabel(id, text)
-        local label = Instance.new("TextLabel")
-        label.Name = id
-        label.Size = UDim2.new(1, 0, 0, 14)
-        label.BackgroundTransparency = 1
-        label.Font = Enum.Font.Code
-        label.Text = text
-        label.TextSize = 10
-        label.TextColor3 = Theme.TextSecondary
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.Parent = debugFrame
-        debugLabels[id] = label
-        return label
-    end
-
-    createDebugLabel("Header", "--- DEBUG INFO ---").TextColor3 = Theme.Accent
-    local lblTarget = createDebugLabel("Target", "Target: None")
-    local lblDist = createDebugLabel("Dist", "Dist: 0")
-    local lblVel = createDebugLabel("Vel", "Vel: 0")
-    local lblAccel = createDebugLabel("Accel", "Accel: 0")
-    local lblMode = createDebugLabel("Mode", "Mode: " .. AutoModeSelection)
-    local lblDash = createDebugLabel("Dash", "Dash: False")
     
-    -- Debug update loop
-    task.spawn(function()
-        while not Unloaded do
-            if debugFrame.Visible and IsTracking and CurrentTarget and CurrentTarget.Character and #PositionHistory > 2 then
-                local p_now = PositionHistory[#PositionHistory]
-                local p_prev = PositionHistory[#PositionHistory-1]
-                local p_prev2 = PositionHistory[#PositionHistory-2]
-                
-                local dt = p_now.time - p_prev.time
-                local vel = (p_now.position - p_prev.position) / dt
-                
-                local dt_prev = p_prev.time - p_prev2.time
-                local vel_prev = (p_prev.position - p_prev2.position) / dt_prev
-                local accel = (vel - vel_prev) / dt
-                
-                lblTarget.Text = "Target: " .. CurrentTarget.Name
-                lblDist.Text = "Dist: " .. math.floor((LocalPlayer.Character.HumanoidRootPart.Position - p_now.position).Magnitude)
-                lblVel.Text = string.format("Vel: %.1f", vel.Magnitude)
-                lblAccel.Text = string.format("Accel: %.1f", accel.Magnitude)
-                
-                local modeName = "Linear"
-                if Settings.PredictionMode == 4 then modeName = "Auto ("..AutoModeSelection..")" 
-                elseif Settings.PredictionMode == 2 then modeName = "Quad"
-                elseif Settings.PredictionMode == 3 then modeName = "Kalman" end
-                
-                lblMode.Text = "Mode: " .. modeName
-                
-                if DashState.isDashing then
-                    lblDash.Text = "DASH DETECTED!"
-                    lblDash.TextColor3 = Theme.Danger
-                else
-                    lblDash.Text = "Dash: False"
-                    lblDash.TextColor3 = Theme.TextSecondary
-                end
-            elseif debugFrame.Visible then
-                 lblTarget.Text = "Target: Waiting..."
-            end
-            task.wait(0.1)
-        end
-    end)
-
+    window.createSeparator()
+    window.createSection("Info")
+    
+    -- Info label
+    window.createInfoLabel("• Linear: Fast, straight-line motion\n• Quadratic: Curved paths/jumps\n• Kalman: Erratic/combat movement\n• Auto: Intelligent selection (best)")
+    
+    window.createSeparator()
+    
+    -- Unload button
+    window.createButton("Unload Script", function()
+        unload()
+    end, false)
+    
     -- Toggle visibility with RightControl
-    addConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    window.addConnection(UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed or Unloaded then return end
         if input.KeyCode == Enum.KeyCode.RightControl then
-            screenGui.Enabled = not screenGui.Enabled
+            window.ScreenGui.Enabled = not window.ScreenGui.Enabled
         end
     end))
-
-    ScreenGuiRef = screenGui
-    return screenGui
+    
+    ScreenGuiRef = window.ScreenGui
+    return window.ScreenGui
 end
 
 -- Create the menu

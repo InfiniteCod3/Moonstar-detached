@@ -14,6 +14,13 @@ const CONFIG = {
     encryptionKey: "LunarityXOR2025!SecretKey", // XOR encryption key for payload obfuscation
     discordWebhook: "https://discord.com/api/webhooks/1424094994129485915/tj3RnyDn8DqMprbe-3Is4yuz-shQsHe--r4baFAQ9vGRdRaYqrENVeY92NR2DGUs7u94",
     scripts: {
+        lunarityUI: {
+            kvKey: "LunarityUI.lua",
+            label: "Lunarity UI Module",
+            description: "Shared ImGUI-style UI framework for all Lunarity scripts",
+            version: "1.0.0",
+            enabled: true,
+        },
         lunarity: {
             kvKey: "lunarity.lua",
             label: "Lunarity · IFrames",
@@ -71,16 +78,16 @@ const CONFIG = {
 const API_KEYS = {
     "demo-dev-key": {
         label: "Developer",
-        allowedScripts: ["lunarity", "doorEsp", "teleport", "remoteLogger", "aetherShitter", "playerTracker", "gamepassUnlocker"],
+        allowedScripts: ["lunarityUI", "lunarity", "doorEsp", "teleport", "remoteLogger", "aetherShitter", "playerTracker", "gamepassUnlocker"],
     },
     "test-key-123": {
         label: "Tester",
-        allowedScripts: ["lunarity", "doorEsp", "teleport", "playerTracker", "gamepassUnlocker"],
+        allowedScripts: ["lunarityUI", "lunarity", "doorEsp", "teleport", "playerTracker", "gamepassUnlocker"],
     },
     // Add more keys here:
     // "your-custom-key": {
     //     label: "Your Name",
-    //     allowedScripts: ["lunarity", "doorEsp", "teleport"],
+    //     allowedScripts: ["lunarityUI", "lunarity", "doorEsp", "teleport"],
     // },
 };
 
@@ -525,6 +532,26 @@ export default {
 
         if (url.pathname === "/" || url.pathname === "/loader") {
             return handleLoader(env);
+        }
+
+        // Serve LunarityUI module directly for scripts to load
+        if (url.pathname === "/ui" || url.pathname === "/LunarityUI") {
+            const source = await env.SCRIPTS.get("LunarityUI.lua", "text");
+            if (!source) {
+                return new Response("-- LunarityUI not uploaded to KV", {
+                    status: 503,
+                    headers: {
+                        "content-type": "text/plain; charset=utf-8",
+                        "cache-control": "no-store",
+                    },
+                });
+            }
+            return new Response(source, {
+                headers: {
+                    "content-type": "text/plain; charset=utf-8",
+                    "cache-control": "no-store",
+                },
+            });
         }
 
         if (url.pathname === "/authorize" && request.method === "POST") {

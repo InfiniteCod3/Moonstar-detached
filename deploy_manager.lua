@@ -1,5 +1,6 @@
 local SCRIPTS = {
     { id = "loader", label = "Loader", needsPreprocess = false },
+    { id = "LunarityUI", label = "LunarityUI (Shared)", needsPreprocess = false },
     { id = "lunarity", label = "Lunarity", needsPreprocess = true },
     { id = "DoorESP", label = "DoorESP", needsPreprocess = true },
     { id = "Teleport", label = "Teleport", needsPreprocess = false },
