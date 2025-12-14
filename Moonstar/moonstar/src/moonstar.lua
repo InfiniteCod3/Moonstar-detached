@@ -240,7 +240,7 @@ local Presets   = {
         };
 
         Compression = {
-            Enabled = true;
+            Enabled = false;
             FastMode = true;  -- Prioritize decompression speed for Roblox
             Preseed = true;
             BWT = true;

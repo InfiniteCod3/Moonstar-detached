@@ -8,19 +8,12 @@ local SCRIPTS = {
     { id = "PlayerTracker", label = "PlayerTracker", needsPreprocess = false },
 }
 
--- Check for compression flag and parallel setting
-local COMPRESSION_MODE = nil  -- nil, "default", "balanced", or "fast"
-local PARALLEL_TESTS = 4
+-- Check for compression flag
+local ENABLE_COMPRESSION = false
 
 for _, v in ipairs(arg or {}) do
     if v == "--compress" or v == "--compression" then
-        COMPRESSION_MODE = "default"
-    elseif v == "--compress-balanced" then
-        COMPRESSION_MODE = "balanced"
-    elseif v == "--compress-fast" then
-        COMPRESSION_MODE = "fast"
-    elseif v:match("^--parallel=") then
-        PARALLEL_TESTS = tonumber(v:match("^--parallel=(.+)$")) or 4
+        ENABLE_COMPRESSION = true
     end
 end
 
@@ -43,10 +36,8 @@ end
 
 local function obfuscate(scriptName, usePreprocessed)
     print("  [+] Obfuscating " .. scriptName .. " (Strong Preset)...")
-    if COMPRESSION_MODE then
-        local mode_label = COMPRESSION_MODE == "default" and "Default" or 
-                           COMPRESSION_MODE == "balanced" and "Balanced" or "Fast"
-        print("      (Compression Enabled: " .. mode_label .. ")")
+    if ENABLE_COMPRESSION then
+        print("      (Compression Enabled)")
     end
     local input = usePreprocessed and ("../" .. scriptName .. ".preprocessed.lua") or ("../" .. scriptName .. ".lua")
     local output = "../" .. scriptName .. ".obfuscated.lua"
@@ -54,14 +45,8 @@ local function obfuscate(scriptName, usePreprocessed)
     -- We cd into Moonstar because it likely depends on relative paths for its modules
     local cmd = "cd Moonstar && lua moonstar.lua " .. input .. " " .. output .. " --preset=Strong"
     
-    if COMPRESSION_MODE then
-        if COMPRESSION_MODE == "balanced" then
-            cmd = cmd .. " --compress-balanced --parallel=" .. tostring(PARALLEL_TESTS)
-        elseif COMPRESSION_MODE == "fast" then
-            cmd = cmd .. " --compress-fast --parallel=" .. tostring(PARALLEL_TESTS)
-        else
-            cmd = cmd .. " --compress --parallel=" .. tostring(PARALLEL_TESTS)
-        end
+    if ENABLE_COMPRESSION then
+        cmd = cmd .. " --compress"
     end
     
     return run_command(cmd)
