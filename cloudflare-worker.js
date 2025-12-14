@@ -56,6 +56,13 @@ const CONFIG = {
             version: "1.0.0",
             enabled: true,
         },
+        gamepassUnlocker: {
+            kvKey: "GamepassUnlocker.lua",
+            label: "Gamepass Unlocker",
+            description: "Gamepass bypass proof of concept with namecall hooking and weapon injection",
+            version: "1.0.0",
+            enabled: true,
+        },
     },
 };
 
@@ -64,11 +71,11 @@ const CONFIG = {
 const API_KEYS = {
     "demo-dev-key": {
         label: "Developer",
-        allowedScripts: ["lunarity", "doorEsp", "teleport", "remoteLogger", "aetherShitter", "playerTracker"],
+        allowedScripts: ["lunarity", "doorEsp", "teleport", "remoteLogger", "aetherShitter", "playerTracker", "gamepassUnlocker"],
     },
     "test-key-123": {
         label: "Tester",
-        allowedScripts: ["lunarity", "doorEsp", "teleport", "playerTracker"],
+        allowedScripts: ["lunarity", "doorEsp", "teleport", "playerTracker", "gamepassUnlocker"],
     },
     // Add more keys here:
     // "your-custom-key": {

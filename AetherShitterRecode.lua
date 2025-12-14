@@ -1,24 +1,33 @@
--- // Aetherfall Shitter // --
--- // Recoded with Lunarity UI Style // --
+--[[
+    ╔═══════════════════════════════════════════════════════════════╗
+    ║                    AETHERFALL SHITTER                        ║
+    ║                     Recode Edition                           ║
+    ║                                                               ║
+    ║  Features:                                                    ║
+    ║  • Enemy Debuffs (Stun/Ragdoll/Freeze/Slow)                 ║
+    ║  • Mass Attacks (Affect all non-whitelisted players)        ║
+    ║  • Auto Attack & Mouse Aimbot                               ║
+    ║  • Welds Exploits (Fling/Void/Bring)                        ║
+    ║  • Anti-Knockback, IFrames, Anti-Debuff                     ║
+    ║  • Input Spoofing (Force Dash/Ultimate/Block/Transform)     ║
+    ╚═══════════════════════════════════════════════════════════════╝
+]]--
 
+-- // Services
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
 local LOADER_SCRIPT_ID = "aetherShitter"
 local LoaderAccess = rawget(getgenv(), "LunarityAccess")
-local HttpService = game:GetService("HttpService")
-
-local HttpRequestInvoker
-if typeof(http_request) == "function" then
-    HttpRequestInvoker = http_request
-elseif typeof(syn) == "table" and typeof(syn.request) == "function" then
-    HttpRequestInvoker = syn.request
-elseif typeof(request) == "function" then
-    HttpRequestInvoker = request
-elseif typeof(http) == "table" and typeof(http.request) == "function" then
-    HttpRequestInvoker = http.request
-elseif HttpService and HttpService.RequestAsync then
-    HttpRequestInvoker = function(options)
-        return HttpService:RequestAsync(options)
-    end
-end
+local ScriptActive = true
 
 -- XOR encryption/decryption for payload obfuscation (matches loader)
 local function xorCrypt(input, key)
@@ -68,122 +77,144 @@ local function encryptPayload(plainText, key)
     return base64Encode(encrypted)
 end
 
-local function buildValidateUrl()
-    if not LoaderAccess then return nil end
-    if typeof(LoaderAccess.validateUrl) == "string" then
-        return LoaderAccess.validateUrl
-    elseif typeof(LoaderAccess.baseUrl) == "string" then
-        return LoaderAccess.baseUrl .. "/validate"
-    end
-    return nil
-end
+local HttpRequestInvoker
 
-local function requestLoaderValidation(refresh)
-    if not LoaderAccess then return false, "Missing loader token" end
-    if not HttpRequestInvoker then return false, "Executor lacks HTTP support" end
-    local validateUrl = buildValidateUrl()
-    if not validateUrl then return false, "Validation endpoint unavailable" end
-
-    local payload = {
-        token = LoaderAccess.token,
-        scriptId = LOADER_SCRIPT_ID,
-        refresh = refresh ~= false,
-    }
-
-    local encodedOk, encodedPayload = pcall(HttpService.JSONEncode, HttpService, payload)
-    if not encodedOk then return false, "Failed to encode validation payload" end
-
-    -- Encrypt the payload if encryption key is available
-    local requestBody = encodedPayload
-    if LoaderAccess.encryptionKey then
-        requestBody = encryptPayload(encodedPayload, LoaderAccess.encryptionKey)
-    end
-
-    local success, response = pcall(HttpRequestInvoker, {
-        Url = validateUrl,
-        Method = "POST",
-        Headers = {
-            ["Content-Type"] = "application/json",
-            ["Accept"] = "application/json",
-            ["User-Agent"] = LoaderAccess.userAgent or "LunarityLoader/1.0",
-        },
-        Body = requestBody,
-    })
-
-    if not success then return false, tostring(response) end
-
-    local statusCode = response.StatusCode or response.Status or response.status_code
-    local bodyText = response.Body or response.body or ""
-    if statusCode and (statusCode < 200 or statusCode >= 300) then
-        return false, bodyText ~= "" and bodyText or ("HTTP " .. tostring(statusCode))
-    end
-
-    local decodeOk, decoded = pcall(HttpService.JSONDecode, HttpService, bodyText)
-    if not decodeOk then return false, "Invalid JSON from worker" end
-
-    if decoded.ok ~= true then return false, decoded.reason or "Validation denied" end
-
-    -- Dynamic token rotation: update the token if a new one was provided
-    if decoded.newToken and typeof(decoded.newToken) == "string" then
-        LoaderAccess.token = decoded.newToken
-    end
-
-    return true, decoded
-end
-
-local function enforceLoaderWhitelist()
-    if not LoaderAccess or LoaderAccess.scriptId ~= LOADER_SCRIPT_ID then
-        warn("[AetherShitter] This script must be loaded via the official loader.")
-        return false
-    end
-
-    local ok, response = requestLoaderValidation(true)
-    if not ok then
-        warn("[AetherShitter] Loader validation failed: " .. tostring(response))
-        return false
-    end
-
-    if response.killSwitch then
-        warn("[AetherShitter] Loader kill switch active. Aborting.")
-        return false
-    end
-
-    local refreshInterval = math.clamp(LoaderAccess.refreshInterval or 90, 30, 240)
-    task.spawn(function()
-        while true do
-            task.wait(refreshInterval)
-            local valid, data = requestLoaderValidation(true)
-            if not valid or (data and data.killSwitch) then
-                warn("[AetherShitter] Access revoked or kill switch triggered. Unloading.")
-                -- Implement self-destruct/unload here if needed
-                local CoreGui = game:GetService("CoreGui")
-                local existing = CoreGui:FindFirstChild("AetherShitter_Menu")
-                if existing then existing:Destroy() end
-                local selector = CoreGui:FindFirstChild("AetherShitter_Selector")
-                if selector then selector:Destroy() end
-                break
-            end
+do
+    if typeof(http_request) == "function" then
+        HttpRequestInvoker = http_request
+    elseif typeof(syn) == "table" and typeof(syn.request) == "function" then
+        HttpRequestInvoker = syn.request
+    elseif typeof(request) == "function" then
+        HttpRequestInvoker = request
+    elseif typeof(http) == "table" and typeof(http.request) == "function" then
+        HttpRequestInvoker = http.request
+    elseif HttpService and HttpService.RequestAsync then
+        HttpRequestInvoker = function(options)
+            return HttpService:RequestAsync(options)
         end
-    end)
+    end
 
-    getgenv().LunarityAccess = nil
-    return true
+    local function buildValidateUrl()
+        if not LoaderAccess then
+            return nil
+        end
+        if typeof(LoaderAccess.validateUrl) == "string" then
+            return LoaderAccess.validateUrl
+        elseif typeof(LoaderAccess.baseUrl) == "string" then
+            return LoaderAccess.baseUrl .. "/validate"
+        end
+        return nil
+    end
+
+    local function requestLoaderValidation(refresh)
+        if not LoaderAccess then
+            return false, "Loader access token missing"
+        end
+        if not HttpRequestInvoker then
+            return false, "Executor lacks HTTP support"
+        end
+        local validateUrl = buildValidateUrl()
+        if not validateUrl then
+            return false, "Validation endpoint unavailable"
+        end
+
+        local payload = {
+            token = LoaderAccess.token,
+            scriptId = LOADER_SCRIPT_ID,
+            refresh = refresh ~= false,
+        }
+
+        local encodedOk, encodedPayload = pcall(HttpService.JSONEncode, HttpService, payload)
+        if not encodedOk then
+            return false, "Failed to encode validation payload"
+        end
+
+        -- Encrypt the payload if encryption key is available
+        local requestBody = encodedPayload
+        if LoaderAccess.encryptionKey then
+            requestBody = encryptPayload(encodedPayload, LoaderAccess.encryptionKey)
+        end
+
+        local success, response = pcall(HttpRequestInvoker, {
+            Url = validateUrl,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json",
+                ["Accept"] = "application/json",
+                ["User-Agent"] = LoaderAccess.userAgent or "LunarityLoader/1.0",
+            },
+            Body = requestBody,
+        })
+
+        if not success then
+            return false, tostring(response)
+        end
+
+        local statusCode = response.StatusCode or response.Status or response.status_code
+        local bodyText = response.Body or response.body or ""
+        if statusCode and (statusCode < 200 or statusCode >= 300) then
+            return false, bodyText ~= "" and bodyText or ("HTTP " .. tostring(statusCode))
+        end
+
+        local decodeOk, decoded = pcall(HttpService.JSONDecode, HttpService, bodyText)
+        if not decodeOk then
+            return false, "Invalid JSON from worker"
+        end
+
+        if decoded.ok ~= true then
+            return false, decoded.reason or "Validation denied"
+        end
+
+        -- Dynamic token rotation: update the token if a new one was provided
+        if decoded.newToken and typeof(decoded.newToken) == "string" then
+            LoaderAccess.token = decoded.newToken
+        end
+
+        return true, decoded
+    end
+
+    local function enforceLoaderWhitelist()
+        if not LoaderAccess or LoaderAccess.scriptId ~= LOADER_SCRIPT_ID then
+            warn("[AetherShitter] This build must be launched via the official loader.")
+            return false
+        end
+
+        local ok, response = requestLoaderValidation(true)
+        if not ok then
+            warn("[AetherShitter] Loader validation failed: " .. tostring(response))
+            return false
+        end
+
+        if response.killSwitch then
+            warn("[AetherShitter] Loader kill switch active. Aborting.")
+            return false
+        end
+
+        local refreshInterval = math.clamp(LoaderAccess.refreshInterval or 90, 30, 240)
+        task.spawn(function()
+            while ScriptActive do
+                task.wait(refreshInterval)
+                local valid, data = requestLoaderValidation(true)
+                if not valid or (data and data.killSwitch) then
+                    warn("[AetherShitter] Access revoked or kill switch activated. Shutting down.")
+                    ScriptActive = false
+                    break
+                end
+            end
+        end)
+
+        getgenv().LunarityAccess = nil
+        return true
+    end
+
+    if not enforceLoaderWhitelist() then
+        return
+    end
 end
 
-if not enforceLoaderWhitelist() then return end
-
--- // Services
-local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local CoreGui = game:GetService("CoreGui")
-local HttpService = game:GetService("HttpService")
-local TweenService = game:GetService("TweenService")
-
-local LocalPlayer = Players.LocalPlayer
-local Camera = Workspace.CurrentCamera
+-- // ============================
+-- // SCRIPT FUNCTIONALITY STARTS HERE
+-- // ============================
 
 -- // Remotes
 local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
@@ -247,12 +278,26 @@ local Settings = {
     AutoRemoveSkills = false,
     AttacherVisible = false,
     LoopVoid = false,
-    MapShield = false,
+    -- Input/Aimbot Settings
+    AutoAttack = false,
+    MouseSpoof = false,
+    -- Troll Features (Affect Others via Welds - these still work)
+    SpinTarget = false,
+    TrapUnderground = false,
+    AttachToTarget = false,
+    PlayerCentipede = false, -- Chain all players in a line
+    PuppetMode = false, -- Control target like a puppet
+    CentipedeSpacing = 4, -- Space between players in centipede
+    -- Fakery
+    SelectedTrait = nil,
+    SelectedTitle = nil,
     Whitelist = {[LocalPlayer.Name] = true},
-    TargetName = nil -- For Attacher/Orbit
+    TargetName = nil, -- For Attacher/Orbit
+    -- Self Ragdoll (uses RagdollTrigger BoolValue - no remote needed)
+    SelfRagdoll = false
 }
 
-local DEBUG_MODE = true -- Toggle this to enable/disable debug prints
+local DEBUG_MODE = false -- Set to true for debug output
 local DEBUFF_BLACKLIST = {
     ["Stunned"] = true,
     ["Freeze"] = true,
@@ -379,38 +424,228 @@ task.spawn(function()
     end
 end)
 
--- Map Shield Logic
+-- Auto Attack Logic
 task.spawn(function()
+    local inputRemote = Remotes and Remotes:FindFirstChild("Input")
     while not Unloaded do
-        if Settings.MapShield and WeldsRemote then
-             local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-             if localHRP then
-                 -- Only scan parts within radius to reduce lag
-                 local radius = 200
-                 for _, obj in pairs(Workspace:GetDescendants()) do
-                    if Unloaded or not Settings.MapShield then break end
-                    if obj:IsA("BasePart") and not obj.Parent:FindFirstChild("Humanoid") and not obj:IsDescendantOf(LocalPlayer.Character) then
-                         if (obj.Position - localHRP.Position).Magnitude < radius then
-                             local offset = Vector3.new(math.random(-12, 12), math.random(-5, 15), math.random(-12, 12))
-                             -- Identity CFrame
-                             local cf1 = CFrame.new(0,0,0) 
-                             local cf2 = CFrame.new(0,0,0)
-                             
-                             pcall(function()
-                                 WeldsRemote:FireServer(localHRP, obj, cf1, offset, cf2)
-                             end)
-                         end
-                    end
-                    -- Yield occasionally to prevent crash
-                    if math.random() > 0.95 then task.wait() end
-                 end
-             end
-             task.wait(0.1)
+        if Settings.AutoAttack and inputRemote then
+            inputRemote:FireServer("Click")
+            task.wait(0.1)
         else
-             task.wait(1)
+            task.wait(0.5)
         end
     end
 end)
+
+-- Mouse Position Spoof (Aimbot) - Sends enemy position as mouse target
+task.spawn(function()
+    local mousePosRemote = Remotes and Remotes:FindFirstChild("mousePos")
+    while not Unloaded do
+        if Settings.MouseSpoof and mousePosRemote and Settings.TargetName then
+            local target = Players:FindFirstChild(Settings.TargetName)
+            if target and target.Character then
+                local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
+                if targetHRP then
+                    mousePosRemote:FireServer(targetHRP.Position)
+                end
+            end
+            task.wait(0.05)
+        else
+            task.wait(0.5)
+        end
+    end
+end)
+
+-- Spin Target Logic (Rotates target using Welds)
+task.spawn(function()
+    local spinAngle = 0
+    while not Unloaded do
+        if Settings.SpinTarget and WeldsRemote and Settings.TargetName then
+            local target = Players:FindFirstChild(Settings.TargetName)
+            if target and target.Character then
+                local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
+                local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if targetHRP and localHRP then
+                    spinAngle = spinAngle + 0.5
+                    local spinCF = CFrame.Angles(0, spinAngle, 0)
+                    local cf1 = CFrame.new(0, 0, 0)
+                    local offset = Vector3.new(0, 0, 0)
+                    WeldsRemote:FireServer(targetHRP, targetHRP, cf1, offset, spinCF)
+                end
+            end
+            task.wait(0.05)
+        else
+            spinAngle = 0
+            task.wait(0.5)
+        end
+    end
+end)
+
+-- Trap Underground Logic (Welds target below ground)
+local function TrapTargetUnderground()
+    if not WeldsRemote then return notify("Welds Remote not found") end
+    if not Settings.TargetName then return notify("No target selected!") end
+    
+    local target = Players:FindFirstChild(Settings.TargetName)
+    if target and target.Character then
+        local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
+        local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if targetHRP and localHRP then
+            local cf1 = CFrame.new(0, -50, 0)
+            local offset = Vector3.new(0, -50, 0)
+            local cf2 = CFrame.new(0, 0, 0)
+            WeldsRemote:FireServer(targetHRP, localHRP, cf1, offset, cf2)
+            notify("Trapped " .. Settings.TargetName .. " underground")
+        end
+    end
+end
+
+-- Attach to Target Logic (Parasite mode - you follow them)
+task.spawn(function()
+    while not Unloaded do
+        if Settings.AttachToTarget and WeldsRemote and Settings.TargetName then
+            local target = Players:FindFirstChild(Settings.TargetName)
+            if target and target.Character then
+                local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
+                local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if targetHRP and localHRP then
+                    local cf1 = CFrame.new(0, 0, 0)
+                    local offset = Vector3.new(0, 3, -2) -- Behind and above them
+                    local cf2 = CFrame.new(0, 0, 0)
+                    WeldsRemote:FireServer(localHRP, targetHRP, cf1, offset, cf2)
+                end
+            end
+            task.wait(0.1)
+        else
+            task.wait(0.5)
+        end
+    end
+end)
+
+-- Player Centipede Logic (Chain all players in a line following you)
+local lastLocalCFrame = nil
+task.spawn(function()
+    while not Unloaded do
+        if Settings.PlayerCentipede and WeldsRemote then
+            local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if localHRP then
+                local players = GetUnwhitelistedPlayers()
+                local spacing = Settings.CentipedeSpacing or 4
+                
+                -- Chain each player behind the previous one
+                for i, player in ipairs(players) do
+                    if player.Character then
+                        local targetHRP = player.Character:FindFirstChild("HumanoidRootPart")
+                        if targetHRP then
+                            -- Calculate position: behind the local player in a line
+                            local behindOffset = Vector3.new(0, 0, spacing * i)
+                            local cf1 = CFrame.new(0, 0, 0)
+                            local cf2 = CFrame.new(0, 0, 0)
+                            
+                            -- Weld each player to your HRP with increasing Z offset
+                            WeldsRemote:FireServer(targetHRP, localHRP, cf1, behindOffset, cf2)
+                        end
+                    end
+                end
+            end
+            task.wait(0.15) -- Smooth update
+        else
+            task.wait(0.5)
+        end
+    end
+end)
+
+-- Puppet Mode Logic (Target mirrors your movement like a puppet)
+local puppetLastCFrame = nil
+task.spawn(function()
+    while not Unloaded do
+        if Settings.PuppetMode and WeldsRemote and Settings.TargetName then
+            local target = Players:FindFirstChild(Settings.TargetName)
+            local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            
+            if target and target.Character and localHRP then
+                local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
+                if targetHRP then
+                    -- Get current local position and movement delta
+                    local currentCFrame = localHRP.CFrame
+                    
+                    if puppetLastCFrame then
+                        -- Calculate how much we moved
+                        local delta = currentCFrame.Position - puppetLastCFrame.Position
+                        
+                        -- Mirror the movement: same direction but on their position
+                        -- They move in the same direction as you (puppet follows)
+                        local mirrorOffset = delta
+                        
+                        -- Keep them at a fixed offset but make them "move with" you
+                        local cf1 = CFrame.new(0, 0, 0)
+                        local offset = Vector3.new(3, 0, 3) -- 3 studs to the side and front
+                        local cf2 = CFrame.new(0, 0, 0)
+                        
+                        WeldsRemote:FireServer(targetHRP, localHRP, cf1, offset, cf2)
+                    end
+                    
+                    puppetLastCFrame = currentCFrame
+                end
+            else
+                puppetLastCFrame = nil
+            end
+            task.wait(0.05) -- Very fast updates for smooth puppeting
+        else
+            puppetLastCFrame = nil
+            task.wait(0.5)
+        end
+    end
+end)
+
+-- Get All Weapons from Game
+local function GetAllWeapons()
+    local weapons = {}
+    local weaponsFolder = ReplicatedStorage:FindFirstChild("Weapons")
+    if weaponsFolder then
+        for _, weapon in pairs(weaponsFolder:GetChildren()) do
+            table.insert(weapons, weapon.Name)
+        end
+    end
+    table.sort(weapons)
+    return weapons
+end
+
+-- Get All Traits from Game
+local function GetAllTraits()
+    local traits = {}
+    local traitsFolder = ReplicatedStorage:FindFirstChild("Traits")
+    if traitsFolder then
+        for _, trait in pairs(traitsFolder:GetChildren()) do
+            local displayName = trait:GetAttribute("DisplayName") or trait.Name
+            table.insert(traits, {
+                Name = trait.Name,
+                DisplayName = displayName,
+                Cost = trait:GetAttribute("Cost") or 0,
+                Info = trait:GetAttribute("Information") or "No info"
+            })
+        end
+    end
+    table.sort(traits, function(a, b) return a.Cost < b.Cost end)
+    return traits
+end
+
+-- Get All Titles from Game
+local function GetAllTitles()
+    local titles = {}
+    local titlesFolder = ReplicatedStorage:FindFirstChild("Titles")
+    if titlesFolder then
+        for _, title in pairs(titlesFolder:GetChildren()) do
+            table.insert(titles, {
+                Name = title.Name,
+                Value = title.Value, -- The actual title text
+                Kills = title:GetAttribute("Kills") or 0
+            })
+        end
+    end
+    table.sort(titles, function(a, b) return a.Kills < b.Kills end)
+    return titles
+end
 
 local function BlowEveryone()
     if not WeldsRemote then return notify("Welds Remote not found") end
@@ -542,70 +777,6 @@ local function TargetAction(action)
          WeldsRemote:FireServer(localHRP, targetHRP, localHRP.CFrame, vecZero, cfZero)
          notify("Brought " .. targetName)
     end
-end
-
-local function RemoveMap()
-    if not WeldsRemote then return notify("Welds Remote not found") end
-    
-    notify("Removing map...")
-    debugLog("RemoveMap started")
-    task.spawn(function()
-        local count = 0
-        for _, obj in pairs(Workspace:GetDescendants()) do
-            if Unloaded then break end
-            if obj:IsA("BasePart") and obj.Parent and not obj.Parent:FindFirstChild("Humanoid") then
-                local cf1 = CFrame.new(
-                    -3028.2375, 3101.8884, 308.0635, 
-                    -0.9139, -2.541e-08, 0.4057, 
-                    -4.904e-08, 1, -4.783e-08, 
-                    -0.4057, -6.361e-08, -0.9139
-                )
-                local vec1 = Vector3.new(-2.0289, -9999, 4.5698)
-                local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
-                
-                local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                
-                if localHRP then
-                    WeldsRemote:FireServer(localHRP, obj, cf1, vec1, cf2)
-                    count = count + 1
-                    if count % 100 == 0 then debugLog("Removed " .. count .. " parts so far...") end
-                    if count % 10 == 0 then task.wait() end
-                end
-            end
-        end
-        notify("Map remove complete (" .. count .. " parts)")
-        debugLog("RemoveMap complete. Total: " .. count)
-    end)
-end
-
-local function BringMap()
-    if not WeldsRemote then return notify("Welds Remote not found") end
-    
-    notify("Bringing map...")
-    debugLog("BringMap started")
-    task.spawn(function()
-        local count = 0
-        for _, obj in pairs(Workspace:GetDescendants()) do
-            if Unloaded then break end
-            if obj:IsA("BasePart") and obj.Parent and not obj.Parent:FindFirstChild("Humanoid") and not obj:IsDescendantOf(LocalPlayer.Character) then
-                 local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                
-                if localHRP then
-                    -- Random offset to create a "shield" or "mess" around player without crashing physics
-                    local offset = Vector3.new(math.random(-15, 15), math.random(-5, 15), math.random(-15, 15))
-                    
-                    -- Identity CFrame for rotation, relative position
-                    local cf1 = CFrame.new(0,0,0) 
-                    local cf2 = CFrame.new(0,0,0)
-                    
-                    WeldsRemote:FireServer(localHRP, obj, cf1, offset, cf2)
-                    count = count + 1
-                    if count % 50 == 0 then task.wait() end -- Faster than remove
-                end
-            end
-        end
-        notify("Map brought (" .. count .. " parts)")
-    end)
 end
 
 -- Auto Remove Skills Loop
@@ -749,10 +920,30 @@ task.spawn(function()
 end)
 
 -- IFrames
-local PlayerStatus = nil
-pcall(function()
-    PlayerStatus = require(ReplicatedStorage.Modules.PlayerStatus)
-end)
+-- NOTE: Exploits cannot require() Roblox modules directly.
+-- Instead, we fire the Status remote directly using the same protocol.
+local StatusRemote = Remotes and Remotes:FindFirstChild("Status")
+
+local function ApplyStatus(statusName, duration)
+    -- This fires the remote using the same format the game's PlayerStatus module uses on the client
+    -- See: ReplicatedStorage.Modules.PlayerStatus.ApplyStatus (lines 119-126 in the original module)
+    if StatusRemote then
+        StatusRemote:FireServer({
+            ApplyStatus = true,
+            Status = statusName,
+            Length = duration or false
+        })
+    end
+end
+
+-- Fake PlayerStatus table for backwards compatibility with existing code
+local PlayerStatus = {
+    ApplyStatus = function(self, character, statusName, duration)
+        -- The remote doesn't need the character - it applies to LocalPlayer anyway
+        -- For affecting others, this is server-validated - the client request is just for self
+        ApplyStatus(statusName, duration)
+    end
+}
 
 task.spawn(function()
     while not Unloaded do
@@ -774,7 +965,16 @@ local function createSelectorUI()
     screenGui.Name = "AetherShitter_Selector"
     screenGui.ResetOnSpawn = false
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    screenGui.IgnoreGuiInset = true
     screenGui.Parent = CoreGui
+    
+    -- Protect GUI from detection if possible
+    if syn and syn.protect_gui then
+        syn.protect_gui(screenGui)
+    elseif protect_gui then
+        protect_gui(screenGui)
+    end
+    
     screenGui.Enabled = false -- Hidden by default
 
     local frame = Instance.new("Frame")
@@ -905,7 +1105,15 @@ local function createMenu()
     screenGui.Name = "AetherShitter_Menu"
     screenGui.ResetOnSpawn = false
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    screenGui.IgnoreGuiInset = true
     screenGui.Parent = CoreGui
+    
+    -- Protect GUI from detection if possible
+    if syn and syn.protect_gui then
+        syn.protect_gui(screenGui)
+    elseif protect_gui then
+        protect_gui(screenGui)
+    end
 
     local main = Instance.new("Frame")
     main.Name = "Main"
@@ -1126,19 +1334,344 @@ local function createMenu()
     createButton("Void Target", Theme.Danger, function() TargetAction("Void") end)
     createButton("Fling Target", Theme.Danger, function() TargetAction("Fling") end)
     createButton("Bring Target", Theme.Accent, function() TargetAction("Bring") end)
-
-
-
+    
+    -- [ Attack Exploits ] --
+    createSection("Attack Exploits")
+    
+    createToggle("Auto Attack (Click Spam)", Settings.AutoAttack, function(val)
+        Settings.AutoAttack = val
+        if val then notify("Auto Attack Enabled") end
+    end)
+    
+    createToggle("Mouse Aimbot (Target)", Settings.MouseSpoof, function(val)
+        Settings.MouseSpoof = val
+        if val then 
+            if not Settings.TargetName then
+                notify("Select a target first!")
+            else
+                notify("Aimbot Enabled for: " .. Settings.TargetName) 
+            end
+        end
+    end)
+    
+    createButton("Force Input: Dash", Theme.NeutralButton, function()
+        local inputRemote = Remotes and Remotes:FindFirstChild("Input")
+        if inputRemote then
+            inputRemote:FireServer("Q")
+            notify("Fired Dash Input")
+        end
+    end)
+    
+    createButton("Force Input: Ultimate", Theme.Accent, function()
+        local inputRemote = Remotes and Remotes:FindFirstChild("Input")
+        if inputRemote then
+            inputRemote:FireServer("G")
+            notify("Fired Ultimate Input")
+        end
+    end)
+    
+    createButton("Force Input: Block", Theme.NeutralButton, function()
+        local inputRemote = Remotes and Remotes:FindFirstChild("Input")
+        if inputRemote then
+            inputRemote:FireServer("F")
+            notify("Fired Block Input")
+        end
+    end)
+    
+    createButton("Force Input: Transform", Theme.Success, function()
+        local inputRemote = Remotes and Remotes:FindFirstChild("Input")
+        if inputRemote then
+            inputRemote:FireServer("T")
+            notify("Fired Transform Input")
+        end
+    end)
+    
+    -- [ Troll Features ] --
+    createSection("Troll Features")
+    
+    createToggle("Spin Target", Settings.SpinTarget, function(val)
+        Settings.SpinTarget = val
+        if val then 
+            if not Settings.TargetName then
+                notify("Select a target first!")
+            else
+                notify("Spinning " .. Settings.TargetName)
+            end
+        end
+    end)
+    
+    createButton("Trap Underground", Theme.DangerDark, TrapTargetUnderground)
+    
+    createToggle("Attach to Target (Parasite)", Settings.AttachToTarget, function(val)
+        Settings.AttachToTarget = val
+        if val then 
+            if not Settings.TargetName then
+                notify("Select a target first!")
+            else
+                notify("Attached to " .. Settings.TargetName)
+            end
+        end
+    end)
+    
+    createToggle("Player Centipede", Settings.PlayerCentipede, function(val)
+        Settings.PlayerCentipede = val
+        if val then 
+            notify("Centipede Mode! Everyone follows you in a line!")
+        else
+            notify("Centipede Disabled")
+        end
+    end)
+    
+    createToggle("Puppet Mode (Target)", Settings.PuppetMode, function(val)
+        Settings.PuppetMode = val
+        if val then 
+            if not Settings.TargetName then
+                notify("Select a target first!")
+            else
+                notify("Puppeting " .. Settings.TargetName .. "!")
+            end
+        else
+            notify("Puppet Mode Disabled")
+        end
+    end)
+    
+    -- [ Trait & Title Faker ] --
+    createSection("Trait & Title Faker")
+    
+    -- Trait Faker
+    local traitLabel = Instance.new("TextLabel")
+    traitLabel.Text = "Selected Trait: None"
+    traitLabel.Font = Enum.Font.Gotham
+    traitLabel.TextSize = 11
+    traitLabel.TextColor3 = Theme.TextSecondary
+    traitLabel.Size = UDim2.new(1, 0, 0, 16)
+    traitLabel.BackgroundTransparency = 1
+    traitLabel.TextXAlignment = Enum.TextXAlignment.Left
+    traitLabel.Parent = content
+    
+    -- Trait Dropdown
+    local traitDropdownHolder = Instance.new("Frame")
+    traitDropdownHolder.Size = UDim2.new(1, 0, 0, 28)
+    traitDropdownHolder.BackgroundTransparency = 1
+    traitDropdownHolder.ClipsDescendants = false
+    traitDropdownHolder.Parent = content
+    
+    local traitDropdownBtn = Instance.new("TextButton")
+    traitDropdownBtn.Size = UDim2.new(1, 0, 1, 0)
+    traitDropdownBtn.BackgroundColor3 = Theme.NeutralButton
+    traitDropdownBtn.Text = "Select Trait..."
+    traitDropdownBtn.TextColor3 = Theme.TextSecondary
+    traitDropdownBtn.Font = Enum.Font.Gotham
+    traitDropdownBtn.TextSize = 12
+    traitDropdownBtn.BorderSizePixel = 0
+    traitDropdownBtn.Parent = traitDropdownHolder
+    
+    local traitDropCorner = Instance.new("UICorner")
+    traitDropCorner.CornerRadius = UDim.new(0, 6)
+    traitDropCorner.Parent = traitDropdownBtn
+    
+    -- Trait List Frame
+    local traitListFrame = Instance.new("Frame")
+    traitListFrame.Size = UDim2.new(1, 0, 0, 150)
+    traitListFrame.Position = UDim2.new(0, 0, 1, 2)
+    traitListFrame.BackgroundColor3 = Theme.Panel
+    traitListFrame.BorderSizePixel = 0
+    traitListFrame.Visible = false
+    traitListFrame.ZIndex = 50
+    traitListFrame.Parent = traitDropdownHolder
+    
+    local traitListCorner = Instance.new("UICorner")
+    traitListCorner.CornerRadius = UDim.new(0, 6)
+    traitListCorner.Parent = traitListFrame
+    
+    local traitListStroke = Instance.new("UIStroke")
+    traitListStroke.Color = Theme.PanelStroke
+    traitListStroke.Thickness = 1
+    traitListStroke.Parent = traitListFrame
+    
+    local traitScroll = Instance.new("ScrollingFrame")
+    traitScroll.Size = UDim2.new(1, -4, 1, -4)
+    traitScroll.Position = UDim2.new(0, 2, 0, 2)
+    traitScroll.BackgroundTransparency = 1
+    traitScroll.ScrollBarThickness = 3
+    traitScroll.ScrollBarImageColor3 = Theme.Accent
+    traitScroll.ZIndex = 51
+    traitScroll.Parent = traitListFrame
+    
+    local traitListLayout = Instance.new("UIListLayout")
+    traitListLayout.Padding = UDim.new(0, 2)
+    traitListLayout.Parent = traitScroll
+    
+    -- Populate traits
+    local allTraits = GetAllTraits()
+    for _, traitData in pairs(allTraits) do
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -4, 0, 22)
+        btn.BackgroundColor3 = Theme.NeutralDark
+        btn.Text = traitData.DisplayName .. " (" .. traitData.Cost .. " souls)"
+        btn.TextColor3 = Theme.TextSecondary
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 10
+        btn.BorderSizePixel = 0
+        btn.ZIndex = 52
+        btn.Parent = traitScroll
+        
+        local btnCorner = Instance.new("UICorner")
+        btnCorner.CornerRadius = UDim.new(0, 4)
+        btnCorner.Parent = btn
+        
+        btn.MouseButton1Click:Connect(function()
+            Settings.SelectedTrait = traitData.Name
+            traitDropdownBtn.Text = traitData.DisplayName
+            traitLabel.Text = "Selected: " .. traitData.DisplayName .. " (" .. traitData.Info .. ")"
+            traitListFrame.Visible = false
+        end)
+    end
+    
+    traitListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        traitScroll.CanvasSize = UDim2.new(0, 0, 0, traitListLayout.AbsoluteContentSize.Y + 4)
+    end)
+    
+    traitDropdownBtn.MouseButton1Click:Connect(function()
+        traitListFrame.Visible = not traitListFrame.Visible
+    end)
+    
+    createButton("Equip Selected Trait", Theme.Success, function()
+        if not Settings.SelectedTrait then
+            return notify("Select a trait first!")
+        end
+        
+        local traitsRemote = Remotes and Remotes:FindFirstChild("Traits")
+        if traitsRemote then
+            traitsRemote:FireServer({
+                Equip = true,
+                Trait = Settings.SelectedTrait
+            })
+            notify("Equipped Trait: " .. Settings.SelectedTrait)
+        else
+            notify("Traits remote not found!")
+        end
+    end)
+    
+    -- Title Faker
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Text = "Selected Title: None"
+    titleLabel.Font = Enum.Font.Gotham
+    titleLabel.TextSize = 11
+    titleLabel.TextColor3 = Theme.TextSecondary
+    titleLabel.Size = UDim2.new(1, 0, 0, 16)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = content
+    
+    -- Title Dropdown
+    local titleDropdownHolder = Instance.new("Frame")
+    titleDropdownHolder.Size = UDim2.new(1, 0, 0, 28)
+    titleDropdownHolder.BackgroundTransparency = 1
+    titleDropdownHolder.ClipsDescendants = false
+    titleDropdownHolder.Parent = content
+    
+    local titleDropdownBtn = Instance.new("TextButton")
+    titleDropdownBtn.Size = UDim2.new(1, 0, 1, 0)
+    titleDropdownBtn.BackgroundColor3 = Theme.NeutralButton
+    titleDropdownBtn.Text = "Select Title..."
+    titleDropdownBtn.TextColor3 = Theme.TextSecondary
+    titleDropdownBtn.Font = Enum.Font.Gotham
+    titleDropdownBtn.TextSize = 12
+    titleDropdownBtn.BorderSizePixel = 0
+    titleDropdownBtn.Parent = titleDropdownHolder
+    
+    local titleDropCorner = Instance.new("UICorner")
+    titleDropCorner.CornerRadius = UDim.new(0, 6)
+    titleDropCorner.Parent = titleDropdownBtn
+    
+    -- Title List Frame
+    local titleListFrame = Instance.new("Frame")
+    titleListFrame.Size = UDim2.new(1, 0, 0, 150)
+    titleListFrame.Position = UDim2.new(0, 0, 1, 2)
+    titleListFrame.BackgroundColor3 = Theme.Panel
+    titleListFrame.BorderSizePixel = 0
+    titleListFrame.Visible = false
+    titleListFrame.ZIndex = 50
+    titleListFrame.Parent = titleDropdownHolder
+    
+    local titleListCorner = Instance.new("UICorner")
+    titleListCorner.CornerRadius = UDim.new(0, 6)
+    titleListCorner.Parent = titleListFrame
+    
+    local titleListStroke = Instance.new("UIStroke")
+    titleListStroke.Color = Theme.PanelStroke
+    titleListStroke.Thickness = 1
+    titleListStroke.Parent = titleListFrame
+    
+    local titleScroll = Instance.new("ScrollingFrame")
+    titleScroll.Size = UDim2.new(1, -4, 1, -4)
+    titleScroll.Position = UDim2.new(0, 2, 0, 2)
+    titleScroll.BackgroundTransparency = 1
+    titleScroll.ScrollBarThickness = 3
+    titleScroll.ScrollBarImageColor3 = Theme.Accent
+    titleScroll.ZIndex = 51
+    titleScroll.Parent = titleListFrame
+    
+    local titleListLayout = Instance.new("UIListLayout")
+    titleListLayout.Padding = UDim.new(0, 2)
+    titleListLayout.Parent = titleScroll
+    
+    -- Populate titles
+    local allTitles = GetAllTitles()
+    for _, titleData in pairs(allTitles) do
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -4, 0, 22)
+        btn.BackgroundColor3 = Theme.NeutralDark
+        btn.Text = titleData.Value .. " (" .. titleData.Kills .. " kills)"
+        btn.TextColor3 = Theme.TextSecondary
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 10
+        btn.BorderSizePixel = 0
+        btn.ZIndex = 52
+        btn.Parent = titleScroll
+        
+        local btnCorner = Instance.new("UICorner")
+        btnCorner.CornerRadius = UDim.new(0, 4)
+        btnCorner.Parent = btn
+        
+        btn.MouseButton1Click:Connect(function()
+            Settings.SelectedTitle = titleData.Value
+            titleDropdownBtn.Text = titleData.Value
+            titleLabel.Text = "Selected: " .. titleData.Value
+            titleListFrame.Visible = false
+        end)
+    end
+    
+    titleListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        titleScroll.CanvasSize = UDim2.new(0, 0, 0, titleListLayout.AbsoluteContentSize.Y + 4)
+    end)
+    
+    titleDropdownBtn.MouseButton1Click:Connect(function()
+        titleListFrame.Visible = not titleListFrame.Visible
+    end)
+    
+    createButton("Equip Selected Title", Theme.Success, function()
+        if not Settings.SelectedTitle then
+            return notify("Select a title first!")
+        end
+        
+        local titleRemote = Remotes and Remotes:FindFirstChild("TitleChange")
+        if titleRemote then
+            titleRemote:FireServer({
+                TitleName = Settings.SelectedTitle
+            })
+            notify("Equipped Title: " .. Settings.SelectedTitle)
+        else
+            notify("TitleChange remote not found!")
+        end
+    end)
+    
     -- [ Toggles Section ] --
     createSection("Toggles")
     createToggle("Loop Void (Kill Aura)", Settings.LoopVoid, function(val)
         Settings.LoopVoid = val
         if val then notify("Loop Void Enabled") else notify("Loop Void Disabled") end
-    end)
-
-    createToggle("Map Shield (Loop Bring)", Settings.MapShield, function(val)
-        Settings.MapShield = val
-        if val then notify("Map Shield Enabled") else notify("Map Shield Disabled") end
     end)
 
     createToggle("Auto Remove Skills", Settings.AutoRemoveSkills, function(val)
@@ -1164,6 +1697,22 @@ local function createMenu()
     createToggle("Anti-Debuff", Settings.AntiDebuff, function(val)
         Settings.AntiDebuff = val
         if val then notify("Anti-Debuff Enabled") else notify("Anti-Debuff Disabled") end
+    end)
+    
+    createToggle("Self Ragdoll", Settings.SelfRagdoll, function(val)
+        Settings.SelfRagdoll = val
+        -- Toggle ragdoll state directly via the character's RagdollTrigger BoolValue
+        -- This is what the game's MovementClient checks for ragdoll state (no remote needed!)
+        local character = LocalPlayer.Character
+        if character then
+            local ragdollTrigger = character:FindFirstChild("RagdollTrigger")
+            if ragdollTrigger then
+                ragdollTrigger.Value = val
+                notify("Self Ragdoll: " .. (val and "ON" or "OFF"))
+            else
+                notify("RagdollTrigger not found - respawn first?")
+            end
+        end
     end)
     
     -- [ Exploits ] --

@@ -6,6 +6,7 @@ local SCRIPTS = {
     { id = "RemoteLogger", label = "RemoteLogger", needsPreprocess = true },
     { id = "AetherShitterRecode", label = "AetherShitter", needsPreprocess = false },
     { id = "PlayerTracker", label = "PlayerTracker", needsPreprocess = false },
+    { id = "GamepassUnlocker", label = "GamepassUnlocker", needsPreprocess = false },
 }
 
 -- Check for compression flag
@@ -61,6 +62,38 @@ local function upload(scriptName)
     return run_command(cmd)
 end
 
+local function cleanup(scriptName)
+    print("  [+] Cleaning up temp files for " .. scriptName .. "...")
+    local preprocessed = scriptName .. ".preprocessed.lua"
+    local obfuscated = scriptName .. ".obfuscated.lua"
+    
+    -- Check if files exist and delete them
+    local isWindows = package.config:sub(1,1) == "\\"
+    
+    if isWindows then
+        os.execute('if exist "' .. preprocessed .. '" del "' .. preprocessed .. '" 2>nul')
+        os.execute('if exist "' .. obfuscated .. '" del "' .. obfuscated .. '" 2>nul')
+    else
+        os.execute('rm -f "' .. preprocessed .. '" 2>/dev/null')
+        os.execute('rm -f "' .. obfuscated .. '" 2>/dev/null')
+    end
+    
+    return true
+end
+
+local function cleanup_all()
+    print("\n----------------------------------------")
+    print(" Action: CLEANUP ALL TEMP FILES")
+    print("----------------------------------------")
+    
+    for _, s in ipairs(SCRIPTS) do
+        cleanup(s.id)
+    end
+    
+    print("  [+] Cleanup complete!")
+    return true
+end
+
 local function perform_action(action, scriptObj)
     local name = scriptObj.id
     local needsPreprocess = scriptObj.needsPreprocess
@@ -88,6 +121,7 @@ local function perform_action(action, scriptObj)
         end
         if not obfuscate(name, needsPreprocess) then return false end
         if not upload(name) then return false end
+        cleanup(name) -- Clean up temp files after successful upload
     end
     
     return true
@@ -146,13 +180,14 @@ local function show_main_menu()
 #      (Strong Preset + KV Upload)          #
 #############################################
 
-1. Full Deployment (Preprocess -> Obfuscate -> Upload)
+1. Full Deployment (Preprocess -> Obfuscate -> Upload -> Cleanup)
 2. Preprocess Only
 3. Obfuscate Only
 4. Upload Only
-5. Exit
+5. Cleanup Temp Files
+6. Exit
 ]])
-    io.write("Select Option (1-5): ")
+    io.write("Select Option (1-6): ")
 end
 
 -- Main Loop
@@ -170,6 +205,11 @@ while true do
     elseif choice == "4" then
         execute_task("upload")
     elseif choice == "5" then
+        cleanup_all()
+        print("\nPress Enter to continue...")
+        io.read()
+        clear_screen()
+    elseif choice == "6" then
         print("\nExiting...")
         break
     else
