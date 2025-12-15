@@ -5,7 +5,7 @@ Moonstar is an advanced Lua/Luau obfuscator designed to provide high-level prote
 ## Features
 
 - **Advanced Obfuscation Engine:** Utilizes a sophisticated pipeline to transform code.
-- **Multiple Presets:** Built-in configurations ranging from simple minification to extreme protection.
+- **Modular Presets:** Presets are stored as individual `.lua` files in `presets/` for easy customization.
 - **VM-based Bytecode Compilation:** Compiles Lua code into a custom bytecode format executed by a virtual machine (`Vmify`).
 - **Control Flow Flattening:** Flattens nested control structures into a complex state machine (`ControlFlowFlattening`).
 - **Global Virtualization:** Hides global variables and mocks the environment to prevent hooking (`GlobalVirtualization`).
@@ -32,65 +32,143 @@ To install dependencies on Debian/Ubuntu:
 sudo apt-get update && sudo apt-get install -y lua5.1
 ```
 
+## Project Structure
+
+```
+Moonstar/
+├── moonstar.lua          # Main entry point (consolidated CLI + library)
+├── presets/              # Preset configuration files
+│   ├── minify.lua        # No obfuscation, just minification
+│   ├── weak.lua          # Basic protection
+│   ├── medium.lua        # Balanced protection (recommended)
+│   └── strong.lua        # Maximum protection
+├── moonstar/src/         # Core obfuscator modules
+│   ├── config.lua
+│   ├── logger.lua
+│   ├── colors.lua
+│   ├── highlightlua.lua
+│   └── moonstar/         # Pipeline, steps, compiler, etc.
+├── tests/                # Test suite
+├── examples/             # Example scripts
+└── banner.txt            # Optional banner for obfuscated output
+```
+
 ## Usage
 
 Run Moonstar using the `lua` (or `lua5.1`) command:
 
 ```bash
-lua moonstar.lua <input_file> [options]
+lua moonstar.lua <input_file> <output_file> [options]
 ```
 
 ### Arguments
 
 - `input_file`: Path to the Lua/Luau file you want to obfuscate.
-- `--out <file>`: Path where the obfuscated script will be saved (default: `<input_file>.obfuscated.lua`).
+- `output_file`: Path where the obfuscated script will be saved.
 
 ### Options
 
-- `--preset=X`: Select a configuration preset (default: `Minify`).
-  - **Available Presets:** `Minify`, `Weak`, `Medium`, `Strong`
-- `--config=<file>`: Load configuration from a specific file.
+- `--preset=X`: Select a configuration preset (default: `Medium`).
+  - **Built-in Presets:** `Minify`, `Weak`, `Medium`, `Strong`
+  - **Custom Presets:** Place a `.lua` file in `presets/` and use its name
 - `--LuaU`: Target LuaU (Roblox).
 - `--Lua51`: Target Lua 5.1 (default).
 - `--pretty`: Enable pretty printing for readable output (useful for debugging).
-- `--nocolors`: Disable colored output.
-- `--saveerrors`: Save error messages to a file.
+- `--no-antitamper`: Disable anti-tamper protection.
 - `--seed=N`: Set a specific random seed for reproducible output.
+- `--detailed`: Show detailed build report with step timings.
+- `--compress`: Enable compression of output.
+- `--parallel=N`: Number of parallel compression tests (default: 4).
+- `--debug`: Enable debug mode (verbose logging, fixed seed, pretty printing).
 
 ### Presets
 
-**Minify** — No obfuscation, just minification.
+Presets are stored in the `presets/` folder as individual Lua files that return configuration tables.
+
+**Minify** (`presets/minify.lua`) — No obfuscation, just minification.
 - **Features:** None (structure preservation only)
 
-**Weak** — Basic protection against casual snooping.
+**Weak** (`presets/weak.lua`) — Basic protection against casual snooping.
 - **Features:** `WrapInFunction`, `EncryptStrings` (Light), `SplitStrings`, `ConstantArray`, `NumbersToExpressions`
 
-**Medium** — Balanced protection for general use.
+**Medium** (`presets/medium.lua`) — Balanced protection for general use.
 - **Features:** All Weak features plus `EncryptStrings` (Standard), `IndexObfuscation`, `AddVararg`
 
-**Strong** — Maximum protection for sensitive logic.
+**Strong** (`presets/strong.lua`) — Maximum protection for sensitive logic.
 - **Features:** All Medium features plus `ControlFlowFlattening`, `GlobalVirtualization`, `AntiTamper`, `Vmify`, `VmProfileRandomizer`, `Compression`
+
+### Custom Presets
+
+To create a custom preset, add a new `.lua` file to the `presets/` folder that returns a configuration table:
+
+```lua
+-- presets/mycustom.lua
+return {
+    LuaVersion    = "Lua51";
+    VarNamePrefix = "";
+    NameGenerator = "MangledShuffled";
+    PrettyPrint   = false;
+    Seed          = 0;
+
+    WrapInFunction = { Enabled = true };
+    EncryptStrings = { Enabled = true; Mode = "standard" };
+    -- Add more configuration as needed
+}
+```
+
+Then use it with `--preset=mycustom`.
 
 ### Examples
 
 **Basic usage (Medium preset):**
 ```bash
-lua moonstar.lua myscript.lua --preset=Medium
+lua moonstar.lua myscript.lua output.lua --preset=Medium
 ```
 
 **Maximum protection:**
 ```bash
-lua moonstar.lua myscript.lua --preset=Strong --out output.lua
+lua moonstar.lua myscript.lua output.lua --preset=Strong
 ```
 
 **For Roblox (LuaU):**
 ```bash
-lua moonstar.lua script.lua --preset=Medium --LuaU
+lua moonstar.lua script.lua output.lua --preset=Medium --LuaU
 ```
 
 **Minify only:**
 ```bash
-lua moonstar.lua script.lua --preset=Minify
+lua moonstar.lua script.lua output.lua --preset=Minify
+```
+
+**Debug mode with detailed report:**
+```bash
+lua moonstar.lua script.lua output.lua --preset=Strong --debug --detailed
+```
+
+## Using as a Library
+
+Moonstar can also be used as a Lua library in your own scripts:
+
+```lua
+-- Add Moonstar to your package path
+package.path = "./Moonstar/moonstar/src/?.lua;" ..
+               "./Moonstar/moonstar/src/moonstar/?.lua;" ..
+               package.path
+
+-- Require Moonstar
+local Moonstar = require("Moonstar.moonstar")
+
+-- Access components
+local Pipeline = Moonstar.Pipeline
+local Presets = Moonstar.Presets
+local Logger = Moonstar.Logger
+
+-- Get a preset configuration
+local config = Moonstar.getPreset("Strong")
+
+-- Create and use a pipeline
+local pipeline = Pipeline:fromConfig(config)
+local obfuscated = pipeline:apply(sourceCode, "input.lua")
 ```
 
 ## Testing

@@ -61,6 +61,7 @@ function Pipeline:new(settings)
 		VarNamePrefix = prefix;
 		Seed = seed;
 		DetailedReport = settings.DetailedReport;
+		DebugMode = settings.DebugMode or false;
 		parser = Parser:new({
 			LuaVersion = luaVersion;
 		});
@@ -206,6 +207,7 @@ function Pipeline:fromConfig(config)
 		VarNamePrefix = config.VarNamePrefix or "";
 		Seed          = config.Seed or 0;
 		DetailedReport = config.DetailedReport or false;
+		DebugMode     = config.DebugMode or false;
 	});
 
 	pipeline:setNameGenerator(config.NameGenerator or "MangledShuffled");
@@ -286,21 +288,63 @@ function Pipeline:apply(code, filename)
 	local startTime = gettime();
 	filename = filename or "Anonymus Script";
 	logger:info(string.format("Applying Obfuscation Pipeline to %s ...", filename));
+	
+	-- Enable debug mode in logger if set
+	if self.DebugMode then
+		logger:enableDebugMode()
+		logger:debug("Debug mode enabled - verbose logging active")
+	end
+	
 	-- Seed the Random Generator
 	if(self.Seed > 0) then
 		math.randomseed(self.Seed);
+		if self.DebugMode then
+			logger:debug(string.format("Random seed set to: %d", self.Seed))
+		end
 	else
 		math.randomseed(os.time())
+		if self.DebugMode then
+			logger:debug("Random seed set from os.time()")
+		end
+	end
+	
+	-- Create debug output folder if in debug mode
+	local debugOutputDir = nil
+	if self.DebugMode then
+		debugOutputDir = "output/debug"
+		local mkdirCmd = package.config:sub(1,1) == "\\" and "mkdir" or "mkdir -p"
+		os.execute(mkdirCmd .. " \"" .. debugOutputDir .. "\"")
+		logger:debug("Debug output directory: " .. debugOutputDir)
+		
+		-- Save original source
+		local f = io.open(debugOutputDir .. "/00_original.lua", "w")
+		if f then
+			f:write("-- Original source code\n")
+			f:write("-- File: " .. filename .. "\n")
+			f:write("-- Time: " .. os.date("%Y-%m-%d %H:%M:%S") .. "\n\n")
+			f:write(code)
+			f:close()
+			logger:debug("Saved original source to 00_original.lua")
+		end
 	end
 	
 	logger:info("Parsing ...");
 	local parserStartTime = gettime();
 
 	local sourceLen = string.len(code);
+	
+	if self.DebugMode then
+		logger:debug(string.format("Source code size: %d bytes", sourceLen))
+	end
+	
 	local ast = self.parser:parse(code);
 
 	local parserTimeDiff = gettime() - parserStartTime;
 	logger:info(string.format("Parsing Done in %.2f seconds", parserTimeDiff));
+	
+	if self.DebugMode then
+		logger:debug(string.format("AST parsed successfully, globalScope created"))
+	end
 	
 	local report = {}
 	if self.DetailedReport then
@@ -322,6 +366,11 @@ function Pipeline:apply(code, filename)
 	for i, step in ipairs(self.steps) do
 		local stepStartTime = gettime();
 		logger:info(string.format("Applying Step \"%s\" ...", step.Name or "Unnamed"));
+		
+		if self.DebugMode then
+			logger:debug(string.format("Step %d/%d: %s", i, #self.steps, step.Name or "Unnamed"))
+		end
+		
 		local newAst = step:apply(ast, self);
 		if type(newAst) == "table" then
 			ast = newAst;
@@ -337,6 +386,22 @@ function Pipeline:apply(code, filename)
 				Entropy = util.calculateEntropy(unparsed),
 				Time = stepTime
 			})
+			
+			-- Save intermediate output in debug mode
+			if self.DebugMode and debugOutputDir then
+				local stepNum = string.format("%02d", i)
+				local stepFileName = debugOutputDir .. "/" .. stepNum .. "_" .. (step.Name or "Unnamed"):gsub("%s+", "_") .. ".lua"
+				local f = io.open(stepFileName, "w")
+				if f then
+					f:write("-- After step: " .. (step.Name or "Unnamed") .. "\n")
+					f:write("-- Size: " .. #unparsed .. " bytes\n")
+					f:write("-- Time: " .. string.format("%.4f", stepTime) .. " seconds\n")
+					f:write("-- Entropy: " .. string.format("%.4f", util.calculateEntropy(unparsed)) .. "\n\n")
+					f:write(unparsed)
+					f:close()
+					logger:debug("Saved intermediate output to " .. stepFileName)
+				end
+			end
 		end
 	end
 	

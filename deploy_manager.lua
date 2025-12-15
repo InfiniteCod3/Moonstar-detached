@@ -10,12 +10,17 @@ local SCRIPTS = {
     { id = "GamepassUnlocker", label = "GamepassUnlocker", needsPreprocess = false },
 }
 
--- Check for compression flag
+-- Obfuscation preset: Minify, Weak, Medium, Strong, or custom preset file name
+local OBFUSCATION_PRESET = "Strong"
+
+-- Check for command line arguments
 local ENABLE_COMPRESSION = false
 
 for _, v in ipairs(arg or {}) do
     if v == "--compress" or v == "--compression" then
         ENABLE_COMPRESSION = true
+    elseif v:match("^--preset=") then
+        OBFUSCATION_PRESET = v:match("^--preset=(.+)$")
     end
 end
 
@@ -37,15 +42,15 @@ local function preprocess(scriptName)
 end
 
 local function obfuscate(scriptName, usePreprocessed)
-    print("  [+] Obfuscating " .. scriptName .. " (Strong Preset)...")
+    print("  [+] Obfuscating " .. scriptName .. " (" .. OBFUSCATION_PRESET .. " Preset)...")
     if ENABLE_COMPRESSION then
         print("      (Compression Enabled)")
     end
     local input = usePreprocessed and ("../" .. scriptName .. ".preprocessed.lua") or ("../" .. scriptName .. ".lua")
     local output = "../" .. scriptName .. ".obfuscated.lua"
     
-    -- We cd into Moonstar because it likely depends on relative paths for its modules
-    local cmd = "cd Moonstar && lua moonstar.lua " .. input .. " " .. output .. " --preset=Strong"
+    -- We cd into Moonstar because it depends on relative paths for its modules
+    local cmd = "cd Moonstar && lua moonstar.lua " .. input .. " " .. output .. " --preset=" .. OBFUSCATION_PRESET
     
     if ENABLE_COMPRESSION then
         cmd = cmd .. " --compress"
@@ -174,20 +179,19 @@ local function execute_task(action)
 end
 
 local function show_main_menu()
-    print([[
-
-#############################################
-#      LUNARITY DEPLOYMENT MANAGER          #
-#      (Strong Preset + KV Upload)          #
-#############################################
-
-1. Full Deployment (Preprocess -> Obfuscate -> Upload -> Cleanup)
-2. Preprocess Only
-3. Obfuscate Only
-4. Upload Only
-5. Cleanup Temp Files
-6. Exit
-]])
+    print("")
+    print("#############################################")
+    print("#      LUNARITY DEPLOYMENT MANAGER          #")
+    print("#      (" .. OBFUSCATION_PRESET .. " Preset + KV Upload)          #")
+    print("#############################################")
+    print("")
+    print("1. Full Deployment (Preprocess -> Obfuscate -> Upload -> Cleanup)")
+    print("2. Preprocess Only")
+    print("3. Obfuscate Only")
+    print("4. Upload Only")
+    print("5. Cleanup Temp Files")
+    print("6. Exit")
+    print("")
     io.write("Select Option (1-6): ")
 end
 

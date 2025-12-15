@@ -4,34 +4,197 @@
     Copyright (c) 2025 Moonstar
     All rights reserved.
 
+    This is the consolidated single-file entry point for Moonstar.
+    Presets are loaded from the presets/ folder.
 ]]
 
--- Setup Moonstar module paths
-local function setupMoonstarPath()
-    -- PERFORMANCE: Removed unnecessary io.popen("cd") call
-    -- The current working directory is already available via relative paths
-    -- This eliminates an expensive system call on every invocation
-    package.path = "./moonstar/src/?.lua;" ..
-                   "./moonstar/src/moonstar/?.lua;" ..
-                   "./moonstar/src/moonstar/steps/?.lua;" ..
-                   package.path
+-- ============================================================================
+-- PATH SETUP
+-- ============================================================================
+
+local function script_path()
+    local str = debug.getinfo(2, "S").source:sub(2)
+    return str:match("(.*[/%\\])")
 end
 
-setupMoonstarPath()
+local MOONSTAR_ROOT = script_path() or "./"
+local oldPkgPath = package.path
+package.path = MOONSTAR_ROOT .. "moonstar/src/?.lua;" ..
+               MOONSTAR_ROOT .. "moonstar/src/moonstar/?.lua;" ..
+               MOONSTAR_ROOT .. "moonstar/src/moonstar/steps/?.lua;" ..
+               package.path
 
--- Load Moonstar core module
-local Moonstar = require("moonstar")
+-- ============================================================================
+-- LUA 5.1 COMPATIBILITY FIXES
+-- ============================================================================
 
--- Config is read-only, we need to update the source config
-local ConfigModule = require("config")
-ConfigModule.NameUpper = "MOONSTAR"
-ConfigModule.Name = "Moonstar"
+-- Math.random Fix for Lua5.1
+if not pcall(function() return math.random(1, 2^40) end) then
+    local oldMathRandom = math.random
+    math.random = function(a, b)
+        if not a and b then
+            return oldMathRandom()
+        end
+        if not b then
+            return math.random(1, a)
+        end
+        if a > b then
+            a, b = b, a
+        end
+        local diff = b - a
+        
+        if diff < 0 then
+            error(string.format("Invalid interval: a=%s, b=%s, diff=%s", tostring(a), tostring(b), tostring(diff)))
+        end
+        
+        if diff == 0 then
+            return a
+        end
+        
+        if diff > 2 ^ 31 - 1 or a < 0 or b >= 2^31 then
+            return math.floor(oldMathRandom() * diff + a)
+        else
+            local ia = math.floor(a + 0.5)
+            local ib = math.floor(b + 0.5)
+            if ia > ib then
+                ia, ib = ib, ia
+            end
+            if ia == ib then
+                return ia
+            end
+            return oldMathRandom(ia, ib)
+        end
+    end
+end
+
+-- newproxy polyfill
+_G.newproxy = _G.newproxy or function(arg)
+    if arg then
+        return setmetatable({}, {})
+    end
+    return {}
+end
+
+-- ============================================================================
+-- CORE MODULE LOADING
+-- ============================================================================
+
+local Pipeline  = require("moonstar.pipeline")
+local highlight = require("highlightlua")
+local colors    = require("colors")
+local Logger    = require("logger")
+local Config    = require("config")
+local util      = require("moonstar.util")
+
+-- Update config
+Config.NameUpper = "MOONSTAR"
+Config.Name = "Moonstar"
 
 -- Set logger to Info level
-Moonstar.Logger.logLevel = Moonstar.Logger.LogLevel.Info
+Logger.logLevel = Logger.LogLevel.Info
 
--- Moonstar Presets (sourced from runtime module)
-local MoonstarPresets = Moonstar.Presets
+-- ============================================================================
+-- PRESET LOADING
+-- ============================================================================
+
+-- Load a preset from the presets folder
+local function loadPresetFromFile(presetName)
+    local presetPath = MOONSTAR_ROOT .. "presets/" .. presetName:lower() .. ".lua"
+    local f = io.open(presetPath, "r")
+    if f then
+        f:close()
+        local success, preset = pcall(dofile, presetPath)
+        if success and preset then
+            return preset
+        end
+    end
+    return nil
+end
+
+-- Fallback hardcoded presets
+local FallbackPresets = {
+    ["Minify"] = {
+        LuaVersion    = "Lua51";
+        VarNamePrefix = "";
+        NameGenerator = "MangledShuffled";
+        PrettyPrint   = false;
+        Seed          = 0;
+        WrapInFunction = { Enabled = false };
+    };
+    ["Weak"] = {
+        LuaVersion    = "Lua51";
+        VarNamePrefix = "";
+        NameGenerator = "MangledShuffled";
+        PrettyPrint   = false;
+        Seed          = 0;
+        WrapInFunction = { Enabled = true };
+        EncryptStrings = { Enabled = true; Mode = "light" };
+        SplitStrings = { Enabled = true; MaxSegmentLength = 16; Strategy = "random" };
+        ConstantArray = { Enabled = true; EncodeStrings = true; IndexObfuscation = false };
+        NumbersToExpressions = { Enabled = true; Complexity = "low" };
+    };
+    ["Medium"] = {
+        LuaVersion    = "Lua51";
+        VarNamePrefix = "";
+        NameGenerator = "MangledShuffled";
+        PrettyPrint   = false;
+        Seed          = 0;
+        WrapInFunction = { Enabled = true };
+        EncryptStrings = { Enabled = true; Mode = "standard" };
+        SplitStrings = { Enabled = true; MaxSegmentLength = 16; Strategy = "random" };
+        ConstantArray = { Enabled = true; EncodeStrings = true; IndexObfuscation = true };
+        NumbersToExpressions = { Enabled = true; Complexity = "low" };
+        AddVararg = { Enabled = true; Probability = 0.15 };
+    };
+    ["Strong"] = {
+        LuaVersion    = "Lua51";
+        VarNamePrefix = "";
+        NameGenerator = "MangledShuffled";
+        PrettyPrint   = false;
+        Seed          = 0;
+        GlobalVirtualization = { Enabled = true; VirtualizeEnv = true };
+        WrapInFunction = { Enabled = true };
+        ConstantFolding = { Enabled = true };
+        JitStringDecryptor = { Enabled = false; MaxLength = 30 };
+        EncryptStrings = { Enabled = true; Mode = "standard"; DecryptorVariant = "polymorphic"; LayerDepth = 1; InlineThreshold = 16; EnvironmentCheck = true };
+        ControlFlowFlattening = { Enabled = true; ChunkSize = 3 };
+        ConstantArray = { Enabled = true; EncodeStrings = true; IndexObfuscation = true };
+        NumbersToExpressions = { Enabled = true; Complexity = "medium" };
+        AddVararg = { Enabled = true; Probability = 0.1 };
+        AntiTamper = { Enabled = true };
+        Vmify = { Enabled = true; InlineVMState = true; ObfuscateHandlers = true; InstructionRandomization = true; EncryptVmStrings = true };
+        VmProfileRandomizer = { Enabled = true; PermuteOpcodes = true; ShuffleHandlers = true; RandomizeNames = true };
+        Compression = { Enabled = false; FastMode = true; Preseed = true; BWT = true; RLE = true; Huffman = true; ArithmeticCoding = true; PPM = true; PPMOrder = 2; ParallelTests = 4 };
+    };
+}
+
+-- Get a preset (file first, then fallback)
+local function getPreset(presetName)
+    -- Capitalize first letter for consistency
+    local normalizedName = presetName:sub(1,1):upper() .. presetName:sub(2):lower()
+    
+    -- Try loading from presets folder first
+    local filePreset = loadPresetFromFile(presetName)
+    if filePreset then
+        return filePreset
+    end
+    
+    -- Fall back to hardcoded presets
+    return FallbackPresets[normalizedName]
+end
+
+-- Build Presets table (try files first, then fallback)
+local Presets = {}
+for name, _ in pairs(FallbackPresets) do
+    Presets[name] = getPreset(name)
+end
+
+-- Restore package.path
+package.path = oldPkgPath
+
+-- ============================================================================
+-- UTILITY FUNCTIONS
+-- ============================================================================
 
 local function deepCopy(value, cache)
     if type(value) ~= "table" then
@@ -53,7 +216,69 @@ local function deepCopy(value, cache)
     return copy
 end
 
--- Print usage information
+local function fileExists(file)
+    local f = io.open(file, "rb")
+    if f then f:close() end
+    return f ~= nil
+end
+
+local function readFile(file)
+    if not fileExists(file) then
+        return nil, "File does not exist: " .. file
+    end
+    local f = io.open(file, "rb")
+    if not f then
+        return nil, "Cannot open file: " .. file
+    end
+    local content = f:read("*all")
+    f:close()
+    return content
+end
+
+local function writeFile(file, content)
+    local f = io.open(file, "wb")
+    if not f then
+        return false, "Cannot write to file: " .. file
+    end
+    f:write(content)
+    f:close()
+    return true
+end
+
+-- Strip Luau type annotations to work around parser limitations
+local function stripLuauTypeAnnotations(code)
+    code = code:gsub("(function%s+[%w_]+)%s*<%s*[%w_,%s]+%s*>", "%1")
+    
+    code = code:gsub("%(([^%)]+)%)", function(params)
+        if params:find("[%w_]%s*:") then
+            local stripped = params:gsub("([%w_]+)%s*:%s*[%w_<>{},%[%]%(%)]+", "%1")
+            return "(" .. stripped .. ")"
+        end
+        return "(" .. params .. ")"
+    end)
+    
+    code = code:gsub("%)[ \t]*:[ \t]*[%w_<>{},%[%]%(%)]+[ \t]*(\r?\n)", ")%1")
+    code = code:gsub("(local%s+[%w_]+)[ \t]*:[ \t]*[%w_<>{},%[%]%(%)]+(%s*=)", "%1%2")
+    code = code:gsub("type%s+[%w_]+%s*=%s*[^\n]*\n", "-- type declaration stripped\n")
+    code = code:gsub("export%s+", "")
+    
+    -- Compound assignment operators
+    code = code:gsub("([%w_%.%[%]]+)%s*%+=%s*([^\n]+)", "%1 = %1 + (%2)")
+    code = code:gsub("([%w_%.%[%]]+)%s*%-=%s*([^\n]+)", "%1 = %1 - (%2)")
+    code = code:gsub("([%w_%.%[%]]+)%s*%*=%s*([^\n]+)", "%1 = %1 * (%2)")
+    code = code:gsub("([%w_%.%[%]]+)%s*//=%s*([^\n]+)", "%1 = math.floor(%1 / (%2))")
+    code = code:gsub("([%w_%.%[%]]+)%s*/=%s*([^\n]+)", "%1 = %1 / (%2)")
+    code = code:gsub("([%w_%.%[%]]+)%s*%%=%s*([^\n]+)", "%1 = %1 %% (%2)")
+    code = code:gsub("([%w_%.%[%]]+)%s*%^=%s*([^\n]+)", "%1 = %1 ^ (%2)")
+    code = code:gsub("([%w_%.%[%]]+)%s*%.%.=%s*([^\n]+)", "%1 = %1 .. (%2)")
+    
+    return code
+end
+
+-- ============================================================================
+-- CLI INTERFACE
+-- ============================================================================
+
 local function printUsage()
     print([[
 ╔════════════════════════════════════════════════════════════╗
@@ -70,6 +295,7 @@ Arguments:
 Options:
     --preset=X          Use preset configuration (default: Medium)
                         Available: Minify, Weak, Medium, Strong
+                        Or any custom .lua file in presets/
     --LuaU              Target LuaU/Roblox (default: Lua51)
     --Lua51             Target Lua 5.1 (default)
     --pretty            Enable pretty printing (readable output)
@@ -78,6 +304,8 @@ Options:
     --detailed          Show detailed build report
     --compress          Enable compression of output
     --parallel=N        Number of parallel compression tests (default: 4)
+    --debug             Enable debug mode (verbose logging, intermediate
+                        outputs, fixed seed, pretty printing)
 
     Presets:
     Minify  - No obfuscation (just minification)
@@ -86,103 +314,13 @@ Options:
     Strong  - Maximum protection (double VM + all features)
 
 Examples:
-    # Medium preset (default, recommended)
     lua moonstar.lua script.lua output.lua --preset=Medium
-    
-    # Minify only (no obfuscation)
-    lua moonstar.lua script.lua output.lua --preset=Minify
-    
-    # Weak preset (basic VM)
-    lua moonstar.lua script.lua output.lua --preset=Weak
-    
-    # Strong preset (maximum protection)
-    lua moonstar.lua script.lua output.lua --preset=Strong
-    
-    # For Roblox/LuaU    lua moonstar.lua script.lua output.lua --preset=Medium --LuaU
-    
-    # Disable anti-tamper in Medium preset
-    lua moonstar.lua script.lua output.lua --preset=Medium --no-antitamper
+    lua moonstar.lua script.lua output.lua --preset=Strong --LuaU
 
 For more information, visit: https://github.com/InfiniteCod3/Moonstar
 ]])
 end
 
--- Check if file exists
-local function fileExists(file)
-    local f = io.open(file, "rb")
-    if f then f:close() end
-    return f ~= nil
-end
-
--- Read file contents
-local function readFile(file)
-    if not fileExists(file) then
-        return nil, "File does not exist: " .. file
-    end
-    local f = io.open(file, "rb")
-    if not f then
-        return nil, "Cannot open file: " .. file
-    end
-    local content = f:read("*all")
-    f:close()
-    return content
-end
-
--- Write file contents
-local function writeFile(file, content)
-    local f = io.open(file, "wb")
-    if not f then
-        return false, "Cannot write to file: " .. file
-    end
-    f:write(content)
-    f:close()
-    return true
-end
-
--- Strip Luau type annotations to work around parser limitations
-local function stripLuauTypeAnnotations(code)
-    -- Strip generics from function declarations first: function foo<T>(...)
-    code = code:gsub("(function%s+[%w_]+)%s*<%s*[%w_,%s]+%s*>", "%1")
-    
-    -- Strip type annotations from function parameters
-    -- Handle both single and multiple parameters
-    code = code:gsub("%(([^%)]+)%)", function(params)
-        -- Only process if it contains type annotations (has colon not in string)
-        if params:find("[%w_]%s*:") then
-            -- Strip type annotations: name: type -> name (excluding newlines from type pattern)
-            local stripped = params:gsub("([%w_]+)%s*:%s*[%w_<>{},%[%]%(%)]+", "%1")
-            return "(" .. stripped .. ")"
-        end
-        return "(" .. params .. ")"
-    end)
-    
-    -- Strip return type annotations more carefully
-    -- Match ): type followed by newline (type pattern excludes newlines to prevent eating function body)
-    code = code:gsub("%)[ \t]*:[ \t]*[%w_<>{},%[%]%(%)]+[ \t]*(\r?\n)", ")%1")
-    
-    -- Strip type annotations from variable declarations: local x: type = value
-    code = code:gsub("(local%s+[%w_]+)[ \t]*:[ \t]*[%w_<>{},%[%]%(%)]+(%s*=)", "%1%2")
-    
-    -- Strip type declarations: type Name = {...}
-    code = code:gsub("type%s+[%w_]+%s*=%s*[^\n]*\n", "-- type declaration stripped\n")
-    
-    -- Strip export keyword: export local x = 5
-    code = code:gsub("export%s+", "")
-    
-    -- Strip compound assignment operators (convert to long form)
-    code = code:gsub("([%w_%.%[%]]+)%s*%+=%s*([^\n]+)", "%1 = %1 + (%2)")
-    code = code:gsub("([%w_%.%[%]]+)%s*%-=%s*([^\n]+)", "%1 = %1 - (%2)")
-    code = code:gsub("([%w_%.%[%]]+)%s*%*=%s*([^\n]+)", "%1 = %1 * (%2)")
-    code = code:gsub("([%w_%.%[%]]+)%s*//=%s*([^\n]+)", "%1 = math.floor(%1 / (%2))")
-    code = code:gsub("([%w_%.%[%]]+)%s*/=%s*([^\n]+)", "%1 = %1 / (%2)")
-    code = code:gsub("([%w_%.%[%]]+)%s*%%=%s*([^\n]+)", "%1 = %1 %% (%2)")
-    code = code:gsub("([%w_%.%[%]]+)%s*%^=%s*([^\n]+)", "%1 = %1 ^ (%2)")
-    code = code:gsub("([%w_%.%[%]]+)%s*%.%.=%s*([^\n]+)", "%1 = %1 .. (%2)")
-    
-    return code
-end
-
--- Parse command line arguments
 local function parseArgs(args)
     if #args < 2 then
         return nil, "Missing required arguments"
@@ -199,30 +337,32 @@ local function parseArgs(args)
         detailed = false,
         compress = false,
         parallel = 4,
+        debug = false,
     }
     
-    -- Parse options
     for i = 3, #args do
-        local arg = args[i]
-        if arg:match("^--preset=") then
-            config.preset = arg:match("^--preset=(.+)$")
-        elseif arg == "--LuaU" then
+        local a = args[i]
+        if a:match("^--preset=") then
+            config.preset = a:match("^--preset=(.+)$")
+        elseif a == "--LuaU" then
             config.luaVersion = "LuaU"
-        elseif arg == "--Lua51" then
+        elseif a == "--Lua51" then
             config.luaVersion = "Lua51"
-        elseif arg == "--pretty" then
+        elseif a == "--pretty" then
             config.prettyPrint = true
-        elseif arg:match("^--seed=") then
-            config.seed = tonumber(arg:match("^--seed=(.+)$")) or 0
-        elseif arg == "--no-antitamper" then
+        elseif a:match("^--seed=") then
+            config.seed = tonumber(a:match("^--seed=(.+)$")) or 0
+        elseif a == "--no-antitamper" then
             config.disableAntiTamper = true
-        elseif arg == "--detailed" then
+        elseif a == "--detailed" then
             config.detailed = true
-        elseif arg == "--compress" then
+        elseif a == "--compress" then
             config.compress = true
-        elseif arg:match("^--parallel=") then
-            config.parallel = tonumber(arg:match("^--parallel=(.+)$")) or 4
-        elseif arg == "--help" or arg == "-h" then
+        elseif a:match("^--parallel=") then
+            config.parallel = tonumber(a:match("^--parallel=(.+)$")) or 4
+        elseif a == "--debug" then
+            config.debug = true
+        elseif a == "--help" or a == "-h" then
             return nil, "help"
         end
     end
@@ -230,15 +370,12 @@ local function parseArgs(args)
     return config
 end
 
--- Main function
 local function main(args)
-    
     if #args == 0 or args[1] == "--help" or args[1] == "-h" then
         printUsage()
         os.exit(0)
     end
     
-    -- Parse arguments
     local config, err = parseArgs(args)
     if not config then
         if err == "help" then
@@ -253,18 +390,39 @@ local function main(args)
     end
     
     -- Validate preset
-    if not MoonstarPresets[config.preset] then
+    local presetToUse = getPreset(config.preset)
+    if not presetToUse then
         print("ERROR: Unknown preset '" .. config.preset .. "'")
-        print("Available presets: Minify, Weak, Medium, Strong")
+        print("Available presets: Minify, Weak, Medium, Strong (or custom .lua files in presets/)")
         os.exit(1)
     end
     
-    -- Read input file
-    print("")
-    print("╔" .. string.rep("═", 60) .. "╗")
-    print("║  Moonstar - Lua/Luau Obfuscator                            ║")
-    print("╚" .. string.rep("═", 60) .. "╝")
-    print("")
+    -- Apply debug mode settings
+    if config.debug then
+        Logger.logLevel = Logger.LogLevel.Debug
+        config.detailed = true
+        config.prettyPrint = true
+        if config.seed == 0 then
+            config.seed = 12345
+        end
+        print("")
+        print("╔" .. string.rep("═", 60) .. "╗")
+        print("║  Moonstar - DEBUG MODE ENABLED                              ║")
+        print("╚" .. string.rep("═", 60) .. "╝")
+        print("")
+        print("[DEBUG] Log level: Debug")
+        print("[DEBUG] Pretty printing: Enabled")
+        print("[DEBUG] Detailed report: Enabled")
+        print("[DEBUG] Fixed seed: " .. config.seed)
+        print("")
+    else
+        print("")
+        print("╔" .. string.rep("═", 60) .. "╗")
+        print("║  Moonstar - Lua/Luau Obfuscator                            ║")
+        print("╚" .. string.rep("═", 60) .. "╝")
+        print("")
+    end
+    
     print("Input:  " .. config.inputFile)
     print("Output: " .. config.outputFile)
     print("Preset: " .. config.preset)
@@ -281,7 +439,7 @@ local function main(args)
     print("")
     
     -- Get preset configuration
-    local presetConfig = deepCopy(MoonstarPresets[config.preset])
+    local presetConfig = deepCopy(getPreset(config.preset))
     
     -- Override settings
     presetConfig.LuaVersion = config.luaVersion
@@ -292,12 +450,9 @@ local function main(args)
     
     -- Remove AntiTamper if disabled
     if config.disableAntiTamper then
-        -- Handle new schema
         if presetConfig.AntiTamper then
             presetConfig.AntiTamper.Enabled = false
         end
-
-        -- Handle legacy schema
         if presetConfig.Steps then
             local newSteps = {}
             for _, step in ipairs(presetConfig.Steps) do
@@ -312,7 +467,7 @@ local function main(args)
     if config.compress then
         presetConfig.Compression = {
             Enabled = true,
-            FastMode = true,  -- Prioritize decompression speed for Roblox
+            FastMode = true,
             BWT = true,
             RLE = true,
             Huffman = true,
@@ -325,6 +480,7 @@ local function main(args)
     end
 
     presetConfig.DetailedReport = config.detailed
+    presetConfig.DebugMode = config.debug
     
     -- LUAU FIX: Strip type annotations if targeting LuaU
     if config.luaVersion == "LuaU" then
@@ -332,21 +488,18 @@ local function main(args)
     end
     
     -- Create pipeline from config
-    local pipeline = Moonstar.Pipeline:fromConfig(presetConfig)
+    local pipeline = Pipeline:fromConfig(presetConfig)
     
-    -- Apply obfuscation pipeline (this handles parsing, steps, and renaming)
+    -- Apply obfuscation pipeline
     print("Applying obfuscation pipeline...")
     local obfuscated, report = pipeline:apply(source, config.inputFile)
     
-    -- Add Moonstar banner (as comment block)
-    local banner = ""
-    local bannerFile = io.open("banner.txt", "r")
+    -- Add Moonstar banner
+    local bannerFile = io.open(MOONSTAR_ROOT .. "banner.txt", "r")
     if bannerFile then
         local bannerContent = bannerFile:read("*all")
         bannerFile:close()
-        -- Convert banner to comment block
-        banner = "--[[\n" .. bannerContent .. "\n]]\n"
-        obfuscated = banner .. obfuscated
+        obfuscated = "--[[\n" .. bannerContent .. "\n]]\n" .. obfuscated
     end
     
     -- Write output file
@@ -380,7 +533,28 @@ local function main(args)
     print("═" .. string.rep("═", 60))
 end
 
--- Run main function
+-- ============================================================================
+-- MODULE EXPORT (for use as library)
+-- ============================================================================
+
+-- If this file is being required as a module (not run directly), export the API
+if not arg or #arg == 0 or arg[0]:match("moonstar%.lua$") == nil then
+    -- Being required as a module
+    return {
+        Pipeline  = Pipeline;
+        colors    = colors;
+        Config    = util.readonly(Config);
+        Logger    = Logger;
+        highlight = highlight;
+        Presets   = Presets;
+        getPreset = getPreset;
+    }
+end
+
+-- ============================================================================
+-- MAIN ENTRY POINT
+-- ============================================================================
+
 local success, err = pcall(function()
     main(arg)
 end)
