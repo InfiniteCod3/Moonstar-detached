@@ -818,7 +818,7 @@ local function createUI()
     window.createButton("Disable Hook", function()
         disableGamepassHook()
         updateStatus()
-    end, false)
+    end)
     
     -- Weapon Scanner section
     window.createSection("Weapon Scanner")
@@ -826,11 +826,11 @@ local function createUI()
     window.createButton("Scan All Weapons", function()
         scanWeapons()
         populateWeaponList()
-    end, false)
+    end)
     
     window.createButton("Show Known Testers", function()
         showKnownTesters()
-    end, false)
+    end)
     
     -- Weapon Equip section
     window.createSection("Weapon Equip")
@@ -848,7 +848,7 @@ local function createUI()
     
     window.createButton("Equip All Tester Weapons", function()
         equipAllTesterWeapons()
-    end, false)
+    end)
     
     -- UI Injection section
     window.createSection("UI Injection")
@@ -859,7 +859,7 @@ local function createUI()
     
     window.createButton("Remove Injected Weapons", function()
         removeInjectedWeapons()
-    end, false)
+    end)
     
     -- Weapon List section
     window.createSection("Weapon List")
@@ -956,7 +956,7 @@ local function createUI()
     window.createButton("Refresh List", function()
         scanWeapons()
         populateWeaponList()
-    end, false)
+    end)
     
     -- Info section
     window.createSection("Info")

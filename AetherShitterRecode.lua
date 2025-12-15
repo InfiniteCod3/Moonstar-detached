@@ -1016,7 +1016,7 @@ local function createMenu()
         notify("Auto Remove Skills: " .. (val and "ON" or "OFF"))
     end)
     
-    window.createButton("Spam Tools (5s)", false, SpamTools)
+    window.createButton("Spam Tools (5s)", SpamTools)
     
     -- [ Movement Section ] --
     window.createSection("Movement")
@@ -1052,7 +1052,7 @@ local function createMenu()
         end
     end)
     
-    window.createButton("Flash Step (Forward)", false, function()
+    window.createButton("Flash Step (Forward)", function()
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if hrp then
             local bv = Instance.new("BodyVelocity", hrp)
@@ -1097,7 +1097,7 @@ local function createMenu()
         end
     end)
     
-    window.createButton("Force Recover (Anti-Stun)", true, function()
+    window.createButton("Force Recover (Anti-Stun)", function()
         local recover = Remotes:FindFirstChild("Recover")
         if recover then
             recover:FireServer(0.1, 0.1)
@@ -1109,9 +1109,9 @@ local function createMenu()
     
     -- [ Trolling Section ] --
     window.createSection("Trolling")
-    window.createButton("Blow Everyone", true, BlowEveryone)
-    window.createButton("Void Everyone", true, VoidEveryone)
-    window.createButton("Bring Everyone", false, BringAll)
+    window.createButton("Blow Everyone", BlowEveryone, true)
+    window.createButton("Void Everyone", VoidEveryone, true)
+    window.createButton("Bring Everyone", BringAll)
     
     window.createToggle("Player Centipede", Settings.PlayerCentipede, function(val)
         Settings.PlayerCentipede = val
@@ -1128,7 +1128,7 @@ local function createMenu()
         if selectorWindow then selectorWindow.ScreenGui.Enabled = val end
     end)
     
-    window.createButton("Reset Target (Self)", false, function()
+    window.createButton("Reset Target (Self)", function()
         Settings.TargetName = nil
         local char = LocalPlayer.Character
         local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -1137,15 +1137,15 @@ local function createMenu()
         notify("Target reset to Self")
     end)
     
-    window.createButton("Void Target", true, function() TargetAction("Void") end)
-    window.createButton("Fling Target", true, function() TargetAction("Fling") end)
-    window.createButton("Bring Target", false, function() TargetAction("Bring") end)
+    window.createButton("Void Target", function() TargetAction("Void") end, true)
+    window.createButton("Fling Target", function() TargetAction("Fling") end, true)
+    window.createButton("Bring Target", function() TargetAction("Bring") end)
     
     window.createToggle("Spin Target", Settings.SpinTarget, function(val)
         Settings.SpinTarget = val
     end)
     
-    window.createButton("Trap Underground", true, TrapTargetUnderground)
+    window.createButton("Trap Underground", TrapTargetUnderground, true)
     
     window.createToggle("Attach to Target", Settings.AttachToTarget, function(val)
         Settings.AttachToTarget = val
@@ -1163,7 +1163,7 @@ local function createMenu()
     window.createSection("Input Spoofing")
     local inputs = {{"Dash", "Q"}, {"Ultimate", "G"}, {"Block", "F"}, {"Transform", "T"}}
     for _, inp in ipairs(inputs) do
-        window.createButton("Force " .. inp[1], false, function()
+        window.createButton("Force " .. inp[1], function()
             local inputRemote = Remotes and Remotes:FindFirstChild("Input")
             if inputRemote then
                 inputRemote:FireServer(inp[2])
@@ -1177,7 +1177,7 @@ local function createMenu()
     
     -- Trait Faker
     local traitLabel = window.createLabelValue("Trait", "None")
-    local traitToggleBtn = window.createButton("Select Trait...", false, function() end) -- Placeholder callback
+    local traitToggleBtn = window.createButton("Select Trait...", function() end) -- Placeholder callback
     
     local traitNames = {}
     local traitDataMap = {}
@@ -1203,7 +1203,7 @@ local function createMenu()
         traitList.frame.Visible = not traitList.frame.Visible
     end)
     
-    window.createButton("Equip Trait", true, function()
+    window.createButton("Equip Trait", function()
         if Settings.SelectedTrait then
             local traitsRemote = Remotes and Remotes:FindFirstChild("Traits")
             if traitsRemote then
@@ -1218,7 +1218,7 @@ local function createMenu()
     -- Title Faker
     window.createSeparator()
     local titleLabel = window.createLabelValue("Title", "None")
-    local titleToggleBtn = window.createButton("Select Title...", false, function() end)
+    local titleToggleBtn = window.createButton("Select Title...", function() end)
     
     local titleNames = {}
     local titleDataMap = {}
@@ -1244,7 +1244,7 @@ local function createMenu()
         titleList.frame.Visible = not titleList.frame.Visible
     end)
     
-    window.createButton("Equip Title", true, function()
+    window.createButton("Equip Title", function()
         if Settings.SelectedTitle then
             local titleRemote = Remotes and Remotes:FindFirstChild("TitleChange")
             if titleRemote then
@@ -1285,7 +1285,7 @@ local function createMenu()
     -- [ Settings ] --
     window.createSection("Settings")
     
-    window.createButton("Unload Script", true, function()
+    window.createButton("Unload Script", function()
         Unloaded = true
         if selectorWindow then selectorWindow.destroy() end
         window.destroy()

@@ -279,7 +279,6 @@ local scriptListDropdown = window.createDropdownList("Available Scripts", 180)
 local function createScriptButton(meta)
     local btn = scriptListDropdown.addItem(
         string.format("%s  ·  v%s", meta.label or meta.id, meta.version or "-"),
-        Theme.BackgroundLight,
         function()
             if busy then
                 return
