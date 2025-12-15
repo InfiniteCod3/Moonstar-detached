@@ -386,9 +386,11 @@ local loadingScreen = LunarityUI.CreateLoadingScreen({
 local keybindPanel = LunarityUI.CreatePanel({
     Name = "LunarityKeybindPanel",
     Size = UDim2.new(0, 200, 0, 100),
-    Position = UDim2.new(1, -210, 0, 10),
-    Visible = false
+    Position = UDim2.new(1, -210, 0, 10)
 })
+
+-- Hide initially (show after loading)
+keybindPanel.ScreenGui.Enabled = false
 
 iframesRow = keybindPanel.addKeybindRow(IFramesKeybind, "IFrames", IFramesEnabled)
 antiDebuffRow = keybindPanel.addKeybindRow(AntiDebuffKeybind, "Anti-Debuff", AntiDebuffEnabled)

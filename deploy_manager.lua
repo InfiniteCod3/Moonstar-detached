@@ -24,6 +24,9 @@ for _, v in ipairs(arg or {}) do
     end
 end
 
+local isWindows = package.config:sub(1,1) == "\\"
+local PARALLEL_TEMP_DIR = ".parallel_jobs"
+
 local function run_command(cmd)
     print("\n> " .. cmd)
     local success, exit_type, exit_code = os.execute(cmd)
@@ -32,6 +35,153 @@ local function run_command(cmd)
         return false
     end
     return true
+end
+
+-- Run a command in the background (async)
+local function run_command_async(cmd, jobId)
+    local markerFile = PARALLEL_TEMP_DIR .. "/" .. jobId .. ".done"
+    local logFile = PARALLEL_TEMP_DIR .. "/" .. jobId .. ".log"
+    local batchFile = PARALLEL_TEMP_DIR .. "/" .. jobId .. ".bat"
+    
+    -- Get current working directory (pwd for Unix, cd for Windows)
+    local cwdCmd = isWindows and "cd" or "pwd"
+    local cwdHandle = io.popen(cwdCmd)
+    local cwd = cwdHandle and cwdHandle:read("*l") or "."
+    if cwdHandle then cwdHandle:close() end
+    
+    if isWindows then
+        -- Write a batch file that runs the command, logs output, and creates marker
+        local f = io.open(batchFile, "w")
+        if f then
+            f:write("@echo off\r\n")
+            f:write("cd /d \"" .. cwd .. "\"\r\n")
+            f:write("(" .. cmd .. ") > \"" .. logFile .. "\" 2>&1\r\n")
+            f:write("echo done > \"" .. markerFile .. "\"\r\n")
+            f:close()
+        end
+        
+        -- Convert forward slashes to backslashes for Windows
+        local batchPath = batchFile:gsub("/", "\\")
+        
+        -- Use wmic to truly spawn a detached process (never waits)
+        local wmicCmd = 'wmic process call create "cmd.exe /c \\"' .. batchPath .. '\\""'
+        os.execute(wmicCmd .. " > nul 2>&1")
+    else
+        -- Unix: use & to background the process
+        local shellFile = PARALLEL_TEMP_DIR .. "/" .. jobId .. ".sh"
+        local f = io.open(shellFile, "w")
+        if f then
+            f:write("#!/bin/bash\n")
+            f:write("cd \"" .. cwd .. "\"\n")
+            f:write("(" .. cmd .. ") > \"" .. logFile .. "\" 2>&1\n")
+            f:write("echo done > \"" .. markerFile .. "\"\n")
+            f:close()
+        end
+        os.execute("chmod +x \"" .. shellFile .. "\" && nohup \"" .. shellFile .. "\" > /dev/null 2>&1 &")
+    end
+    
+    print("  [ASYNC] Starting: " .. jobId)
+    return jobId
+end
+
+
+
+-- Check if a job has completed
+local function is_job_done(jobId)
+    local markerFile = PARALLEL_TEMP_DIR .. "/" .. jobId .. ".done"
+    local f = io.open(markerFile, "r")
+    if f then
+        f:close()
+        return true
+    end
+    return false
+end
+
+-- Read job output log
+local function get_job_log(jobId)
+    local logFile = PARALLEL_TEMP_DIR .. "/" .. jobId .. ".log"
+    local f = io.open(logFile, "r")
+    if f then
+        local content = f:read("*all")
+        f:close()
+        return content
+    end
+    return ""
+end
+
+-- Setup parallel temp directory
+local function setup_parallel_dir()
+    if isWindows then
+        os.execute('if not exist "' .. PARALLEL_TEMP_DIR .. '" mkdir "' .. PARALLEL_TEMP_DIR .. '"')
+    else
+        os.execute('mkdir -p "' .. PARALLEL_TEMP_DIR .. '"')
+    end
+end
+
+-- Cleanup parallel temp directory
+local function cleanup_parallel_dir()
+    if isWindows then
+        os.execute('if exist "' .. PARALLEL_TEMP_DIR .. '" rmdir /s /q "' .. PARALLEL_TEMP_DIR .. '" 2>nul')
+    else
+        os.execute('rm -rf "' .. PARALLEL_TEMP_DIR .. '" 2>/dev/null')
+    end
+end
+
+-- Wait for all jobs to complete with a spinner
+local function wait_for_jobs(jobIds, timeout)
+    timeout = timeout or 600 -- 10 minute default timeout
+    local startTime = os.time()
+    local spinChars = {"|", "/", "-", "\\"}
+    local spinIdx = 1
+    
+    while true do
+        local allDone = true
+        local completed = 0
+        
+        for _, jobId in ipairs(jobIds) do
+            if is_job_done(jobId) then
+                completed = completed + 1
+            else
+                allDone = false
+            end
+        end
+        
+        if allDone then
+            print(string.format("\n  [✓] All %d jobs completed!", #jobIds))
+            return true
+        end
+        
+        -- Check timeout
+        if os.time() - startTime > timeout then
+            print("\n  [!] Timeout waiting for jobs!")
+            return false
+        end
+        
+        -- Show progress spinner
+        io.write(string.format("\r  [%s] Waiting... (%d/%d complete)", 
+            spinChars[spinIdx], completed, #jobIds))
+        io.flush()
+        spinIdx = (spinIdx % #spinChars) + 1
+        
+        -- Sleep a bit (Lua doesn't have built-in sleep, so we use a busy wait or socket)
+        -- For Windows, use a ping trick; for Unix, use sleep
+        if isWindows then
+            os.execute("ping -n 2 127.0.0.1 > nul")
+        else
+            os.execute("sleep 1")
+        end
+    end
+end
+
+-- Print all job logs
+local function print_job_logs(jobIds)
+    print("\n========== Job Logs ==========")
+    for _, jobId in ipairs(jobIds) do
+        local log = get_job_log(jobId)
+        print(string.format("\n--- [%s] ---", jobId))
+        print(log)
+    end
+    print("==============================\n")
 end
 
 local function preprocess(scriptName)
@@ -57,6 +207,38 @@ local function obfuscate(scriptName, usePreprocessed)
     end
     
     return run_command(cmd)
+end
+
+-- Build command for async execution (returns the full pipeline command string)
+local function build_full_pipeline_cmd(scriptObj)
+    local name = scriptObj.id
+    local needsPreprocess = scriptObj.needsPreprocess
+    local input = needsPreprocess and ("../" .. name .. ".preprocessed.lua") or ("../" .. name .. ".lua")
+    local output = "../" .. name .. ".obfuscated.lua"
+    
+    local cmds = {}
+    
+    -- Preprocess step (if needed)
+    if needsPreprocess then
+        table.insert(cmds, "lua preprocess.lua " .. name .. ".lua " .. name .. ".preprocessed.lua")
+    end
+    
+    -- Obfuscate step (needs to cd into Moonstar first, use subshell to avoid changing cwd)
+    local obfCmd = "(cd Moonstar && lua moonstar.lua " .. input .. " " .. output .. " --preset=" .. OBFUSCATION_PRESET
+    if ENABLE_COMPRESSION then
+        obfCmd = obfCmd .. " --compress"
+    end
+    obfCmd = obfCmd .. ")"  -- Close the subshell
+    table.insert(cmds, obfCmd)
+    
+    -- Upload step
+    local key = name .. ".lua"
+    local path = name .. ".obfuscated.lua"
+    local uploadCmd = 'wrangler kv key put "' .. key .. '" --binding=SCRIPTS --path="' .. path .. '" --config wrangler.toml --remote'
+    table.insert(cmds, uploadCmd)
+    
+    -- Join commands with && for sequential execution within this job
+    return table.concat(cmds, " && ")
 end
 
 local function upload(scriptName)
@@ -160,15 +342,72 @@ local function get_script_selection()
     return "back"
 end
 
+-- Execute all scripts in parallel for a given action
+local function execute_all_parallel(action)
+    setup_parallel_dir()
+    
+    print("\n============================================")
+    print(" PARALLEL EXECUTION: " .. action:upper() .. " (" .. #SCRIPTS .. " scripts)")
+    print("============================================")
+    
+    local jobIds = {}
+    
+    for _, s in ipairs(SCRIPTS) do
+        local cmd
+        local jobId = action .. "_" .. s.id
+        
+        if action == "full" then
+            cmd = build_full_pipeline_cmd(s)
+        elseif action == "preprocess" then
+            if s.needsPreprocess then
+                cmd = "lua preprocess.lua " .. s.id .. ".lua " .. s.id .. ".preprocessed.lua"
+            end
+        elseif action == "obfuscate" then
+            local input = s.needsPreprocess and ("../" .. s.id .. ".preprocessed.lua") or ("../" .. s.id .. ".lua")
+            local output = "../" .. s.id .. ".obfuscated.lua"
+            cmd = "cd Moonstar && lua moonstar.lua " .. input .. " " .. output .. " --preset=" .. OBFUSCATION_PRESET
+            if ENABLE_COMPRESSION then
+                cmd = cmd .. " --compress"
+            end
+        elseif action == "upload" then
+            local key = s.id .. ".lua"
+            local path = s.id .. ".obfuscated.lua"
+            cmd = 'wrangler kv key put "' .. key .. '" --binding=SCRIPTS --path="' .. path .. '" --config wrangler.toml --remote'
+        end
+        
+        if cmd then
+            run_command_async(cmd, jobId)
+            table.insert(jobIds, jobId)
+        else
+            print("  [SKIP] " .. s.id .. " (not applicable for " .. action .. ")")
+        end
+    end
+    
+    if #jobIds > 0 then
+        local success = wait_for_jobs(jobIds)
+        print_job_logs(jobIds)
+        
+        -- Cleanup temp files if full deployment
+        if action == "full" then
+            print("\n  [+] Cleaning up temp files...")
+            for _, s in ipairs(SCRIPTS) do
+                cleanup(s.id)
+            end
+        end
+    end
+    
+    cleanup_parallel_dir()
+end
+
 local function execute_task(action)
     local selection = get_script_selection()
     if selection == "back" or selection == nil then return end
     
     if selection == "all" then
-        for _, s in ipairs(SCRIPTS) do
-            perform_action(action, s)
-        end
+        -- Use parallel execution for ALL scripts
+        execute_all_parallel(action)
     else
+        -- Single script - run sequentially as before
         perform_action(action, selection)
     end
     

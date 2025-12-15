@@ -1,0 +1,125 @@
+MOONSTAR OBFUSCATOR - TEST RESULTS
+Generated: 2025-12-15 18:05:33
+Test Files: 25
+Target Preset: Strong
+Compression: disabled
+
+------------------------------------------------------------
+PRESET: Strong
+------------------------------------------------------------
+[PASS]   tests/bit.lua
+[PASS]   tests/closures.lua
+[PASS]   tests/closures_advanced.lua
+[PASS]   tests/control_flow.lua
+[PASS]   tests/coroutines.lua
+[PASS]   tests/error_handling.lua
+[PASS]   tests/factorial.lua
+[SKIP]   tests/luau/door_esp_test.luau
+         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
+[SKIP]   tests/luau/remote_logger_test.luau
+         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
+[SKIP]   tests/luau/roblox_test.luau
+         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
+[PASS]   tests/math_test.lua
+[PASS]   tests/metamethods.lua
+[FAIL]   tests/metamethods_advanced.lua
+         Output mismatch:
+           Expected: "custom len: 0\
+         eq1 == eq2: true\
+         eq1 == eq3: false\
+         cmp1 < cmp2: true\
+         cmp2 ...
+           Actual: "custom len: 0\
+         eq1 == eq2: true\
+         eq1 == eq3: false\
+         cmp1 < cmp2: true\
+         cmp2 ...
+[PASS]   tests/perf_opt_local_func.lua
+[PASS]   tests/perf_opt_scope_reuse.lua
+[PASS]   tests/perf_opt_string_decrypt.lua
+[PASS]   tests/perf_opt_upvalue_cache.lua
+[PASS]   tests/simple_print.lua
+[PASS]   tests/stress_large_file.lua
+[FAIL]   tests/string_edge_cases.lua
+         Output mismatch:
+           Expected: "empty length: 0\
+         empty == '': true\
+         A byte: 65\
+         char 65: A\
+         null string leng...
+           Actual: "empty length: 0\
+         empty == '': true\
+         A byte: 65\
+         char 65: A\
+         null string leng...
+[PASS]   tests/string_enc.lua
+[PASS]   tests/string_manipulation.lua
+[PASS]   tests/tables_advanced.lua
+[PASS]   tests/tables_loops.lua
+[PASS]   tests/varargs.lua
+
+
+------------------------------------------------------------
+PERFORMANCE METRICS
+------------------------------------------------------------
+Total Assertions Passed: 60
+Total Assertions Failed: 0
+Original Code Size:      68080 bytes
+Obfuscated Code Size:    1861515 bytes
+Size Change:             +2634.3%
+Original Execution:      0.002s
+Obfuscated Execution:    0.024s
+Performance Ratio:       10.14x
+
+
+================================================================================
+SUMMARY
+================================================================================
+
+Total Tests:   25
+Passed:        20
+Failed:        2
+Skipped:       3
+Success Rate:  80.0%
+Duration:      11s
+
+
+------------------------------------------------------------
+FAILED TESTS DETAILS
+------------------------------------------------------------
+
+Failure #1:
+  Preset: Strong
+  File:   tests/metamethods_advanced.lua
+  Details:
+    Output mismatch:
+      Expected: "custom len: 0\
+    eq1 == eq2: true\
+    eq1 == eq3: false\
+    cmp1 < cmp2: true\
+    cmp2 ...
+      Actual: "custom len: 0\
+    eq1 == eq2: true\
+    eq1 == eq3: false\
+    cmp1 < cmp2: true\
+    cmp2 ...
+
+Failure #2:
+  Preset: Strong
+  File:   tests/string_edge_cases.lua
+  Details:
+    Output mismatch:
+      Expected: "empty length: 0\
+    empty == '': true\
+    A byte: 65\
+    char 65: A\
+    null string leng...
+      Actual: "empty length: 0\
+    empty == '': true\
+    A byte: 65\
+    char 65: A\
+    null string leng...
+
+================================================================================
+END OF REPORT
+================================================================================

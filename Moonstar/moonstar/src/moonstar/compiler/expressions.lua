@@ -168,9 +168,14 @@ function Expressions.FunctionCallExpression(compiler, expression, funcDepth, num
     for i, expr in ipairs(expression.args) do
         if i == #expression.args and (expr.kind == AstKind.FunctionCallExpression or expr.kind == AstKind.PassSelfFunctionCallExpression or expr.kind == AstKind.VarargExpression) then
             local reg = compiler:compileExpression(expr, funcDepth, compiler.RETURN_ALL)[1];
+            -- VUL-FIX: Unpack using explicit count (.n) to handle holes/nils
             table.insert(args, Ast.FunctionCallExpression(
                 compiler:unpack(scope),
-                {compiler:register(scope, reg)}));
+                {
+                    compiler:register(scope, reg),
+                    Ast.NumberExpression(1),
+                    Ast.IndexExpression(compiler:register(scope, reg), Ast.StringExpression("n"))
+                }));
             table.insert(regs, reg);
         else
             local argExpr, argReg = compiler:compileOperand(scope, expr, funcDepth);
@@ -180,7 +185,12 @@ function Expressions.FunctionCallExpression(compiler, expression, funcDepth, num
     end
 
     if(returnAll) then
-        compiler:addStatement(compiler:setRegister(scope, retRegs[1], Ast.TableConstructorExpression{Ast.TableEntry(Ast.FunctionCallExpression(compiler:register(scope, baseReg), args))}), {retRegs[1]}, {baseReg, unpack(regs)}, true);
+        -- VUL-FIX: Pack result into table with .n count
+        compiler:addStatement(compiler:setRegister(scope, retRegs[1], 
+            Ast.FunctionCallExpression(compiler:pack(scope), {
+                Ast.FunctionCallExpression(compiler:register(scope, baseReg), args)
+            })
+        ), {retRegs[1]}, {baseReg, unpack(regs)}, true);
     else
         if(numReturns > 1) then
             local a7bX9 = compiler:allocRegister(false);
@@ -224,9 +234,14 @@ function Expressions.PassSelfFunctionCallExpression(compiler, expression, funcDe
     for i, expr in ipairs(expression.args) do
         if i == #expression.args and (expr.kind == AstKind.FunctionCallExpression or expr.kind == AstKind.PassSelfFunctionCallExpression or expr.kind == AstKind.VarargExpression) then
             local reg = compiler:compileExpression(expr, funcDepth, compiler.RETURN_ALL)[1];
+            -- VUL-FIX: Unpack using explicit count (.n)
             table.insert(args, Ast.FunctionCallExpression(
                 compiler:unpack(scope),
-                {compiler:register(scope, reg)}));
+                {
+                    compiler:register(scope, reg),
+                    Ast.NumberExpression(1),
+                    Ast.IndexExpression(compiler:register(scope, reg), Ast.StringExpression("n"))
+                }));
             table.insert(regs, reg);
         else
             local argExpr, argReg = compiler:compileOperand(scope, expr, funcDepth);
@@ -242,7 +257,12 @@ function Expressions.PassSelfFunctionCallExpression(compiler, expression, funcDe
         compiler:addStatement(compiler:setRegister(scope, a7bX9, Ast.IndexExpression(compiler:register(scope, baseReg), compiler:register(scope, a7bX9))), {a7bX9}, {baseReg, a7bX9}, false);
 
         if returnAll then
-            compiler:addStatement(compiler:setRegister(scope, retRegs[1], Ast.TableConstructorExpression{Ast.TableEntry(Ast.FunctionCallExpression(compiler:register(scope, a7bX9), args))}), {retRegs[1]}, {a7bX9, unpack(regs)}, true);
+            -- VUL-FIX: Pack result into table with .n count
+            compiler:addStatement(compiler:setRegister(scope, retRegs[1], 
+                Ast.FunctionCallExpression(compiler:pack(scope), {
+                    Ast.FunctionCallExpression(compiler:register(scope, a7bX9), args)
+                })
+            ), {retRegs[1]}, {a7bX9, unpack(regs)}, true);
         else
             compiler:addStatement(compiler:setRegister(scope, a7bX9, Ast.TableConstructorExpression{Ast.TableEntry(Ast.FunctionCallExpression(compiler:register(scope, a7bX9), args))}), {a7bX9}, {a7bX9, unpack(regs)}, true);
 
@@ -792,9 +812,14 @@ function Expressions.TableConstructorExpression(compiler, expression, funcDepth,
                     local value = entry.value;
                     if i == #expression.entries and (value.kind == AstKind.FunctionCallExpression or value.kind == AstKind.PassSelfFunctionCallExpression or value.kind == AstKind.VarargExpression) then
                         local reg = compiler:compileExpression(entry.value, funcDepth, compiler.RETURN_ALL)[1];
+                        -- VUL-FIX: Unpack using explicit count (.n)
                         table.insert(entries, Ast.TableEntry(Ast.FunctionCallExpression(
                             compiler:unpack(scope),
-                            {compiler:register(scope, reg)})));
+                            {
+                                compiler:register(scope, reg),
+                                Ast.NumberExpression(1),
+                                Ast.IndexExpression(compiler:register(scope, reg), Ast.StringExpression("n"))
+                            })));
                         table.insert(entryRegs, reg);
                     else
                         -- OPTIMIZATION: Inline literals/vars/safe-expressions for array part
@@ -926,8 +951,11 @@ function Expressions.StrCatExpression(compiler, expression, funcDepth, numReturn
                     {regs[i]}, {}, false
                 )
             -- OPTIMIZATION: Use table.concat for 3+ operands
-            -- For 2 operands, the overhead of table creation outweighs benefits
-            elseif #operands >= 3 then
+            -- DISABLED: This breaks __concat metamethods (e.g. object .. " string") because table.concat
+            -- requires strings/numbers and does not invoke __concat or __tostring on elements.
+            -- To make this safe, we would need to ensure all operands are primitives, which is hard.
+            -- elseif #operands >= 3 then
+            elseif false and #operands >= 3 then
                 -- Build table entries for each operand
                 local entries = {}
                 local entryRegs = {}
@@ -980,37 +1008,45 @@ function Expressions.StrCatExpression(compiler, expression, funcDepth, numReturn
                 for _, reg in ipairs(entryRegs) do
                     compiler:freeRegister(reg, false)
                 end
+
             else
-                -- For 2 operands (or less after folding), use regular binary concatenation
-                local lhsExpr, lhsReg = compiler:compileOperand(scope, operands[1], funcDepth)
-                local rhsExpr, rhsReg
-                if #operands >= 2 then
-                    rhsExpr, rhsReg = compiler:compileOperand(scope, operands[2], funcDepth)
-                else
-                    -- Single operand (all strings folded into one), just assign it
-                    compiler:addStatement(
-                        compiler:setRegister(scope, regs[i], lhsExpr),
-                        {regs[i]}, lhsReg and {lhsReg} or {}, false
-                    )
-                    if lhsReg then compiler:freeRegister(lhsReg, false) end
-                    -- Skip the rest
-                    rhsExpr = nil
-                end
+                -- SAFE ITERATIVE CONCATENATION
+                -- Replaces table.concat strategy to respect __concat metamethods
                 
-                if rhsExpr then
-                    local reads = {}
-                    if lhsReg then table.insert(reads, lhsReg) end
-                    if rhsReg then table.insert(reads, rhsReg) end
-                    
+                -- 1. Compile first operand
+                local firstExpr, firstReg = compiler:compileOperand(scope, operands[1], funcDepth)
+                
+                if #operands == 1 then
+                    -- Just one operand (others folded), assign directly
                     compiler:addStatement(
-                        compiler:setRegister(scope, regs[i], Ast.StrCatExpression(lhsExpr, rhsExpr)),
-                        {regs[i]}, reads, true
+                        compiler:setRegister(scope, regs[i], firstExpr),
+                        {regs[i]}, firstReg and {firstReg} or {}, false
                     )
+                    if firstReg then compiler:freeRegister(firstReg, false) end
+                else
+                    -- 2. Initialize target with first operand
+                    compiler:addStatement(
+                        compiler:setRegister(scope, regs[i], firstExpr),
+                        {regs[i]}, firstReg and {firstReg} or {}, false
+                    )
+                    if firstReg then compiler:freeRegister(firstReg, false) end
                     
-                    if lhsReg then compiler:freeRegister(lhsReg, false) end
-                    if rhsReg then compiler:freeRegister(rhsReg, false) end
+                    -- 3. Iteratively append subsequent operands
+                    for k = 2, #operands do
+                         local nextExpr, nextReg = compiler:compileOperand(scope, operands[k], funcDepth)
+                         local reads = {regs[i]}
+                         if nextReg then table.insert(reads, nextReg) end
+                         
+                         -- regs[i] = regs[i] .. nextReg
+                         compiler:addStatement(
+                             compiler:setRegister(scope, regs[i], Ast.StrCatExpression(compiler:register(scope, regs[i]), nextExpr)),
+                             {regs[i]}, reads, true
+                         )
+                         
+                         if nextReg then compiler:freeRegister(nextReg, false) end
+                    end
                 end
-            end
+             end
         else
             compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.NilExpression()), {regs[i]}, {}, false);
         end

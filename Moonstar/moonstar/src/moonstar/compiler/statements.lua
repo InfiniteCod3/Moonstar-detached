@@ -159,7 +159,11 @@ function Statements.FunctionCallStatement(compiler, statement, funcDepth)
             local reg = compiler:compileExpression(expr, funcDepth, compiler.RETURN_ALL)[1];
             table.insert(args, Ast.FunctionCallExpression(
                 compiler:unpack(scope),
-                {compiler:register(scope, reg)}));
+                {
+                    compiler:register(scope, reg),
+                    Ast.NumberExpression(1),
+                    Ast.IndexExpression(compiler:register(scope, reg), Ast.StringExpression("n"))
+                }));
             table.insert(regs, reg);
         else
             local argExpr, argReg = compiler:compileOperand(scope, expr, funcDepth);
@@ -187,7 +191,11 @@ function Statements.PassSelfFunctionCallStatement(compiler, statement, funcDepth
             local reg = compiler:compileExpression(expr, funcDepth, compiler.RETURN_ALL)[1];
             table.insert(args, Ast.FunctionCallExpression(
                 compiler:unpack(scope),
-                {compiler:register(scope, reg)}));
+                {
+                    compiler:register(scope, reg),
+                    Ast.NumberExpression(1),
+                    Ast.IndexExpression(compiler:register(scope, reg), Ast.StringExpression("n"))
+                }));
             table.insert(regs, reg);
         else
             local argExpr, argReg = compiler:compileOperand(scope, expr, funcDepth);
@@ -215,10 +223,16 @@ function Statements.LocalFunctionDeclaration(compiler, statement, funcDepth)
         compiler:addStatement(compiler:setUpvalueMember(scope, compiler:register(scope, varReg), compiler:register(scope, retReg)), {}, {varReg, retReg}, true);
         compiler:freeRegister(retReg, false);
     else
+        -- PERF-OPT #11: For non-upvalue local functions, try to compile directly into the variable register
+        -- This avoids an unnecessary register copy operation
+        local varReg = compiler:getVarRegister(statement.scope, statement.id, funcDepth, nil);
         local retReg = compiler:compileFunction(statement, funcDepth);
-        local varReg = compiler:getVarRegister(statement.scope, statement.id, funcDepth, retReg);
-        compiler:addStatement(compiler:copyRegisters(scope, {varReg}, {retReg}), {varReg}, {retReg}, false);
-        compiler:freeRegister(retReg, false);
+        -- Only copy if the registers are different (should be rare with this optimization)
+        if varReg ~= retReg then
+            compiler:addStatement(compiler:copyRegisters(scope, {varReg}, {retReg}), {varReg}, {retReg}, false);
+            compiler:freeRegister(retReg, false);
+        end
+        -- If varReg == retReg, the function was already compiled into the correct register (no copy needed)
     end
 end
 

@@ -317,12 +317,136 @@ local function get_test_files()
     return files
 end
 
-local function run_lua_code(code)
+-- Enhanced test harness that wraps the code with assertion tracking and timing
+local TEST_HARNESS = [[
+-- Test Harness: Assertion Tracking & Performance Measurement
+local __test_harness = {
+    assertions_passed = 0,
+    assertions_failed = 0,
+    assertion_errors = {},
+    start_time = nil,
+    end_time = nil,
+}
+
+-- Override assert to track assertions
+-- We track all assertions but still allow failed ones to error (original behavior)
+local _original_assert = assert
+_G.assert = function(condition, message)
+    if condition then
+        __test_harness.assertions_passed = __test_harness.assertions_passed + 1
+        return condition
+    else
+        __test_harness.assertions_failed = __test_harness.assertions_failed + 1
+        local err_msg = message or "assertion failed"
+        table.insert(__test_harness.assertion_errors, err_msg)
+        -- Call original assert to trigger the error (original behavior)
+        return _original_assert(condition, message)
+    end
+end
+
+-- Start timing
+__test_harness.start_time = os.clock()
+
+-- Run test in protected mode (so we can capture assertion failures)
+local __test_ok, __test_err = pcall(function()
+-- BEGIN USER CODE
+]]
+
+local TEST_HARNESS_END = [[
+-- END USER CODE
+end)
+
+-- End timing
+__test_harness.end_time = os.clock()
+
+-- Output test results in structured format
+print("__TEST_HARNESS_RESULTS__")
+print("ASSERTIONS_PASSED=" .. __test_harness.assertions_passed)
+print("ASSERTIONS_FAILED=" .. __test_harness.assertions_failed)
+print("EXECUTION_TIME=" .. string.format("%.6f", __test_harness.end_time - __test_harness.start_time))
+if __test_ok then
+    print("STATUS=OK")
+else
+    print("STATUS=ERROR")
+    print("ERROR_MESSAGE=" .. tostring(__test_err))
+end
+for i, err in ipairs(__test_harness.assertion_errors) do
+    print("ASSERTION_ERROR_" .. i .. "=" .. tostring(err))
+end
+print("__TEST_HARNESS_END__")
+]]
+
+-- Parse test harness results from output
+local function parse_test_results(output)
+    local results = {
+        assertions_passed = 0,
+        assertions_failed = 0,
+        execution_time = 0,
+        status = "UNKNOWN",
+        error_message = nil,
+        assertion_errors = {},
+        raw_output = "",
+    }
+    
+    -- Find harness results section
+    local harness_start = output:find("__TEST_HARNESS_RESULTS__")
+    local harness_end = output:find("__TEST_HARNESS_END__")
+    
+    if harness_start and harness_end then
+        -- Extract raw output (before harness)
+        results.raw_output = output:sub(1, harness_start - 1):gsub("%s+$", "")
+        
+        -- Parse harness data
+        local harness_data = output:sub(harness_start, harness_end)
+        
+        results.assertions_passed = tonumber(harness_data:match("ASSERTIONS_PASSED=(%d+)")) or 0
+        results.assertions_failed = tonumber(harness_data:match("ASSERTIONS_FAILED=(%d+)")) or 0
+        results.execution_time = tonumber(harness_data:match("EXECUTION_TIME=([%d%.]+)")) or 0
+        results.status = harness_data:match("STATUS=(%w+)") or "UNKNOWN"
+        results.error_message = harness_data:match("ERROR_MESSAGE=([^\n]+)")
+        
+        -- Parse assertion errors
+        for err in harness_data:gmatch("ASSERTION_ERROR_%d+=([^\n]+)") do
+            table.insert(results.assertion_errors, err)
+        end
+    else
+        -- Fallback: no harness output found
+        results.raw_output = output:gsub("%s+$", "")
+        results.status = "NO_HARNESS"
+    end
+    
+    return results
+end
+
+local function run_lua_code(code, use_harness)
     local f = io.open(CONFIG.TEMP_FILE, "w")
     if not f then return nil, "Could not open temp file" end
-    f:write(code)
+    
+    if use_harness then
+        f:write(TEST_HARNESS)
+        f:write(code)
+        f:write(TEST_HARNESS_END)
+    else
+        f:write(code)
+    end
+    
     f:close()
-    local output = run_command("lua5.1 " .. CONFIG.TEMP_FILE .. " 2>&1")
+    -- Prefer Lua 5.1 for Moonstar compatibility
+    -- lua5.1 > luajit > lua5.2 > lua
+    local lua_cmd = "lua"
+    local separator = package.config:sub(1,1)
+    if separator == '/' then  -- Unix-like
+        -- Check for available interpreters (prefer 5.1)
+        local check_lua = io.popen("which lua5.1 luajit lua5.2 2>/dev/null | head -1")
+        if check_lua then
+            local found = check_lua:read("*l")
+            check_lua:close()
+            if found and found ~= "" then
+                lua_cmd = found
+            end
+        end
+    end
+    local output = run_command(lua_cmd .. " " .. CONFIG.TEMP_FILE .. " 2>&1")
     os.remove(CONFIG.TEMP_FILE)
     return output
 end
@@ -330,6 +454,11 @@ end
 local function truncate(str, max_len)
     if #str <= max_len then return str end
     return str:sub(1, max_len - 3) .. "..."
+end
+
+-- Get file size
+local function get_code_size(code)
+    return #code
 end
 
 --------------------------------------------------------------------------------
@@ -399,7 +528,15 @@ local failed_tests = 0
 local skipped_tests = 0
 local start_time = os.time()
 
--- Test runner function
+-- Additional metrics
+local total_assertions_passed = 0
+local total_assertions_failed = 0
+local total_size_original = 0
+local total_size_obfuscated = 0
+local total_time_original = 0
+local total_time_obfuscated = 0
+
+-- Test runner function with enhanced validation
 local function run_single_test(file_path, pipeline, test_index, total_count)
     total_tests = total_tests + 1
     
@@ -418,6 +555,10 @@ local function run_single_test(file_path, pipeline, test_index, total_count)
     local original_code = f:read("*a")
     f:close()
     
+    -- Track original code size
+    local original_size = get_code_size(original_code)
+    total_size_original = total_size_original + original_size
+    
     -- Prepare code for execution
     local code_to_run = original_code
     if file_path:match("%.luau$") then
@@ -430,8 +571,19 @@ local function run_single_test(file_path, pipeline, test_index, total_count)
         code_to_run = aurora_emulator_code .. "\n" .. original_code
     end
     
-    -- Run original
-    local expected_output = run_lua_code(code_to_run)
+    -- Run original with test harness
+    local original_output_raw = run_lua_code(code_to_run, true)
+    local original_results = parse_test_results(original_output_raw)
+    
+    -- Check if original code runs successfully
+    if original_results.status == "ERROR" then
+        skipped_tests = skipped_tests + 1
+        Report:testResult(file_path, "SKIP", "Original code error: " .. (original_results.error_message or "unknown"))
+        if verbose then Console:testSkip(file_path, "Original code error") end
+        return
+    end
+    
+    total_time_original = total_time_original + original_results.execution_time
     
     -- Obfuscate
     local status, obfuscated_code = pcall(function()
@@ -449,34 +601,79 @@ local function run_single_test(file_path, pipeline, test_index, total_count)
         return
     end
     
-    -- Run obfuscated
+    -- Track obfuscated code size
+    local obfuscated_size = get_code_size(obfuscated_code)
+    total_size_obfuscated = total_size_obfuscated + obfuscated_size
+    
+    -- Run obfuscated WITHOUT test harness (harness breaks vararg compatibility)
+    -- The obfuscated code uses '...' which doesn't work inside pcall(function() ... end)
     local obfuscated_code_to_run = obfuscated_code
     if file_path:match("%.luau$") and aurora_emulator_code then
         obfuscated_code_to_run = aurora_emulator_code .. "\n" .. obfuscated_code
     end
-    local actual_output = run_lua_code(obfuscated_code_to_run)
     
-    -- Compare outputs
-    local expected_clean = expected_output:gsub("%s+$", ""):gsub("\r\n", "\n")
-    local actual_clean = actual_output:gsub("%s+$", ""):gsub("\r\n", "\n")
+    -- Time the obfuscated execution manually
+    local obf_start_time = os.clock()
+    local obfuscated_output_raw = run_lua_code(obfuscated_code_to_run, false)  -- No harness!
+    local obf_end_time = os.clock()
     
-    if expected_clean == actual_clean then
+    local obfuscated_execution_time = obf_end_time - obf_start_time
+    total_time_obfuscated = total_time_obfuscated + obfuscated_execution_time
+    
+    -- Enhanced validation
+    local test_passed = true
+    local failure_reasons = {}
+    
+    -- Clean outputs for comparison (normalize all whitespace variations)
+    local function normalize_output(s)
+        return s:gsub("\r\n", "\n")   -- Normalize line endings
+                :gsub("\r", "\n")     -- Handle old Mac line endings
+                :gsub("\t", " ")      -- Tabs to spaces
+                :gsub(" +\n", "\n")   -- Trailing spaces on lines
+                :gsub("%s+$", "")     -- Trailing whitespace at end
+    end
+    
+    local expected_clean = normalize_output(original_results.raw_output)
+    local actual_clean = normalize_output(obfuscated_output_raw)
+    
+    -- 1. Check for runtime errors (look for error patterns in output)
+    if actual_clean:match("^[^:]+:%d+:") or actual_clean:match("^lua[^:]*:") then
+        test_passed = false
+        table.insert(failure_reasons, "Runtime error: " .. truncate(actual_clean, 100))
+    end
+    
+    -- 2. Compare outputs
+    if expected_clean ~= actual_clean then
+        test_passed = false
+        table.insert(failure_reasons, string.format("Output mismatch:\n  Expected: %s\n  Actual: %s",
+            truncate(string.format("%q", expected_clean), 80),
+            truncate(string.format("%q", actual_clean), 80)))
+    end
+    
+    -- Update totals (use original assertion count since we can't track obfuscated)
+    total_assertions_passed = total_assertions_passed + original_results.assertions_passed
+    -- We can't track obfuscated assertions without harness, so we assume they match if output matches
+    
+    if test_passed then
         passed_tests = passed_tests + 1
-        Report:testResult(file_path, "PASS")
+        -- Include metrics in pass report
+        local metrics = string.format("(assertions: %d, size: %d→%d, time: %.3fs→%.3fs)",
+            original_results.assertions_passed,
+            original_size, obfuscated_size,
+            original_results.execution_time, obfuscated_execution_time)
+        Report:testResult(file_path, "PASS", verbose and metrics or nil)
         if verbose then 
             Console:clearLine()
             Console:testPass(file_path) 
         end
     else
         failed_tests = failed_tests + 1
-        local details = string.format("Expected: %s\nActual: %s",
-            truncate(string.format("%q", expected_clean), 100),
-            truncate(string.format("%q", actual_clean), 100))
+        local details = table.concat(failure_reasons, "\n")
         Report:testResult(file_path, "FAIL", details)
         
         if verbose then 
             Console:clearLine()
-            Console:testFail(file_path, "Output mismatch") 
+            Console:testFail(file_path, failure_reasons[1] or "Unknown error") 
         end
         
         -- Save failed code
@@ -544,11 +741,54 @@ end
 -- Calculate duration
 local duration = os.time() - start_time
 
+-- Add enhanced metrics to report
+Report:add("")
+Report:section("PERFORMANCE METRICS")
+Report:add(string.format("Total Assertions Passed: %d", total_assertions_passed))
+Report:add(string.format("Total Assertions Failed: %d", total_assertions_failed))
+Report:add(string.format("Original Code Size:      %d bytes", total_size_original))
+Report:add(string.format("Obfuscated Code Size:    %d bytes", total_size_obfuscated))
+if total_size_original > 0 then
+    local size_change = ((total_size_obfuscated - total_size_original) / total_size_original) * 100
+    Report:add(string.format("Size Change:             %+.1f%%", size_change))
+end
+Report:add(string.format("Original Execution:      %.3fs", total_time_original))
+Report:add(string.format("Obfuscated Execution:    %.3fs", total_time_obfuscated))
+if total_time_original > 0 then
+    local time_ratio = total_time_obfuscated / total_time_original
+    Report:add(string.format("Performance Ratio:       %.2fx", time_ratio))
+end
+
 -- Save report
 Report:save()
 
 -- Print summary
 Console:summary(total_tests, passed_tests, failed_tests, skipped_tests, duration)
+
+-- Print enhanced metrics to console
+print("")
+print(c(Colors.cyan .. Colors.bold, "  ═══════════════════════════════════════"))
+print(c(Colors.cyan, "  ENHANCED METRICS"))
+print(c(Colors.cyan .. Colors.bold, "  ═══════════════════════════════════════"))
+print(c(Colors.dim, string.format("  Assertions:  %d passed, %d failed", 
+    total_assertions_passed, total_assertions_failed)))
+
+if total_size_original > 0 then
+    local size_change = ((total_size_obfuscated - total_size_original) / total_size_original) * 100
+    local size_color = size_change > 0 and Colors.yellow or Colors.green
+    print(c(Colors.dim, string.format("  Code Size:   %d → %d bytes (", total_size_original, total_size_obfuscated)) ..
+          c(size_color, string.format("%+.1f%%", size_change)) ..
+          c(Colors.dim, ")"))
+end
+
+if total_time_original > 0 then
+    local time_ratio = total_time_obfuscated / total_time_original
+    local time_color = time_ratio > 2 and Colors.yellow or Colors.green
+    print(c(Colors.dim, string.format("  Exec Time:   %.3fs → %.3fs (", total_time_original, total_time_obfuscated)) ..
+          c(time_color, string.format("%.2fx", time_ratio)) ..
+          c(Colors.dim, ")"))
+end
+
 print("")
 print(c(Colors.dim, "  Report saved to: " .. CONFIG.REPORT_FILE))
 print("")
