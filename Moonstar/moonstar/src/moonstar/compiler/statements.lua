@@ -56,13 +56,29 @@ function Statements.ReturnStatement(compiler, statement, funcDepth)
     local entries = {};
     local regs = {};
 
+    local nExpr
+
     for i, expr in ipairs(statement.args) do
         if i == #statement.args and (expr.kind == AstKind.FunctionCallExpression or expr.kind == AstKind.PassSelfFunctionCallExpression or expr.kind == AstKind.VarargExpression) then
             local reg = compiler:compileExpression(expr, funcDepth, compiler.RETURN_ALL)[1];
+            -- VUL-2025-012 FIX: Use explicit unpack count to handle holes in return values
             table.insert(entries, Ast.TableEntry(Ast.FunctionCallExpression(
                 compiler:unpack(scope),
-                {compiler:register(scope, reg)})));
+                {
+                    compiler:register(scope, reg),
+                    Ast.NumberExpression(1),
+                    Ast.IndexExpression(compiler:register(scope, reg), Ast.StringExpression("n"))
+                })));
             table.insert(regs, reg);
+
+            -- Calculate dynamic n: (args_before) + reg.n
+            local baseCount = i - 1
+            local regN = Ast.IndexExpression(compiler:register(scope, reg), Ast.StringExpression("n"))
+            if baseCount > 0 then
+                nExpr = Ast.AddExpression(Ast.NumberExpression(baseCount), regN)
+            else
+                nExpr = regN
+            end
         else
             -- OPTIMIZATION: Inline literals/vars for return
             local retExpr, retReg = compiler:compileOperand(scope, expr, funcDepth);
@@ -70,6 +86,14 @@ function Statements.ReturnStatement(compiler, statement, funcDepth)
             if retReg then table.insert(regs, retReg) end
         end
     end
+
+    -- If no dynamic n was calculated, use static count
+    if not nExpr then
+        nExpr = Ast.NumberExpression(#statement.args)
+    end
+
+    -- VUL-2025-012 FIX: Store 'n' in return table so containerFunc can unpack correctly
+    table.insert(entries, Ast.KeyedTableEntry(Ast.StringExpression("n"), nExpr))
 
     for _, reg in ipairs(regs) do
         compiler:freeRegister(reg, false);
