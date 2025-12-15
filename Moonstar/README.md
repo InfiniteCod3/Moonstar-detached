@@ -9,7 +9,7 @@ Moonstar is an advanced Lua/Luau obfuscator designed to provide high-level prote
 - **VM-based Bytecode Compilation:** Compiles Lua code into a custom bytecode format executed by a virtual machine (`Vmify`).
 - **Control Flow Flattening:** Flattens nested control structures into a complex state machine (`ControlFlowFlattening`).
 - **Global Virtualization:** Hides global variables and mocks the environment to prevent hooking (`GlobalVirtualization`).
-- **JIT String Encryption:** Replaces static strings with runtime-generated logic (`JitStringDecryptor`).
+
 - **Anti-Tamper Protection:** Prevents unauthorized modification of the obfuscated script (`AntiTamper`).
 - **Instruction Randomization:** Randomizes VM instructions to make reverse engineering more difficult (`VmProfileRandomizer`).
 - **Compression:** Compresses the script using advanced algorithms (LZSS, Huffman, Arithmetic, PPM, BWT) to reduce file size and add another layer of obfuscation (`Compression`).
@@ -19,7 +19,7 @@ Moonstar is an advanced Lua/Luau obfuscator designed to provide high-level prote
 - **Constant Folding:** Pre-calculates constant expressions to simplify code before obfuscation (`ConstantFolding`).
 - **Number to Expression:** Converts plain numbers into complex arithmetic expressions (`NumbersToExpressions`).
 - **Vararg Injection:** Injects unused vararg (`...`) parameters to confuse function signatures (`AddVararg`).
-- **Local Proxification:** Wraps local variables in proxies to hide their values (`ProxifyLocals`).
+
 - **Lua 5.1 & LuaU Support:** Fully compatible with standard Lua 5.1 and Roblox's LuaU.
 
 ## Installation

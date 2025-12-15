@@ -4,7 +4,6 @@ return {
 	Vmify                    = require("moonstar.steps.Vmify");
 	Vmify2                   = require("moonstar.steps.Vmify");
 	ConstantArray            = require("moonstar.steps.ConstantArray");
-	ProxifyLocals            = require("moonstar.steps.ProxifyLocals");
 	EncryptStrings           = require("moonstar.steps.EncryptStrings");
 	NumbersToExpressions     = require("moonstar.steps.NumbersToExpressions");
 	AddVararg                = require("moonstar.steps.AddVararg");
@@ -13,6 +12,5 @@ return {
 	AntiTamper               = require("moonstar.steps.AntiTamper");
 	GlobalVirtualization     = require("moonstar.steps.GlobalVirtualization");
 	ControlFlowFlattening    = require("moonstar.steps.ControlFlowFlattening");
-	JitStringDecryptor       = require("moonstar.steps.JitStringDecryptor");
 	Compression              = require("moonstar.steps.Compression");
 }

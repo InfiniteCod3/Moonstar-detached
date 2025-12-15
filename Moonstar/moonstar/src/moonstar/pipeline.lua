@@ -96,13 +96,13 @@ local CANONICAL_ORDER = {
 	"AntiTamper",
 	"WrapInFunction",
 	"ConstantFolding",
-	"JitStringDecryptor",
+
 	"EncryptStrings",
 	"SplitStrings",
 	"ConstantArray",
 	"LayeredStringDecrypt",
 	"NumbersToExpressions",
-	"ProxifyLocals",
+
 	"AddVararg",
 	"ControlFlowRestructuring",
 	"ControlFlowFlattening",
@@ -124,13 +124,13 @@ local DEFAULT_ENABLED = {
 	AntiTamper               = false,
 	WrapInFunction           = false,
 	ConstantFolding          = false,
-	JitStringDecryptor       = false,
+
 	EncryptStrings           = false,
 	SplitStrings             = false,
 	ConstantArray            = false,
 	LayeredStringDecrypt     = false,
 	NumbersToExpressions     = false,
-	ProxifyLocals            = false,
+
 	AddVararg                = false,
 	ControlFlowRestructuring = false,
 	ControlFlowFlattening    = false,

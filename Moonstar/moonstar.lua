@@ -155,7 +155,6 @@ local FallbackPresets = {
         GlobalVirtualization = { Enabled = true; VirtualizeEnv = true };
         WrapInFunction = { Enabled = true };
         ConstantFolding = { Enabled = true };
-        JitStringDecryptor = { Enabled = false; MaxLength = 30 };
         EncryptStrings = { Enabled = true; Mode = "standard"; DecryptorVariant = "polymorphic"; LayerDepth = 1; InlineThreshold = 16; EnvironmentCheck = true };
         ControlFlowFlattening = { Enabled = true; ChunkSize = 3 };
         ConstantArray = { Enabled = true; EncodeStrings = true; IndexObfuscation = true };

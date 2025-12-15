@@ -19,11 +19,6 @@ return {
         Enabled = true;
     };
     
-    JitStringDecryptor = {
-        Enabled = false;
-        MaxLength = 30;
-    };
-
     EncryptStrings = {
         Enabled = true;
         Mode = "standard";
