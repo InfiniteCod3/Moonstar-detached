@@ -552,28 +552,10 @@ function Unparser:unparseExpression(expression, tabbing)
 	
 	local k = AstKind.OrExpression;
 	if(expression.kind == k) then
-		-- Check if this is a ternary-like pattern: (X and Y or Z)
-		-- If so, generate obfuscated version directly instead of the pattern
-		if expression.lhs.kind == AstKind.AndExpression then
-			-- This is "X and Y or Z" pattern - obfuscate it during generation
-			local condition = self:unparseExpression(expression.lhs.lhs, tabbing);
-			local trueValue = self:unparseExpression(expression.lhs.rhs, tabbing);
-			local falseValue = self:unparseExpression(expression.rhs, tabbing);
-			
-			-- 91% chance to generate obfuscated form
-			if math.random(1, 100) <= 91 then
-				-- Generate as inline function with if-then-else
-				return string.format("(function() if %s then return %s else return %s end end)()",
-					condition, trueValue, falseValue);
-			else
-				-- Keep some as original for variety (9%)
-				local lhs = self:unparseExpression(expression.lhs, tabbing);
-				local rhs = self:unparseExpression(expression.rhs, tabbing);
-				return "(" .. lhs .. self:whitespaceIfNeeded2(lhs) .. "or" .. self:whitespaceIfNeeded(rhs) .. rhs .. ")";
-			end
-		end
-		
-		-- Regular or expression (not part of ternary pattern)
+		-- NOTE: Do NOT transform "(X and Y) or Z" into "if X then return Y else return Z"
+		-- That transformation is semantically incorrect when Y can be falsy!
+		-- Original: if X is truthy but Y is falsy, returns Z
+		-- Transformed: if X is truthy, returns Y (regardless of Y's truthiness)
 		local lhs = self:unparseExpression(expression.lhs, tabbing);
 		local rhs = self:unparseExpression(expression.rhs, tabbing);
 		return lhs .. self:whitespaceIfNeeded2(lhs) .. "or" .. self:whitespaceIfNeeded(rhs) .. rhs;

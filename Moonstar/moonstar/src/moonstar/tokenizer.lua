@@ -284,9 +284,11 @@ end
 
 local function int(self, chars, seperators)
 	local buffer = {};
+	local bufferLen = 0
 	while true do
 		if (is(self, chars)) then
-			buffer[#buffer + 1] = get(self)
+			bufferLen = bufferLen + 1
+			buffer[bufferLen] = get(self)
 		elseif (is(self, seperators)) then
 			self.index = self.index + 1;
 		else
@@ -369,6 +371,7 @@ function Tokenizer:singleLineString()
 	local startPos = self.index;
 	local startChar = expect(self, self.StringStartLookup);
 	local buffer = {};
+	local bufferLen = 0;
 
 	while (not is(self, startChar)) do
 		local char = get(self);
@@ -422,7 +425,8 @@ function Tokenizer:singleLineString()
 		end
 		
 		--// since table.insert is slower in lua51
-		buffer[#buffer + 1] = char
+		bufferLen = bufferLen + 1
+		buffer[bufferLen] = char
 	end
 	
 	expect(self, startChar);
@@ -443,9 +447,15 @@ function Tokenizer:multiLineString()
 			-- Multiline String
 			-- Parse String to Closing bracket but also consider that the count of equal signs must be the same
 			
-			-- Skip Leading newline if existing
+			-- Skip Leading newline if existing (handles CRLF, LF, or CR)
 			self.index = self.index + 1;
-			if(is(self, "\n")) then
+			if(is(self, "\r")) then
+				self.index = self.index + 1;
+				-- Also skip \n if this is CRLF
+				if(is(self, "\n")) then
+					self.index = self.index + 1;
+				end
+			elseif(is(self, "\n")) then
 				self.index = self.index + 1;
 			end
 			

@@ -461,6 +461,34 @@ local function get_code_size(code)
     return #code
 end
 
+-- Helper to find diff
+local function get_string_diff(s1, s2, context)
+    context = context or 20
+    if s1 == s2 then return nil end
+
+    local min_len = math.min(#s1, #s2)
+    for i = 1, min_len do
+        if s1:sub(i, i) ~= s2:sub(i, i) then
+            local start_idx = math.max(1, i - context)
+            local end_idx = math.min(math.max(#s1, #s2), i + context)
+
+            local s1_sub = s1:sub(start_idx, end_idx)
+            local s2_sub = s2:sub(start_idx, end_idx)
+
+            -- Highlight difference point (crudely)
+            return string.format("Difference at index %d:\nExpected context: ...%s...\nActual context:   ...%s...",
+                i, s1_sub:gsub("\n", "\\n"), s2_sub:gsub("\n", "\\n"))
+        end
+    end
+
+    if #s1 ~= #s2 then
+        return string.format("Lengths differ: Expected %d chars, Actual %d chars. Strings identical up to index %d.",
+            #s1, #s2, min_len)
+    end
+
+    return "Unknown difference"
+end
+
 --------------------------------------------------------------------------------
 -- Parse Arguments
 --------------------------------------------------------------------------------
@@ -631,6 +659,9 @@ local function run_single_test(file_path, pipeline, test_index, total_count)
                 :gsub("\t", " ")      -- Tabs to spaces
                 :gsub(" +\n", "\n")   -- Trailing spaces on lines
                 :gsub("%s+$", "")     -- Trailing whitespace at end
+                :gsub("table: 0x%x+", "table: 0xADDR")         -- Normalize table addresses
+                :gsub("function: 0x%x+", "function: 0xADDR")   -- Normalize function addresses
+                :gsub("userdata: 0x%x+", "userdata: 0xADDR")   -- Normalize userdata addresses
     end
     
     local expected_clean = normalize_output(original_results.raw_output)
@@ -645,9 +676,9 @@ local function run_single_test(file_path, pipeline, test_index, total_count)
     -- 2. Compare outputs
     if expected_clean ~= actual_clean then
         test_passed = false
-        table.insert(failure_reasons, string.format("Output mismatch:\n  Expected: %s\n  Actual: %s",
-            truncate(string.format("%q", expected_clean), 80),
-            truncate(string.format("%q", actual_clean), 80)))
+        local diff_msg = get_string_diff(expected_clean, actual_clean)
+
+        table.insert(failure_reasons, string.format("Output mismatch:\n%s", diff_msg or "Unknown difference"))
     end
     
     -- Update totals (use original assertion count since we can't track obfuscated)
