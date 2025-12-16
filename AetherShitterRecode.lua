@@ -242,6 +242,7 @@ local Settings = {
     IFrames = false,
     AntiDebuff = false,
     AutoRemoveSkills = false,
+    StealTargetSkills = false, -- Steal skills from target only and keep them
     AttacherVisible = false,
     LoopVoid = false,
     -- Input/Aimbot Settings
@@ -375,15 +376,17 @@ task.spawn(function()
                     local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                     
                     if targetHRP and localHRP then
-                         local cf1 = CFrame.new(0, -10000, 0)
-                         local vecInf = Vector3.new(0, -10000, 0)
-                         local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
+                         -- Use same CFrame values as lol.lua for consistency
+                         local cf1 = CFrame.new(-3028.2375, 3101.888, 308.063, -0.9139, 0, 0.4057, 0, 1, 0, -0.4057, 0, -0.9139)
+                         local voidOffset = Vector3.new(0, -10000, 0)
+                         local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
                          
-                         WeldsRemote:FireServer(targetHRP, localHRP, cf1, vecInf, cf2)
+                         -- Order: localHRP first, then targetHRP (matches lol.lua)
+                         WeldsRemote:FireServer(localHRP, targetHRP, cf1, voidOffset, cf2)
                     end
                 end
              end
-             task.wait(0.2)
+             task.wait(0.1) -- Faster loop for more persistent effect
         else
              task.wait(1)
         end
@@ -433,10 +436,10 @@ task.spawn(function()
                 local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if targetHRP and localHRP then
                     spinAngle = spinAngle + 0.5
-                    local spinCF = CFrame.Angles(0, spinAngle, 0)
-                    local cf1 = CFrame.new(0, 0, 0)
-                    local offset = Vector3.new(0, 0, 0)
-                    WeldsRemote:FireServer(targetHRP, targetHRP, cf1, offset, spinCF)
+                    local cf1 = CFrame.new(-3028.2375, 3101.888, 308.063, -0.9139, 0, 0.4057, 0, 1, 0, -0.4057, 0, -0.9139)
+                    local offset = Vector3.new(math.cos(spinAngle) * 5, 0, math.sin(spinAngle) * 5)
+                    local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
+                    WeldsRemote:FireServer(localHRP, targetHRP, cf1, offset, cf2)
                 end
             end
             task.wait(0.05)
@@ -457,10 +460,10 @@ local function TrapTargetUnderground()
         local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
         local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if targetHRP and localHRP then
-            local cf1 = CFrame.new(0, -50, 0)
+            local cf1 = CFrame.new(-3028.2375, 3101.888, 308.063, -0.9139, 0, 0.4057, 0, 1, 0, -0.4057, 0, -0.9139)
             local offset = Vector3.new(0, -50, 0)
-            local cf2 = CFrame.new(0, 0, 0)
-            WeldsRemote:FireServer(targetHRP, localHRP, cf1, offset, cf2)
+            local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
+            WeldsRemote:FireServer(localHRP, targetHRP, cf1, offset, cf2)
             notify("Trapped " .. Settings.TargetName .. " underground")
         end
     end
@@ -475,9 +478,9 @@ task.spawn(function()
                 local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
                 local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if targetHRP and localHRP then
-                    local cf1 = CFrame.new(0, 0, 0)
+                    local cf1 = CFrame.new(-3028.2375, 3101.888, 308.063, -0.9139, 0, 0.4057, 0, 1, 0, -0.4057, 0, -0.9139)
                     local offset = Vector3.new(0, 3, -2) -- Behind and above them
-                    local cf2 = CFrame.new(0, 0, 0)
+                    local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
                     WeldsRemote:FireServer(localHRP, targetHRP, cf1, offset, cf2)
                 end
             end
@@ -505,16 +508,16 @@ task.spawn(function()
                         if targetHRP then
                             -- Calculate position: behind the local player in a line
                             local behindOffset = Vector3.new(0, 0, spacing * i)
-                            local cf1 = CFrame.new(0, 0, 0)
-                            local cf2 = CFrame.new(0, 0, 0)
+                            local cf1 = CFrame.new(-3028.2375, 3101.888, 308.063, -0.9139, 0, 0.4057, 0, 1, 0, -0.4057, 0, -0.9139)
+                            local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
                             
                             -- Weld each player to your HRP with increasing Z offset
-                            WeldsRemote:FireServer(targetHRP, localHRP, cf1, behindOffset, cf2)
+                            WeldsRemote:FireServer(localHRP, targetHRP, cf1, behindOffset, cf2)
                         end
                     end
                 end
             end
-            task.wait(0.15) -- Smooth update
+            task.wait(0.1) -- Faster update
         else
             task.wait(0.5)
         end
@@ -532,33 +535,16 @@ task.spawn(function()
             if target and target.Character and localHRP then
                 local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
                 if targetHRP then
-                    -- Get current local position and movement delta
-                    local currentCFrame = localHRP.CFrame
+                    -- Keep them at a fixed offset
+                    local cf1 = CFrame.new(-3028.2375, 3101.888, 308.063, -0.9139, 0, 0.4057, 0, 1, 0, -0.4057, 0, -0.9139)
+                    local offset = Vector3.new(3, 0, 3) -- 3 studs to the side and front
+                    local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
                     
-                    if puppetLastCFrame then
-                        -- Calculate how much we moved
-                        local delta = currentCFrame.Position - puppetLastCFrame.Position
-                        
-                        -- Mirror the movement: same direction but on their position
-                        -- They move in the same direction as you (puppet follows)
-                        local mirrorOffset = delta
-                        
-                        -- Keep them at a fixed offset but make them "move with" you
-                        local cf1 = CFrame.new(0, 0, 0)
-                        local offset = Vector3.new(3, 0, 3) -- 3 studs to the side and front
-                        local cf2 = CFrame.new(0, 0, 0)
-                        
-                        WeldsRemote:FireServer(targetHRP, localHRP, cf1, offset, cf2)
-                    end
-                    
-                    puppetLastCFrame = currentCFrame
+                    WeldsRemote:FireServer(localHRP, targetHRP, cf1, offset, cf2)
                 end
-            else
-                puppetLastCFrame = nil
             end
             task.wait(0.05) -- Very fast updates for smooth puppeting
         else
-            puppetLastCFrame = nil
             task.wait(0.5)
         end
     end
@@ -624,9 +610,9 @@ local function BlowEveryone()
             local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             
             if targetHRP and localHRP then
-                local cf1 = CFrame.new(-3028.23, 3101.88, 308.06, -0.91, 0, 0.4, 0, 1, 0, -0.4, 0, -0.91)
+                local cf1 = CFrame.new(-3028.2375, 3101.888, 308.063, -0.9139, 0, 0.4057, 0, 1, 0, -0.4057, 0, -0.9139)
                 local vecInf = Vector3.new(math.huge, math.huge, math.huge)
-                local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
+                local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
                 
                 WeldsRemote:FireServer(localHRP, targetHRP, cf1, vecInf, cf2)
                 count = count + 1
@@ -648,12 +634,12 @@ local function VoidEveryone()
             local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             
             if targetHRP and localHRP then
-                -- Teleport deep into the void
-                local cf1 = CFrame.new(0, -10000, 0)
-                local vecInf = Vector3.new(0, -10000, 0)
-                local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
+                -- Use consistent CFrame values from lol.lua
+                local cf1 = CFrame.new(-3028.2375, 3101.888, 308.063, -0.9139, 0, 0.4057, 0, 1, 0, -0.4057, 0, -0.9139)
+                local voidOffset = Vector3.new(0, -10000, 0)
+                local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
                 
-                WeldsRemote:FireServer(localHRP, targetHRP, cf1, vecInf, cf2)
+                WeldsRemote:FireServer(localHRP, targetHRP, cf1, voidOffset, cf2)
                 count = count + 1
                 debugLog("Voided " .. player.Name)
             end
@@ -673,11 +659,12 @@ local function BringAll()
             local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             
             if targetHRP and localHRP then
-                -- Bring to local player
-                local cfZero = CFrame.new(0, 0, 0)
-                local vecZero = Vector3.new(0, 0, 0)
+                -- Bring to local player using consistent CFrame values
+                local cf1 = CFrame.new(-3028.2375, 3101.888, 308.063, -0.9139, 0, 0.4057, 0, 1, 0, -0.4057, 0, -0.9139)
+                local bringOffset = Vector3.new(0, 0, 0)
+                local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
                 
-                WeldsRemote:FireServer(localHRP, targetHRP, localHRP.CFrame, vecZero, cfZero)
+                WeldsRemote:FireServer(localHRP, targetHRP, cf1, bringOffset, cf2)
                 count = count + 1
                 debugLog("Brought " .. player.Name)
             end
@@ -723,24 +710,25 @@ local function TargetAction(action)
     if not (targetHRP and localHRP) then return notify("Target or Local HRP missing") end
     
     if action == "Void" then
-         local cf1 = CFrame.new(0, -10000, 0)
-         local vecInf = Vector3.new(0, -10000, 0)
-         local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
-         WeldsRemote:FireServer(localHRP, targetHRP, cf1, vecInf, cf2)
+         -- Use consistent CFrame values from lol.lua
+         local cf1 = CFrame.new(-3028.2375, 3101.888, 308.063, -0.9139, 0, 0.4057, 0, 1, 0, -0.4057, 0, -0.9139)
+         local voidOffset = Vector3.new(0, -10000, 0)
+         local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
+         WeldsRemote:FireServer(localHRP, targetHRP, cf1, voidOffset, cf2)
          notify("Voided " .. targetName)
          
     elseif action == "Fling" then
-         local cf1 = CFrame.new(-3028.23, 3101.88, 308.06, -0.91, 0, 0.4, 0, 1, 0, -0.4, 0, -0.91)
+         local cf1 = CFrame.new(-3028.2375, 3101.888, 308.063, -0.9139, 0, 0.4057, 0, 1, 0, -0.4057, 0, -0.9139)
          local vecInf = Vector3.new(math.huge, math.huge, math.huge)
-         local cf2 = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
+         local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
          WeldsRemote:FireServer(localHRP, targetHRP, cf1, vecInf, cf2)
          notify("Flung " .. targetName)
          
     elseif action == "Bring" then
-         local cfZero = CFrame.new(0, 0, 0)
-         local vecZero = Vector3.new(0, 0, 0)
-         -- Using LocalPlayer's CFrame as the weld C0 seems to be the trick in Teleport.lua
-         WeldsRemote:FireServer(localHRP, targetHRP, localHRP.CFrame, vecZero, cfZero)
+         local cf1 = CFrame.new(-3028.2375, 3101.888, 308.063, -0.9139, 0, 0.4057, 0, 1, 0, -0.4057, 0, -0.9139)
+         local bringOffset = Vector3.new(0, 0, 0)
+         local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
+         WeldsRemote:FireServer(localHRP, targetHRP, cf1, bringOffset, cf2)
          notify("Brought " .. targetName)
     end
 end
@@ -774,6 +762,43 @@ task.spawn(function()
                 task.wait(0.2)
             else
                 debugLog("AutoRemoveSkills: Remote not found")
+                task.wait(2)
+            end
+        else
+            task.wait(1)
+        end
+    end
+end)
+
+-- Steal Target Skills Loop (Steal from one player and keep in your inventory)
+task.spawn(function()
+    while not Unloaded do
+        if Settings.StealTargetSkills and Settings.TargetName then
+            if ToolEquipRemote then
+                local target = Players:FindFirstChild(Settings.TargetName)
+                if target and target.Character then
+                    -- Steal from target's backpack
+                    local targetBackpack = target:FindFirstChild("Backpack")
+                    if targetBackpack then
+                        for _, tool in pairs(targetBackpack:GetChildren()) do
+                            if tool:IsA("Tool") then
+                                ToolEquipRemote:FireServer(tool)
+                                debugLog("StealSkill: Stole " .. tool.Name .. " from " .. target.Name .. "'s backpack")
+                            end
+                        end
+                    end
+                    
+                    -- Steal equipped tools from target's character
+                    for _, tool in pairs(target.Character:GetChildren()) do
+                        if tool:IsA("Tool") then
+                            ToolEquipRemote:FireServer(tool)
+                            debugLog("StealSkill: Stole equipped " .. tool.Name .. " from " .. target.Name)
+                        end
+                    end
+                end
+                task.wait(0.3)
+            else
+                debugLog("StealTargetSkills: Remote not found")
                 task.wait(2)
             end
         else
@@ -839,48 +864,55 @@ task.spawn(function()
     Settings.OrbitSpeed = Settings.OrbitSpeed or 1
     
     while not Unloaded do
-        if Settings.Orbit then
-            local children = Players:GetChildren()
-            local targetName = Settings.TargetName
-            local index = 0
-            
-            -- Assign offsets
-            for _, player in pairs(children) do
-                if player.Name ~= targetName then
-                    if not offsetTable[player.Name] then
-                        offsetTable[player.Name] = Vector3.new(index * 15, 0, index * 15)
-                    end
-                end
-                index = index + 1
-            end
-            
-            -- Orbit Logic
-            local i = 0
-            for _, player in pairs(children) do
-                i = i + 1
-                if player.Name ~= targetName and not Settings.Whitelist[player.Name] and player.Character then
-                    local targetHRP = player.Character:FindFirstChild("HumanoidRootPart")
-                    local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if Settings.Orbit and Settings.TargetName then
+            local targetPlayer = Players:FindFirstChild(Settings.TargetName)
+            if targetPlayer and targetPlayer.Character then
+                local targetHRP = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if targetHRP then
+                    local children = Players:GetChildren()
+                    local index = 0
                     
-                    if targetHRP and localHRP and WeldsRemote then
-                        local baseOffset = offsetTable[player.Name] or Vector3.new(0,0,0)
-                        local t = tick()
-                        
-                        local radius = i * 5 + Settings.OrbitRange
-                        local speed = (i * 0.1 + 0.5) * Settings.OrbitSpeed
-                        local angle = t * speed + i
-                        
-                        local x = math.cos(angle) * radius
-                        local z = math.sin(angle) * radius
-                        local y = math.sin(t * 2 + i) * 8
-                        
-                        local orbitVec = Vector3.new(x, y, z)
-                        local totalVec = baseOffset + orbitVec
-                        
-                        local cf1 = CFrame.new(-3028.2375, 3101.888, 308.063, -0.9139, 0, 0.4057, 0, 1, 0, -0.4057, 0, -0.9139)
-                        local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
-                        
-                        WeldsRemote:FireServer(localHRP, targetHRP, cf1, totalVec, cf2)
+                    -- Assign offsets per player
+                    for _, player in pairs(children) do
+                        if player.Name ~= Settings.TargetName then
+                            if not offsetTable[player.Name] then
+                                offsetTable[player.Name] = Vector3.new(index * 15, 0, index * 15)
+                            end
+                        end
+                        index = index + 1
+                    end
+                    
+                    -- Orbit Logic - orbit other players around the target
+                    local i = 0
+                    for _, player in pairs(children) do
+                        i = i + 1
+                        if player.Name ~= Settings.TargetName and not Settings.Whitelist[player.Name] and player.Character then
+                            local playerHRP = player.Character:FindFirstChild("HumanoidRootPart")
+                            local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                            
+                            if playerHRP and localHRP and WeldsRemote then
+                                local baseOffset = offsetTable[player.Name] or Vector3.new(0, 0, 0)
+                                local t = tick()
+                                
+                                -- Calculate orbit parameters (matches lol.lua)
+                                local radius = Settings.OrbitRange + (i * 5)
+                                local speed = (0.5 + (i * 0.1)) * Settings.OrbitSpeed
+                                local angle = t * speed + i
+                                
+                                local x = math.cos(angle) * radius
+                                local z = math.sin(angle) * radius
+                                local y = math.sin(t * 2 + i) * 8
+                                
+                                local orbitVec = Vector3.new(x, y, z)
+                                local totalVec = baseOffset + orbitVec
+                                
+                                local cf1 = CFrame.new(-3028.2375, 3101.888, 308.063, -0.9139, 0, 0.4057, 0, 1, 0, -0.4057, 0, -0.9139)
+                                local cf2 = CFrame.new(0, 0, 0, -1, 0, -8.742e-08, 0, 1, 0, 8.742e-08, 0, -1)
+                                
+                                -- Fire weld: attach playerHRP to targetHRP with orbit offset
+                                WeldsRemote:FireServer(localHRP, playerHRP, cf1, totalVec, cf2)
+                            end
+                        end
                     end
                 end
             end
@@ -1014,6 +1046,14 @@ local function createMenu()
     window.createToggle("Auto Remove Skills", Settings.AutoRemoveSkills, function(val)
         Settings.AutoRemoveSkills = val
         notify("Auto Remove Skills: " .. (val and "ON" or "OFF"))
+    end)
+    
+    window.createToggle("Steal Target Skills", Settings.StealTargetSkills, function(val)
+        Settings.StealTargetSkills = val
+        if val and not Settings.TargetName then
+            notify("Warning: Select a target first!")
+        end
+        notify("Steal Target Skills: " .. (val and "ON" or "OFF"))
     end)
     
     window.createButton("Spam Tools (5s)", SpamTools)
