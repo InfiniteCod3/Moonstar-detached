@@ -1,6 +1,6 @@
 MOONSTAR OBFUSCATOR - TEST RESULTS
-Generated: 2025-12-15 21:53:46
-Test Files: 25
+Generated: 2025-12-16 08:28:40
+Test Files: 26
 Compression: disabled
 
 ------------------------------------------------------------
@@ -13,15 +13,13 @@ PRESET: Medium
 [PASS]   tests/coroutines.lua
 [PASS]   tests/error_handling.lua
 [PASS]   tests/factorial.lua
-[SKIP]   tests/luau/door_esp_test.luau
-         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
-[SKIP]   tests/luau/remote_logger_test.luau
-         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
-[SKIP]   tests/luau/roblox_test.luau
-         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
+[PASS]   tests/luau/door_esp_test.luau
+[PASS]   tests/luau/remote_logger_test.luau
+[PASS]   tests/luau/roblox_test.luau
 [PASS]   tests/math_test.lua
 [PASS]   tests/metamethods.lua
 [PASS]   tests/metamethods_advanced.lua
+[PASS]   tests/negated_conditions.lua
 [PASS]   tests/perf_opt_local_func.lua
 [PASS]   tests/perf_opt_scope_reuse.lua
 [PASS]   tests/perf_opt_string_decrypt.lua
@@ -45,15 +43,13 @@ PRESET: Minify
 [PASS]   tests/coroutines.lua
 [PASS]   tests/error_handling.lua
 [PASS]   tests/factorial.lua
-[SKIP]   tests/luau/door_esp_test.luau
-         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
-[SKIP]   tests/luau/remote_logger_test.luau
-         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
-[SKIP]   tests/luau/roblox_test.luau
-         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
+[PASS]   tests/luau/door_esp_test.luau
+[PASS]   tests/luau/remote_logger_test.luau
+[PASS]   tests/luau/roblox_test.luau
 [PASS]   tests/math_test.lua
 [PASS]   tests/metamethods.lua
 [PASS]   tests/metamethods_advanced.lua
+[PASS]   tests/negated_conditions.lua
 [PASS]   tests/perf_opt_local_func.lua
 [PASS]   tests/perf_opt_scope_reuse.lua
 [PASS]   tests/perf_opt_string_decrypt.lua
@@ -77,15 +73,13 @@ PRESET: Strong
 [PASS]   tests/coroutines.lua
 [PASS]   tests/error_handling.lua
 [PASS]   tests/factorial.lua
-[SKIP]   tests/luau/door_esp_test.luau
-         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
-[SKIP]   tests/luau/remote_logger_test.luau
-         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
-[SKIP]   tests/luau/roblox_test.luau
-         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
+[PASS]   tests/luau/door_esp_test.luau
+[PASS]   tests/luau/remote_logger_test.luau
+[PASS]   tests/luau/roblox_test.luau
 [PASS]   tests/math_test.lua
 [PASS]   tests/metamethods.lua
 [PASS]   tests/metamethods_advanced.lua
+[PASS]   tests/negated_conditions.lua
 [PASS]   tests/perf_opt_local_func.lua
 [PASS]   tests/perf_opt_scope_reuse.lua
 [PASS]   tests/perf_opt_string_decrypt.lua
@@ -109,15 +103,13 @@ PRESET: Weak
 [PASS]   tests/coroutines.lua
 [PASS]   tests/error_handling.lua
 [PASS]   tests/factorial.lua
-[SKIP]   tests/luau/door_esp_test.luau
-         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
-[SKIP]   tests/luau/remote_logger_test.luau
-         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
-[SKIP]   tests/luau/roblox_test.luau
-         Original code error: temp_test_exec.lua:56: attempt to call global 'warn' (a nil value)
+[PASS]   tests/luau/door_esp_test.luau
+[PASS]   tests/luau/remote_logger_test.luau
+[PASS]   tests/luau/roblox_test.luau
 [PASS]   tests/math_test.lua
 [PASS]   tests/metamethods.lua
 [PASS]   tests/metamethods_advanced.lua
+[PASS]   tests/negated_conditions.lua
 [PASS]   tests/perf_opt_local_func.lua
 [PASS]   tests/perf_opt_scope_reuse.lua
 [PASS]   tests/perf_opt_string_decrypt.lua
@@ -135,26 +127,26 @@ PRESET: Weak
 ------------------------------------------------------------
 PERFORMANCE METRICS
 ------------------------------------------------------------
-Total Assertions Passed: 240
+Total Assertions Passed: 288
 Total Assertions Failed: 0
-Original Code Size:      272320 bytes
-Obfuscated Code Size:    2552915 bytes
-Size Change:             +837.5%
+Original Code Size:      292608 bytes
+Obfuscated Code Size:    2925837 bytes
+Size Change:             +899.9%
 Original Execution:      0.008s
-Obfuscated Execution:    0.056s
-Performance Ratio:       7.35x
+Obfuscated Execution:    0.058s
+Performance Ratio:       6.94x
 
 
 ================================================================================
 SUMMARY
 ================================================================================
 
-Total Tests:   100
-Passed:        88
+Total Tests:   104
+Passed:        104
 Failed:        0
-Skipped:       12
-Success Rate:  88.0%
-Duration:      25s
+Skipped:       0
+Success Rate:  100.0%
+Duration:      29s
 
 ================================================================================
 END OF REPORT

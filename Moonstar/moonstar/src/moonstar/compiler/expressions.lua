@@ -496,6 +496,19 @@ function Expressions.BinaryExpression(compiler, expression, funcDepth, numReturn
     return regs;
 end
 
+-- PERF-OPT: Comparison Inversion Lookup Table
+-- Maps comparison operators to their logical inverses for "not (a op b)" optimization
+-- Using a lookup table instead of if-elseif chain reduces O(n) branching to O(1) lookup
+-- and eliminates ~40 lines of duplicated code
+local comparisonInversions = {
+    [AstKind.LessThanExpression] = "GreaterThanOrEqualsExpression",
+    [AstKind.GreaterThanExpression] = "LessThanOrEqualsExpression",
+    [AstKind.LessThanOrEqualsExpression] = "GreaterThanExpression",
+    [AstKind.GreaterThanOrEqualsExpression] = "LessThanExpression",
+    [AstKind.EqualsExpression] = "NotEqualsExpression",
+    [AstKind.NotEqualsExpression] = "EqualsExpression",
+}
+
 function Expressions.NotExpression(compiler, expression, funcDepth, numReturns, targetRegs)
     local scope = compiler.activeBlock.scope;
     local regs = {};
@@ -515,68 +528,27 @@ function Expressions.NotExpression(compiler, expression, funcDepth, numReturns, 
                 local reads = innerReg and {innerReg} or {}
                 compiler:addStatement(compiler:setRegister(scope, regs[i], innerExpr), {regs[i]}, reads, false);
                 if innerReg then compiler:freeRegister(innerReg, false) end
-            -- not (a < b) -> a >= b
-            elseif expression.rhs.kind == AstKind.LessThanExpression then
-                local lhsExpr, lhsReg = compiler:compileOperand(scope, expression.rhs.lhs, funcDepth);
-                local rhsExpr, rhsReg = compiler:compileOperand(scope, expression.rhs.rhs, funcDepth);
-                local reads = {}
-                if lhsReg then table.insert(reads, lhsReg) end
-                if rhsReg then table.insert(reads, rhsReg) end
-                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.GreaterThanOrEqualsExpression(lhsExpr, rhsExpr)), {regs[i]}, reads, true);
-                if lhsReg then compiler:freeRegister(lhsReg, false) end
-                if rhsReg then compiler:freeRegister(rhsReg, false) end
-            elseif expression.rhs.kind == AstKind.GreaterThanExpression then
-                local lhsExpr, lhsReg = compiler:compileOperand(scope, expression.rhs.lhs, funcDepth);
-                local rhsExpr, rhsReg = compiler:compileOperand(scope, expression.rhs.rhs, funcDepth);
-                local reads = {}
-                if lhsReg then table.insert(reads, lhsReg) end
-                if rhsReg then table.insert(reads, rhsReg) end
-                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.LessThanOrEqualsExpression(lhsExpr, rhsExpr)), {regs[i]}, reads, true);
-                if lhsReg then compiler:freeRegister(lhsReg, false) end
-                if rhsReg then compiler:freeRegister(rhsReg, false) end
-            elseif expression.rhs.kind == AstKind.LessThanOrEqualsExpression then
-                local lhsExpr, lhsReg = compiler:compileOperand(scope, expression.rhs.lhs, funcDepth);
-                local rhsExpr, rhsReg = compiler:compileOperand(scope, expression.rhs.rhs, funcDepth);
-                local reads = {}
-                if lhsReg then table.insert(reads, lhsReg) end
-                if rhsReg then table.insert(reads, rhsReg) end
-                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.GreaterThanExpression(lhsExpr, rhsExpr)), {regs[i]}, reads, true);
-                if lhsReg then compiler:freeRegister(lhsReg, false) end
-                if rhsReg then compiler:freeRegister(rhsReg, false) end
-            elseif expression.rhs.kind == AstKind.GreaterThanOrEqualsExpression then
-                local lhsExpr, lhsReg = compiler:compileOperand(scope, expression.rhs.lhs, funcDepth);
-                local rhsExpr, rhsReg = compiler:compileOperand(scope, expression.rhs.rhs, funcDepth);
-                local reads = {}
-                if lhsReg then table.insert(reads, lhsReg) end
-                if rhsReg then table.insert(reads, rhsReg) end
-                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.LessThanExpression(lhsExpr, rhsExpr)), {regs[i]}, reads, true);
-                if lhsReg then compiler:freeRegister(lhsReg, false) end
-                if rhsReg then compiler:freeRegister(rhsReg, false) end
-            elseif expression.rhs.kind == AstKind.EqualsExpression then
-                local lhsExpr, lhsReg = compiler:compileOperand(scope, expression.rhs.lhs, funcDepth);
-                local rhsExpr, rhsReg = compiler:compileOperand(scope, expression.rhs.rhs, funcDepth);
-                local reads = {}
-                if lhsReg then table.insert(reads, lhsReg) end
-                if rhsReg then table.insert(reads, rhsReg) end
-                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.NotEqualsExpression(lhsExpr, rhsExpr)), {regs[i]}, reads, true);
-                if lhsReg then compiler:freeRegister(lhsReg, false) end
-                if rhsReg then compiler:freeRegister(rhsReg, false) end
-            elseif expression.rhs.kind == AstKind.NotEqualsExpression then
-                local lhsExpr, lhsReg = compiler:compileOperand(scope, expression.rhs.lhs, funcDepth);
-                local rhsExpr, rhsReg = compiler:compileOperand(scope, expression.rhs.rhs, funcDepth);
-                local reads = {}
-                if lhsReg then table.insert(reads, lhsReg) end
-                if rhsReg then table.insert(reads, rhsReg) end
-                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.EqualsExpression(lhsExpr, rhsExpr)), {regs[i]}, reads, true);
-                if lhsReg then compiler:freeRegister(lhsReg, false) end
-                if rhsReg then compiler:freeRegister(rhsReg, false) end
             else
-                -- Normal Not
-                local rhsExpr, rhsReg = compiler:compileOperand(scope, expression.rhs, funcDepth);
-                local reads = rhsReg and {rhsReg} or {}
+                -- PERF-OPT: Use lookup table for comparison inversions
+                -- not (a < b) -> a >= b, not (a > b) -> a <= b, etc.
+                local inverseName = comparisonInversions[expression.rhs.kind]
+                if inverseName then
+                    local lhsExpr, lhsReg = compiler:compileOperand(scope, expression.rhs.lhs, funcDepth);
+                    local rhsExpr, rhsReg = compiler:compileOperand(scope, expression.rhs.rhs, funcDepth);
+                    local reads = {}
+                    if lhsReg then table.insert(reads, lhsReg) end
+                    if rhsReg then table.insert(reads, rhsReg) end
+                    compiler:addStatement(compiler:setRegister(scope, regs[i], Ast[inverseName](lhsExpr, rhsExpr)), {regs[i]}, reads, true);
+                    if lhsReg then compiler:freeRegister(lhsReg, false) end
+                    if rhsReg then compiler:freeRegister(rhsReg, false) end
+                else
+                    -- Normal Not (no inversion possible)
+                    local rhsExpr, rhsReg = compiler:compileOperand(scope, expression.rhs, funcDepth);
+                    local reads = rhsReg and {rhsReg} or {}
 
-                compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.NotExpression(rhsExpr)), {regs[i]}, reads, false);
-                if rhsReg then compiler:freeRegister(rhsReg, false) end
+                    compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.NotExpression(rhsExpr)), {regs[i]}, reads, false);
+                    if rhsReg then compiler:freeRegister(rhsReg, false) end
+                end
             end
         else
             compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.NilExpression()), {regs[i]}, {}, false);

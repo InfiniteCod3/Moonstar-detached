@@ -10,6 +10,21 @@ local scriptDir = scriptPath:match("(.*/)" ) or scriptPath:match("(.*\\)") or ".
 local auroraPath = scriptDir .. "aurora/init.lua"
 local chunk, err = loadfile(auroraPath)
 
+-- Define warn early for fallback compatibility (Lua 5.1 doesn't have warn)
+local function fallbackWarn(...)
+    local args = {...}
+    local strings = {}
+    for i = 1, select("#", ...) do
+        strings[i] = tostring(args[i])
+    end
+    io.stderr:write("[WARN] " .. table.concat(strings, " ") .. "\n")
+end
+
+-- Set warn globally if it doesn't exist
+if not warn then
+    _G.warn = fallbackWarn
+end
+
 if chunk then
     local Aurora = chunk()
     
@@ -22,8 +37,8 @@ if chunk then
     return Aurora
 else
     -- Fallback: Minimal legacy implementation if modular system fails
-    warn("Failed to load modular Aurora: " .. tostring(err))
-    warn("Using minimal fallback implementation")
+    fallbackWarn("Failed to load modular Aurora: " .. tostring(err))
+    fallbackWarn("Using minimal fallback implementation")
     
     -- Minimal Instance implementation
     local Instance = {}

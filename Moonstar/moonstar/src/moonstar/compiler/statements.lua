@@ -14,8 +14,53 @@ local isComparisonOp = {
     [AstKind.EqualsExpression] = true,
 }
 
+-- PERF-OPT #3: Comparison Inversion Lookup Table for emitConditionalJump
+-- Maps comparison operators to their logical inverses for "not (a op b)" optimization
+-- This allows us to use the fused instruction path even for negated comparisons
+local comparisonInversionsJump = {
+    [AstKind.LessThanExpression] = "GreaterThanOrEqualsExpression",
+    [AstKind.GreaterThanExpression] = "LessThanOrEqualsExpression",
+    [AstKind.LessThanOrEqualsExpression] = "GreaterThanExpression",
+    [AstKind.GreaterThanOrEqualsExpression] = "LessThanExpression",
+    [AstKind.EqualsExpression] = "NotEqualsExpression",
+    [AstKind.NotEqualsExpression] = "EqualsExpression",
+}
+
 local function emitConditionalJump(compiler, condition, trueBlock, falseBlock, funcDepth)
     local scope = compiler.activeBlock.scope
+
+    -- PERF-OPT #3: Handle "not (comparison)" by using inverted comparison directly
+    -- This avoids creating an intermediate register for the boolean result
+    -- and allows us to use the fused instruction path
+    if condition.kind == AstKind.NotExpression then
+        local inner = condition.rhs
+        local inverseName = comparisonInversionsJump[inner.kind]
+        if inverseName then
+            -- Use the inverted comparison directly (e.g., "not (a < b)" becomes "a >= b")
+            local lhsExpr, lhsReg = compiler:compileOperand(scope, inner.lhs, funcDepth)
+            local rhsExpr, rhsReg = compiler:compileOperand(scope, inner.rhs, funcDepth)
+
+            local reads = {}
+            if lhsReg then table.insert(reads, lhsReg) end
+            if rhsReg then table.insert(reads, rhsReg) end
+
+            local fusedCondition = Ast[inverseName](lhsExpr, rhsExpr)
+
+            compiler:addStatement(
+                compiler:setRegister(scope, compiler.POS_REGISTER, Ast.OrExpression(
+                    Ast.AndExpression(fusedCondition, Ast.NumberExpression(trueBlock.id)),
+                    Ast.NumberExpression(falseBlock.id)
+                )),
+                {compiler.POS_REGISTER},
+                reads,
+                true
+            );
+
+            if lhsReg then compiler:freeRegister(lhsReg, false) end
+            if rhsReg then compiler:freeRegister(rhsReg, false) end
+            return
+        end
+    end
 
     if isComparisonOp[condition.kind] then
         -- Fused instruction path: Directly use the comparison in the jump logic

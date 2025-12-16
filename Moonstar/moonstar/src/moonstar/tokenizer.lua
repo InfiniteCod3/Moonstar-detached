@@ -459,7 +459,9 @@ function Tokenizer:multiLineString()
 				self.index = self.index + 1;
 			end
 			
-			local value = "";
+			local buffer = {};
+			local bufferLen = 0;
+			--// Use table buffer to avoid O(N^2) string concatenation
 			while true do
 				local char = get(self);
 				if(char == ']') then
@@ -471,11 +473,12 @@ function Tokenizer:multiLineString()
 					if(is(self, "]")) then
 						if(eqCount2 == eqCount) then
 							self.index = self.index + 1;
-							return token(self, startPos, Tokenizer.TokenKind.String, value), true
+							return token(self, startPos, Tokenizer.TokenKind.String, table.concat(buffer)), true
 						end
 					end
 				end
-				value = value .. char;
+				bufferLen = bufferLen + 1
+				buffer[bufferLen] = char;
 			end
 		end
 	end

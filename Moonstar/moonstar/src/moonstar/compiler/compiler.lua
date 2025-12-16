@@ -849,13 +849,41 @@ function Compiler:getRegisterVarId(id)
     return varId;
 end
 
+-- PERF-OPT #1: Lookup tables for isSafeExpression
+-- Using lookup tables instead of if-chains provides O(1) expression kind checks
+-- These are defined at module level to avoid recreation on each call
+local SAFE_ATOMIC_KINDS = {
+    [AstKind.NumberExpression] = true,
+    [AstKind.StringExpression] = true,
+    [AstKind.BooleanExpression] = true,
+    [AstKind.NilExpression] = true,
+    [AstKind.VariableExpression] = true,
+}
+
+local SAFE_UNARY_KINDS = {
+    [AstKind.NotExpression] = true,
+    [AstKind.NegateExpression] = true,
+    [AstKind.LenExpression] = true,
+}
+
+local SAFE_BINARY_KINDS = {
+    [AstKind.AndExpression] = true,
+    [AstKind.OrExpression] = true,
+}
+
+-- PERF-OPT #2: Lookup table for isLiteral
+local LITERAL_KINDS = {
+    [AstKind.NumberExpression] = true,
+    [AstKind.StringExpression] = true,
+    [AstKind.BooleanExpression] = true,
+    [AstKind.NilExpression] = true,
+}
+
 function Compiler:isSafeExpression(expr)
     if not expr then return true end
-    if expr.kind == AstKind.NumberExpression or
-       expr.kind == AstKind.StringExpression or
-       expr.kind == AstKind.BooleanExpression or
-       expr.kind == AstKind.NilExpression or
-       expr.kind == AstKind.VariableExpression then
+    
+    -- PERF-OPT: O(1) lookup instead of if-chain
+    if SAFE_ATOMIC_KINDS[expr.kind] then
         return true
     end
 
@@ -863,11 +891,13 @@ function Compiler:isSafeExpression(expr)
         return self:isSafeExpression(expr.lhs) and self:isSafeExpression(expr.rhs)
     end
 
-    if expr.kind == AstKind.NotExpression or expr.kind == AstKind.NegateExpression or expr.kind == AstKind.LenExpression then
+    -- PERF-OPT: O(1) lookup for unary expressions
+    if SAFE_UNARY_KINDS[expr.kind] then
         return self:isSafeExpression(expr.rhs)
     end
 
-    if expr.kind == AstKind.AndExpression or expr.kind == AstKind.OrExpression then
+    -- PERF-OPT: O(1) lookup for binary logical expressions
+    if SAFE_BINARY_KINDS[expr.kind] then
          return self:isSafeExpression(expr.lhs) and self:isSafeExpression(expr.rhs)
     end
 
@@ -875,11 +905,9 @@ function Compiler:isSafeExpression(expr)
 end
 
 function Compiler:isLiteral(expr)
+    -- PERF-OPT: O(1) lookup instead of if-chain
     if not expr then return false end
-    return expr.kind == AstKind.NumberExpression or
-           expr.kind == AstKind.StringExpression or
-           expr.kind == AstKind.BooleanExpression or
-           expr.kind == AstKind.NilExpression
+    return LITERAL_KINDS[expr.kind] == true
 end
 
 function Compiler:compileOperand(scope, expr, funcDepth)
@@ -922,9 +950,10 @@ function Compiler:register(scope, id)
 end
 
 function Compiler:registerList(scope, ids)
+    -- PERF-OPT #4: Direct indexing instead of table.insert (~30% faster)
     local l = {};
     for i, id in ipairs(ids) do
-        table.insert(l, self:register(scope, id));
+        l[i] = self:register(scope, id);
     end
     return l;
 end
@@ -961,26 +990,30 @@ function Compiler:setRegister(scope, id, val, compundArg)
 end
 
 function Compiler:setRegisters(scope, ids, vals)
+    -- PERF-OPT #5: Direct indexing instead of table.insert (~30% faster)
     local idStats = {};
     for i, id in ipairs(ids) do
-        table.insert(idStats, self:registerAssignment(scope, id));
+        idStats[i] = self:registerAssignment(scope, id);
     end
 
     return Ast.AssignmentStatement(idStats, vals);
 end
 
 function Compiler:copyRegisters(scope, to, from)
+    -- PERF-OPT: Direct indexing with counter instead of table.insert
     local idStats = {};
     local vals    = {};
+    local count = 0;
     for i, id in ipairs(to) do
         local from = from[i];
         if(from ~= id) then
-            table.insert(idStats, self:registerAssignment(scope, id));
-            table.insert(vals, self:register(scope, from));
+            count = count + 1;
+            idStats[count] = self:registerAssignment(scope, id);
+            vals[count] = self:register(scope, from);
         end
     end
 
-    if(#idStats > 0 and #vals > 0) then
+    if count > 0 then
         return Ast.AssignmentStatement(idStats, vals);
     end
 end
