@@ -88,11 +88,17 @@ function VmGen.emitContainerFuncBody(compiler)
                             if isMergeCandidate or isInlineCandidate then
                                 -- 1. Remove the jump from block (last statement)
                                 table.remove(block.statements)
+                                -- PERF-OPT #11: Update counter
+                                block.statementCount = #block.statements
 
                                 -- 2. Append all statements from targetBlock
+                                -- PERF-OPT #11: Use direct indexing
+                                local count = block.statementCount
                                 for _, stat in ipairs(targetBlock.statements) do
-                                    table.insert(block.statements, stat)
+                                    count = count + 1
+                                    block.statements[count] = stat
                                 end
+                                block.statementCount = count
 
                                 -- 3. Update outEdge for block to point to target's successor
                                 outEdge[block] = outEdge[targetBlock]
@@ -334,12 +340,16 @@ function VmGen.emitContainerFuncBody(compiler)
     
     -- OPTIMIZATION: Sort blocks by ID to ensure the BST is built over a sorted range
     -- This is critical for the binary search logic to work correctly
+    local blocksCount = 0
     for _, block in ipairs(compiler.blocks) do
         local blockstats = {};
+        local bsCount = 0
         for i, stat in ipairs(block.statements) do
-            table.insert(blockstats, stat.statement);
+            bsCount = bsCount + 1
+            blockstats[bsCount] = stat.statement;
         end
-        table.insert(blocks, { id = block.id, block = Ast.Block(blockstats, block.scope) });
+        blocksCount = blocksCount + 1
+        blocks[blocksCount] = { id = block.id, block = Ast.Block(blockstats, block.scope) };
     end
     
     table.sort(blocks, function(a, b)

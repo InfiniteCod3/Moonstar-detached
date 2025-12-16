@@ -126,24 +126,27 @@ function Unparser:unparseBlock(block, tabbing)
 	-- Memory optimization: Use table.concat instead of repeated string concatenation
 	-- This is critical for large obfuscated files (Strong preset with VM obfuscation)
 	local parts = {};
+	local partsLen = 0
 	local lastCode = "";
 	
 	for i, statement in ipairs(block.statements) do
 		if(statement.kind ~= AstKind.NopStatement) then
 			local statementCode = self:unparseStatement(statement, tabbing);
-			if(not self.prettyPrint and #parts > 0 and string.sub(statementCode, 1, 1) == "(") then
+			if(not self.prettyPrint and partsLen > 0 and string.sub(statementCode, 1, 1) == "(") then
 				-- This is so that the following works:
 				-- print("Test");(function() print("Test2") end)();
 				statementCode = ";" .. statementCode;
 			end
 			local ws = self:whitespaceIfNeeded2(lastCode, self:whitespaceIfNeeded(statementCode, self:newline(true)));
 			if i ~= 1 and #ws > 0 then
-				table.insert(parts, ws);
+				partsLen = partsLen + 1
+				parts[partsLen] = ws
 			end
 			if(self.prettyPrint) then
 				statementCode = statementCode .. ";"
 			end
-			table.insert(parts, statementCode);
+			partsLen = partsLen + 1
+			parts[partsLen] = statementCode
 			lastCode = statementCode;
 		end
 	end

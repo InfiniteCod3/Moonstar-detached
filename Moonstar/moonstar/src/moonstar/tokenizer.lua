@@ -100,12 +100,14 @@ function Tokenizer:prepareGetPosition()
 	local source = self.source
 	local len = self.length
 	local i = 1
+	local lineIndex = 1
 
 	-- Scan for newlines to build line index
 	while i <= len do
 		local ni = string.find(source, "\n", i, true)
 		if not ni then break end
-		table.insert(lineStarts, ni + 1)
+		lineIndex = lineIndex + 1
+		lineStarts[lineIndex] = ni + 1
 		i = ni + 1
 	end
 
@@ -363,9 +365,11 @@ function Tokenizer:ident()
 	local startPos = self.index;
 	local source = expect(self, self.IdentCharsLookup)
 	local sourceAddContent = {source}
+	local len = 1
 	while(is(self, self.IdentCharsLookup)) do
 		-- source = source .. get(self);
-		table.insert(sourceAddContent, get(self))
+		len = len + 1
+		sourceAddContent[len] = get(self)
 	end
 	source = table.concat(sourceAddContent)
 	if(self.KeywordsLookup[source]) then
@@ -522,24 +526,30 @@ function Tokenizer:next()
 	if startPos >= self.length then
 		return token(self, startPos, Tokenizer.TokenKind.Eof);
 	end
+
+	-- ⚡ PERFORMANCE OPTIMIZATION: Fetch char once to avoid redundant string.sub calls
+	-- Previously, is() was called multiple times, each performing peek() -> string.sub().
+	-- By fetching the char once, we avoid allocation and overhead for every check.
+	-- This reduces tokenization time by avoiding unnecessary string creation.
+	local char = self.source:sub(startPos + 1, startPos + 1)
 	
 	-- Numbers
-	if(is(self, self.NumberCharsLookup)) then
+	if(self.NumberCharsLookup[char]) then
 		return self:number();
 	end
 	
 	-- Identifiers and Keywords
-	if(is(self, self.IdentCharsLookup)) then
+	if(self.IdentCharsLookup[char]) then
 		return self:ident();
 	end
 	
 	-- Singleline String Literals
-	if(is(self, self.StringStartLookup)) then
+	if(self.StringStartLookup[char]) then
 		return self:singleLineString();
 	end
 	
 	-- Multiline String Literals
-	if(is(self, "[", 0)) then
+	if(char == "[") then
 		-- The isString variable is due to the fact that "[" could also be a symbol for indexing
 		local value, isString = self:multiLineString();
 		if isString then
@@ -548,24 +558,26 @@ function Tokenizer:next()
 	end
 
 	-- Number starting with dot
-	if(is(self, ".") and is(self, self.NumberCharsLookup, 1)) then
+	if(char == "." and is(self, self.NumberCharsLookup, 1)) then
 		return self:number();
 	end
 	
 	-- Symbols
-	if(is(self, self.SymbolCharsLookup)) then
+	if(self.SymbolCharsLookup[char]) then
 		return self:symbol();
 	end
 	
 
-	logger:error(generateError(self, "Unexpected char \"" .. escape(peek(self)) .. "\"!"));
+	logger:error(generateError(self, "Unexpected char \"" .. escape(char) .. "\"!"));
 end
 
 function Tokenizer:scanAll()
 	local tb = {};
+	local count = 0
 	repeat
 		local token = self:next();
-		table.insert(tb, token);
+		count = count + 1
+		tb[count] = token
 	until token.kind == Tokenizer.TokenKind.Eof
 	return tb
 end

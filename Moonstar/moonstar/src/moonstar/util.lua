@@ -266,10 +266,12 @@ end
 local function toBits(num)
     -- returns a table of bits, least significant first.
     local t={} -- will contain the bits
+    local count = 0
 	local rest;
     while num>0 do
         rest=math.fmod(num,2)
-        t[#t+1]=rest
+        count = count + 1
+        t[count]=rest
         num=(num-rest)/2
     end
     return t

@@ -106,6 +106,7 @@ function Compiler:new(config)
         };
         freeRegisters = {}; -- Optimization: Free List (Stack)
         freeRegisterCount = 0; -- PERF-OPT #7: Counter for direct indexing (faster than table.insert/remove)
+        nextScanIndex = 1; -- PERF-OPT #9: Track next scan index for amortized O(1) allocRegister
         constants = {}; -- Optimization: Shared Constant Pool
         constantRegs = {}; -- To prevent freeing constant registers
         activeBlock = nil;
@@ -180,6 +181,7 @@ function Compiler:createBlock()
         statements = {
 
         };
+        statementCount = 0; -- PERF-OPT #11: Track statement count for direct indexing
         scope = scope;
         advanceToNextBlock = true;
     };
@@ -196,13 +198,17 @@ function Compiler:setActiveBlock(block)
 end
 
 function Compiler:addStatement(statement, writes, reads, usesUpvals)
-    if(self.activeBlock.advanceToNextBlock) then  
-        table.insert(self.activeBlock.statements, {
+    if(self.activeBlock.advanceToNextBlock) then
+        -- PERF-OPT #11: Use direct indexing instead of table.insert
+        -- This is a hot path called for every statement in the program
+        local count = self.activeBlock.statementCount + 1
+        self.activeBlock.statements[count] = {
             statement = statement,
             writes = lookupify(writes),
             reads = lookupify(reads),
             usesUpvals = usesUpvals or false,
-        });
+        };
+        self.activeBlock.statementCount = count
     end
 end
 
@@ -219,6 +225,7 @@ function Compiler:compile(ast)
 
     self.upvalVars = {};
     self.registerUsageStack = {};
+    self.nextScanIndex = 1; -- PERF-OPT #9: Initialize scan index
 
     self.upvalsProxyLenReturn = math.random(-2^22, 2^22);
 
@@ -537,6 +544,7 @@ function Compiler:pushRegisterUsageInfo()
         registers = self.registers;
         freeRegisters = self.freeRegisters;
         freeRegisterCount = self.freeRegisterCount; -- PERF-OPT #7
+        nextScanIndex = self.nextScanIndex; -- PERF-OPT #9
         constants = self.constants;
         constantRegs = self.constantRegs;
     });
@@ -544,6 +552,7 @@ function Compiler:pushRegisterUsageInfo()
     self.registers = {};
     self.freeRegisters = {};
     self.freeRegisterCount = 0; -- PERF-OPT #7
+    self.nextScanIndex = 1; -- PERF-OPT #9: Reset scan index for new scope
     self.constants = {};
     self.constantRegs = {};
 end
@@ -554,6 +563,7 @@ function Compiler:popRegisterUsageInfo()
     self.registers = info.registers;
     self.freeRegisters = info.freeRegisters;
     self.freeRegisterCount = info.freeRegisterCount; -- PERF-OPT #7
+    self.nextScanIndex = info.nextScanIndex; -- PERF-OPT #9: Restore scan index
     self.constants = info.constants;
     self.constantRegs = info.constantRegs;
 end
@@ -792,10 +802,13 @@ function Compiler:allocRegister(isVar, forceNumeric)
     if not id then
         -- OPTIMIZATION: Linear Scan Allocation (Fallback)
         -- Use the first available register to minimize stack size
-        id = 1;
+        -- PERF-OPT #9: Start scan from last known free index (amortized O(1))
+        id = self.nextScanIndex;
         while self.registers[id] do
             id = id + 1;
         end
+        -- Update next scan index, assuming registers below id are occupied
+        self.nextScanIndex = id + 1;
     end
 
     if id > self.maxUsedRegister then
@@ -1021,6 +1034,8 @@ end
 function Compiler:resetRegisters()
     self.registers = {};
     self.freeRegisters = {};
+    self.freeRegisterCount = 0;
+    self.nextScanIndex = 1; -- Reset scan index
     self.constants = {};
     self.constantRegs = {};
 end

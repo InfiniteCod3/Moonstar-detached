@@ -1,100 +1,11 @@
 MOONSTAR OBFUSCATOR - TEST RESULTS
-Generated: 2025-12-16 07:48:50
+Generated: 2025-12-16 13:38:42
 Test Files: 26
+Target Preset: Strong
 Compression: disabled
 
 ------------------------------------------------------------
-PRESET: Medium
-------------------------------------------------------------
-[PASS]   tests/bit.lua
-[PASS]   tests/closures.lua
-[PASS]   tests/closures_advanced.lua
-[PASS]   tests/control_flow.lua
-[PASS]   tests/coroutines.lua
-[PASS]   tests/error_handling.lua
-[PASS]   tests/factorial.lua
-[PASS]   tests/luau/door_esp_test.luau
-[PASS]   tests/luau/remote_logger_test.luau
-[PASS]   tests/luau/roblox_test.luau
-[PASS]   tests/math_test.lua
-[PASS]   tests/metamethods.lua
-[PASS]   tests/metamethods_advanced.lua
-[PASS]   tests/negated_conditions.lua
-[PASS]   tests/perf_opt_local_func.lua
-[PASS]   tests/perf_opt_scope_reuse.lua
-[PASS]   tests/perf_opt_string_decrypt.lua
-[PASS]   tests/perf_opt_upvalue_cache.lua
-[PASS]   tests/simple_print.lua
-[PASS]   tests/stress_large_file.lua
-[PASS]   tests/string_edge_cases.lua
-[PASS]   tests/string_enc.lua
-[PASS]   tests/string_manipulation.lua
-[PASS]   tests/tables_advanced.lua
-[PASS]   tests/tables_loops.lua
-[PASS]   tests/varargs.lua
-
-------------------------------------------------------------
-PRESET: Minify
-------------------------------------------------------------
-[PASS]   tests/bit.lua
-[PASS]   tests/closures.lua
-[PASS]   tests/closures_advanced.lua
-[PASS]   tests/control_flow.lua
-[PASS]   tests/coroutines.lua
-[PASS]   tests/error_handling.lua
-[PASS]   tests/factorial.lua
-[PASS]   tests/luau/door_esp_test.luau
-[PASS]   tests/luau/remote_logger_test.luau
-[PASS]   tests/luau/roblox_test.luau
-[PASS]   tests/math_test.lua
-[PASS]   tests/metamethods.lua
-[PASS]   tests/metamethods_advanced.lua
-[PASS]   tests/negated_conditions.lua
-[PASS]   tests/perf_opt_local_func.lua
-[PASS]   tests/perf_opt_scope_reuse.lua
-[PASS]   tests/perf_opt_string_decrypt.lua
-[PASS]   tests/perf_opt_upvalue_cache.lua
-[PASS]   tests/simple_print.lua
-[PASS]   tests/stress_large_file.lua
-[PASS]   tests/string_edge_cases.lua
-[PASS]   tests/string_enc.lua
-[PASS]   tests/string_manipulation.lua
-[PASS]   tests/tables_advanced.lua
-[PASS]   tests/tables_loops.lua
-[PASS]   tests/varargs.lua
-
-------------------------------------------------------------
 PRESET: Strong
-------------------------------------------------------------
-[PASS]   tests/bit.lua
-[PASS]   tests/closures.lua
-[PASS]   tests/closures_advanced.lua
-[PASS]   tests/control_flow.lua
-[PASS]   tests/coroutines.lua
-[PASS]   tests/error_handling.lua
-[PASS]   tests/factorial.lua
-[PASS]   tests/luau/door_esp_test.luau
-[PASS]   tests/luau/remote_logger_test.luau
-[PASS]   tests/luau/roblox_test.luau
-[PASS]   tests/math_test.lua
-[PASS]   tests/metamethods.lua
-[PASS]   tests/metamethods_advanced.lua
-[PASS]   tests/negated_conditions.lua
-[PASS]   tests/perf_opt_local_func.lua
-[PASS]   tests/perf_opt_scope_reuse.lua
-[PASS]   tests/perf_opt_string_decrypt.lua
-[PASS]   tests/perf_opt_upvalue_cache.lua
-[PASS]   tests/simple_print.lua
-[PASS]   tests/stress_large_file.lua
-[PASS]   tests/string_edge_cases.lua
-[PASS]   tests/string_enc.lua
-[PASS]   tests/string_manipulation.lua
-[PASS]   tests/tables_advanced.lua
-[PASS]   tests/tables_loops.lua
-[PASS]   tests/varargs.lua
-
-------------------------------------------------------------
-PRESET: Weak
 ------------------------------------------------------------
 [PASS]   tests/bit.lua
 [PASS]   tests/closures.lua
@@ -127,26 +38,26 @@ PRESET: Weak
 ------------------------------------------------------------
 PERFORMANCE METRICS
 ------------------------------------------------------------
-Total Assertions Passed: 288
+Total Assertions Passed: 72
 Total Assertions Failed: 0
-Original Code Size:      282636 bytes
-Obfuscated Code Size:    2063083 bytes
-Size Change:             +629.9%
-Original Execution:      0.011s
-Obfuscated Execution:    0.056s
-Performance Ratio:       5.21x
+Original Code Size:      70659 bytes
+Obfuscated Code Size:    1641099 bytes
+Size Change:             +2222.6%
+Original Execution:      0.003s
+Obfuscated Execution:    0.031s
+Performance Ratio:       10.82x
 
 
 ================================================================================
 SUMMARY
 ================================================================================
 
-Total Tests:   104
-Passed:        104
+Total Tests:   26
+Passed:        26
 Failed:        0
 Skipped:       0
 Success Rate:  100.0%
-Duration:      12s
+Duration:      10s
 
 ================================================================================
 END OF REPORT
