@@ -5,6 +5,10 @@ local util = require("moonstar.util");
 
 local unpack = unpack or table.unpack;
 
+-- PERF-OPT: Cache commonly used functions locally
+local ipairs = ipairs;
+local pairs = pairs;
+
 local isComparisonOp = {
     [AstKind.LessThanExpression] = true,
     [AstKind.GreaterThanExpression] = true,
@@ -26,6 +30,64 @@ local comparisonInversionsJump = {
     [AstKind.NotEqualsExpression] = "EqualsExpression",
 }
 
+-- PERF-OPT: Shared helper for BreakStatement/ContinueStatement variable clearing
+-- Extracts common logic to reduce code duplication and improve maintainability
+-- Clears all local variables between statement.scope and statement.loop.body.scope
+local function clearLoopVariables(compiler, statement, scope)
+    -- Collect variables to free using direct indexing
+    local toFreeVars = {};
+    local toFreeCount = 0;
+    local statScope;
+    repeat
+        statScope = statScope and statScope.parentScope or statement.scope;
+        for id, name in ipairs(statScope.variables) do
+            toFreeCount = toFreeCount + 1;
+            toFreeVars[toFreeCount] = {
+                scope = statScope,
+                id = id;
+            };
+        end
+    until statScope == statement.loop.body.scope;
+
+    -- Build registers to clear using direct indexing
+    local regsToClear = {}
+    local regsToClearCount = 0
+    local nils = {}
+
+    for i = 1, toFreeCount do
+        local var = toFreeVars[i];
+        local varScope, id = var.scope, var.id;
+        local varReg = compiler:getVarRegister(varScope, id, nil, nil);
+        if compiler:isUpvalue(varScope, id) then
+            scope:addReferenceToHigherScope(compiler.scope, compiler.freeUpvalueFunc);
+            compiler:addStatement(compiler:setRegister(scope, varReg, Ast.FunctionCallExpression(Ast.VariableExpression(compiler.scope, compiler.freeUpvalueFunc), {
+                compiler:register(scope, varReg)
+            })), {varReg}, {varReg}, false);
+        else
+            regsToClearCount = regsToClearCount + 1;
+            regsToClear[regsToClearCount] = varReg;
+            nils[regsToClearCount] = Ast.NilExpression();
+        end
+    end
+
+    if regsToClearCount > 0 then
+        compiler:addStatement(compiler:setRegisters(scope, regsToClear, nils), regsToClear, {}, false);
+    end
+end
+
+-- PERF-OPT: Helper to build reads array without table.insert
+local function buildReadsArray(reg1, reg2)
+    if reg1 and reg2 then
+        return {reg1, reg2}
+    elseif reg1 then
+        return {reg1}
+    elseif reg2 then
+        return {reg2}
+    else
+        return {}
+    end
+end
+
 local function emitConditionalJump(compiler, condition, trueBlock, falseBlock, funcDepth)
     local scope = compiler.activeBlock.scope
 
@@ -40,9 +102,8 @@ local function emitConditionalJump(compiler, condition, trueBlock, falseBlock, f
             local lhsExpr, lhsReg = compiler:compileOperand(scope, inner.lhs, funcDepth)
             local rhsExpr, rhsReg = compiler:compileOperand(scope, inner.rhs, funcDepth)
 
-            local reads = {}
-            if lhsReg then table.insert(reads, lhsReg) end
-            if rhsReg then table.insert(reads, rhsReg) end
+            -- PERF-OPT: Use helper instead of table.insert
+            local reads = buildReadsArray(lhsReg, rhsReg)
 
             local fusedCondition = Ast[inverseName](lhsExpr, rhsExpr)
 
@@ -68,9 +129,8 @@ local function emitConditionalJump(compiler, condition, trueBlock, falseBlock, f
         local lhsExpr, lhsReg = compiler:compileOperand(scope, condition.lhs, funcDepth)
         local rhsExpr, rhsReg = compiler:compileOperand(scope, condition.rhs, funcDepth)
 
-        local reads = {}
-        if lhsReg then table.insert(reads, lhsReg) end
-        if rhsReg then table.insert(reads, rhsReg) end
+        -- PERF-OPT: Use helper instead of table.insert
+        local reads = buildReadsArray(lhsReg, rhsReg)
 
         local fusedCondition = Ast[condition.kind](lhsExpr, rhsExpr)
 
@@ -98,8 +158,11 @@ local Statements = {}
 
 function Statements.ReturnStatement(compiler, statement, funcDepth)
     local scope = compiler.activeBlock.scope;
+    -- PERF-OPT: Use direct indexing instead of table.insert
     local entries = {};
+    local entriesCount = 0;
     local regs = {};
+    local regsCount = 0;
 
     local nExpr
 
@@ -107,14 +170,16 @@ function Statements.ReturnStatement(compiler, statement, funcDepth)
         if i == #statement.args and (expr.kind == AstKind.FunctionCallExpression or expr.kind == AstKind.PassSelfFunctionCallExpression or expr.kind == AstKind.VarargExpression) then
             local reg = compiler:compileExpression(expr, funcDepth, compiler.RETURN_ALL)[1];
             -- VUL-2025-012 FIX: Use explicit unpack count to handle holes in return values
-            table.insert(entries, Ast.TableEntry(Ast.FunctionCallExpression(
+            entriesCount = entriesCount + 1;
+            entries[entriesCount] = Ast.TableEntry(Ast.FunctionCallExpression(
                 compiler:unpack(scope),
                 {
                     compiler:register(scope, reg),
                     Ast.NumberExpression(1),
                     Ast.IndexExpression(compiler:register(scope, reg), Ast.StringExpression("n"))
-                })));
-            table.insert(regs, reg);
+                }));
+            regsCount = regsCount + 1;
+            regs[regsCount] = reg;
 
             -- Calculate dynamic n: (args_before) + reg.n
             local baseCount = i - 1
@@ -127,8 +192,12 @@ function Statements.ReturnStatement(compiler, statement, funcDepth)
         else
             -- OPTIMIZATION: Inline literals/vars for return
             local retExpr, retReg = compiler:compileOperand(scope, expr, funcDepth);
-            table.insert(entries, Ast.TableEntry(retExpr));
-            if retReg then table.insert(regs, retReg) end
+            entriesCount = entriesCount + 1;
+            entries[entriesCount] = Ast.TableEntry(retExpr);
+            if retReg then
+                regsCount = regsCount + 1;
+                regs[regsCount] = retReg;
+            end
         end
     end
 
@@ -138,7 +207,8 @@ function Statements.ReturnStatement(compiler, statement, funcDepth)
     end
 
     -- VUL-2025-012 FIX: Store 'n' in return table so containerFunc can unpack correctly
-    table.insert(entries, Ast.KeyedTableEntry(Ast.StringExpression("n"), nExpr))
+    entriesCount = entriesCount + 1;
+    entries[entriesCount] = Ast.KeyedTableEntry(Ast.StringExpression("n"), nExpr)
 
     for _, reg in ipairs(regs) do
         compiler:freeRegister(reg, false);
@@ -220,24 +290,33 @@ end
 function Statements.FunctionCallStatement(compiler, statement, funcDepth)
     local scope = compiler.activeBlock.scope;
     local baseReg = compiler:compileExpression(statement.base, funcDepth, 1)[1];
+    -- PERF-OPT: Use direct indexing instead of table.insert
     local regs = {};
+    local regsCount = 0;
     local args = {};
+    local argsCount = 0;
 
     for i, expr in ipairs(statement.args) do
         if i == #statement.args and (expr.kind == AstKind.FunctionCallExpression or expr.kind == AstKind.PassSelfFunctionCallExpression or expr.kind == AstKind.VarargExpression) then
             local reg = compiler:compileExpression(expr, funcDepth, compiler.RETURN_ALL)[1];
-            table.insert(args, Ast.FunctionCallExpression(
+            argsCount = argsCount + 1;
+            args[argsCount] = Ast.FunctionCallExpression(
                 compiler:unpack(scope),
                 {
                     compiler:register(scope, reg),
                     Ast.NumberExpression(1),
                     Ast.IndexExpression(compiler:register(scope, reg), Ast.StringExpression("n"))
-                }));
-            table.insert(regs, reg);
+                });
+            regsCount = regsCount + 1;
+            regs[regsCount] = reg;
         else
             local argExpr, argReg = compiler:compileOperand(scope, expr, funcDepth);
-            table.insert(args, argExpr);
-            if argReg then table.insert(regs, argReg) end
+            argsCount = argsCount + 1;
+            args[argsCount] = argExpr;
+            if argReg then
+                regsCount = regsCount + 1;
+                regs[regsCount] = argReg;
+            end
         end
     end
 
@@ -252,24 +331,33 @@ end
 function Statements.PassSelfFunctionCallStatement(compiler, statement, funcDepth)
     local scope = compiler.activeBlock.scope;
     local baseReg = compiler:compileExpression(statement.base, funcDepth, 1)[1];
+    -- PERF-OPT: Use direct indexing instead of table.insert
     local args = { compiler:register(scope, baseReg) };
+    local argsCount = 1;
     local regs = { baseReg };
+    local regsCount = 1;
 
     for i, expr in ipairs(statement.args) do
         if i == #statement.args and (expr.kind == AstKind.FunctionCallExpression or expr.kind == AstKind.PassSelfFunctionCallExpression or expr.kind == AstKind.VarargExpression) then
             local reg = compiler:compileExpression(expr, funcDepth, compiler.RETURN_ALL)[1];
-            table.insert(args, Ast.FunctionCallExpression(
+            argsCount = argsCount + 1;
+            args[argsCount] = Ast.FunctionCallExpression(
                 compiler:unpack(scope),
                 {
                     compiler:register(scope, reg),
                     Ast.NumberExpression(1),
                     Ast.IndexExpression(compiler:register(scope, reg), Ast.StringExpression("n"))
-                }));
-            table.insert(regs, reg);
+                });
+            regsCount = regsCount + 1;
+            regs[regsCount] = reg;
         else
             local argExpr, argReg = compiler:compileOperand(scope, expr, funcDepth);
-            table.insert(args, argExpr);
-            if argReg then table.insert(regs, argReg) end
+            argsCount = argsCount + 1;
+            args[argsCount] = argExpr;
+            if argReg then
+                regsCount = regsCount + 1;
+                regs[regsCount] = argReg;
+            end
         end
     end
 
@@ -796,38 +884,8 @@ end
 
 function Statements.BreakStatement(compiler, statement, funcDepth)
     local scope = compiler.activeBlock.scope;
-    local toFreeVars = {};
-    local statScope;
-    repeat
-        statScope = statScope and statScope.parentScope or statement.scope;
-        for id, name in ipairs(statScope.variables) do
-            table.insert(toFreeVars, {
-                scope = statScope,
-                id = id;
-            });
-        end
-    until statScope == statement.loop.body.scope;
-
-    local regsToClear = {}
-    local nils = {}
-
-    for i, var in pairs(toFreeVars) do
-        local varScope, id = var.scope, var.id;
-        local varReg = compiler:getVarRegister(varScope, id, nil, nil);
-        if compiler:isUpvalue(varScope, id) then
-            scope:addReferenceToHigherScope(compiler.scope, compiler.freeUpvalueFunc);
-            compiler:addStatement(compiler:setRegister(scope, varReg, Ast.FunctionCallExpression(Ast.VariableExpression(compiler.scope, compiler.freeUpvalueFunc), {
-                compiler:register(scope, varReg)
-            })), {varReg}, {varReg}, false);
-        else
-            table.insert(regsToClear, varReg)
-            table.insert(nils, Ast.NilExpression())
-        end
-    end
-
-    if #regsToClear > 0 then
-        compiler:addStatement(compiler:setRegisters(scope, regsToClear, nils), regsToClear, {}, false);
-    end
+    -- PERF-OPT: Use shared helper for variable clearing
+    clearLoopVariables(compiler, statement, scope);
 
     compiler:addStatement(compiler:setPos(scope, statement.loop.__final_block.id), {compiler.POS_REGISTER}, {}, false);
     compiler.activeBlock.advanceToNextBlock = false;
@@ -835,38 +893,8 @@ end
 
 function Statements.ContinueStatement(compiler, statement, funcDepth)
     local scope = compiler.activeBlock.scope;
-    local toFreeVars = {};
-    local statScope;
-    repeat
-        statScope = statScope and statScope.parentScope or statement.scope;
-        for id, name in pairs(statScope.variables) do
-            table.insert(toFreeVars, {
-                scope = statScope,
-                id = id;
-            });
-        end
-    until statScope == statement.loop.body.scope;
-
-    local regsToClear = {}
-    local nils = {}
-
-    for i, var in ipairs(toFreeVars) do
-        local varScope, id = var.scope, var.id;
-        local varReg = compiler:getVarRegister(varScope, id, nil, nil);
-        if compiler:isUpvalue(varScope, id) then
-            scope:addReferenceToHigherScope(compiler.scope, compiler.freeUpvalueFunc);
-            compiler:addStatement(compiler:setRegister(scope, varReg, Ast.FunctionCallExpression(Ast.VariableExpression(compiler.scope, compiler.freeUpvalueFunc), {
-                compiler:register(scope, varReg)
-            })), {varReg}, {varReg}, false);
-        else
-            table.insert(regsToClear, varReg)
-            table.insert(nils, Ast.NilExpression())
-        end
-    end
-
-    if #regsToClear > 0 then
-        compiler:addStatement(compiler:setRegisters(scope, regsToClear, nils), regsToClear, {}, false);
-    end
+    -- PERF-OPT: Use shared helper for variable clearing
+    clearLoopVariables(compiler, statement, scope);
 
     compiler:addStatement(compiler:setPos(scope, statement.loop.__start_block.id), {compiler.POS_REGISTER}, {}, false);
     compiler.activeBlock.advanceToNextBlock = false;

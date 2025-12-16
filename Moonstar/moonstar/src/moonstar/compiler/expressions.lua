@@ -5,7 +5,38 @@ local util = require("moonstar.util");
 
 local unpack = unpack or table.unpack;
 
+-- PERF-OPT: Cache commonly used functions locally
+local type = type;
+local ipairs = ipairs;
+
 local Expressions = {}
+
+-- PERF-OPT: Helper to allocate registers for multi-return expressions
+-- Reduces code duplication across literal expression handlers
+local function allocRegsForReturns(compiler, numReturns, targetRegs)
+    local regs = {};
+    for i = 1, numReturns do
+        if targetRegs and targetRegs[i] then
+            regs[i] = targetRegs[i];
+        else
+            regs[i] = compiler:allocRegister();
+        end
+    end
+    return regs;
+end
+
+-- PERF-OPT: Helper to build reads array without table.insert
+local function buildReadsArray(reg1, reg2)
+    if reg1 and reg2 then
+        return {reg1, reg2}
+    elseif reg1 then
+        return {reg1}
+    elseif reg2 then
+        return {reg2}
+    else
+        return {}
+    end
+end
 
 function Expressions.StringExpression(compiler, expression, funcDepth, numReturns, targetRegs)
     local scope = compiler.activeBlock.scope;
@@ -163,24 +194,33 @@ function Expressions.FunctionCallExpression(compiler, expression, funcDepth, num
         end
     end
 
+    -- PERF-OPT: Use direct indexing instead of table.insert
     local regs = {};
+    local regsCount = 0;
     local args = {};
+    local argsCount = 0;
     for i, expr in ipairs(expression.args) do
         if i == #expression.args and (expr.kind == AstKind.FunctionCallExpression or expr.kind == AstKind.PassSelfFunctionCallExpression or expr.kind == AstKind.VarargExpression) then
             local reg = compiler:compileExpression(expr, funcDepth, compiler.RETURN_ALL)[1];
             -- VUL-FIX: Unpack using explicit count (.n) to handle holes/nils
-            table.insert(args, Ast.FunctionCallExpression(
+            argsCount = argsCount + 1;
+            args[argsCount] = Ast.FunctionCallExpression(
                 compiler:unpack(scope),
                 {
                     compiler:register(scope, reg),
                     Ast.NumberExpression(1),
                     Ast.IndexExpression(compiler:register(scope, reg), Ast.StringExpression("n"))
-                }));
-            table.insert(regs, reg);
+                });
+            regsCount = regsCount + 1;
+            regs[regsCount] = reg;
         else
             local argExpr, argReg = compiler:compileOperand(scope, expr, funcDepth);
-            table.insert(args, argExpr);
-            if argReg then table.insert(regs, argReg) end
+            argsCount = argsCount + 1;
+            args[argsCount] = argExpr;
+            if argReg then
+                regsCount = regsCount + 1;
+                regs[regsCount] = argReg;
+            end
         end
     end
 
@@ -228,25 +268,34 @@ function Expressions.PassSelfFunctionCallExpression(compiler, expression, funcDe
         end
     end
 
+    -- PERF-OPT: Use direct indexing instead of table.insert
     local args = { compiler:register(scope, baseReg) };
+    local argsCount = 1;
     local regs = { baseReg };
+    local regsCount = 1;
 
     for i, expr in ipairs(expression.args) do
         if i == #expression.args and (expr.kind == AstKind.FunctionCallExpression or expr.kind == AstKind.PassSelfFunctionCallExpression or expr.kind == AstKind.VarargExpression) then
             local reg = compiler:compileExpression(expr, funcDepth, compiler.RETURN_ALL)[1];
             -- VUL-FIX: Unpack using explicit count (.n)
-            table.insert(args, Ast.FunctionCallExpression(
+            argsCount = argsCount + 1;
+            args[argsCount] = Ast.FunctionCallExpression(
                 compiler:unpack(scope),
                 {
                     compiler:register(scope, reg),
                     Ast.NumberExpression(1),
                     Ast.IndexExpression(compiler:register(scope, reg), Ast.StringExpression("n"))
-                }));
-            table.insert(regs, reg);
+                });
+            regsCount = regsCount + 1;
+            regs[regsCount] = reg;
         else
             local argExpr, argReg = compiler:compileOperand(scope, expr, funcDepth);
-            table.insert(args, argExpr);
-            if argReg then table.insert(regs, argReg) end
+            argsCount = argsCount + 1;
+            args[argsCount] = argExpr;
+            if argReg then
+                regsCount = regsCount + 1;
+                regs[regsCount] = argReg;
+            end
         end
     end
 
@@ -304,8 +353,8 @@ function Expressions.IndexExpression(compiler, expression, funcDepth, numReturns
             -- OPTIMIZATION: Literal Inlining for Index
             local indexExpr, indexReg = compiler:compileOperand(scope, expression.index, funcDepth);
 
-            local reads = {baseReg}
-            if indexReg then table.insert(reads, indexReg) end
+            -- PERF-OPT: Avoid table.insert for reads array
+            local reads = indexReg and {baseReg, indexReg} or {baseReg};
 
             compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.IndexExpression(compiler:register(scope, baseReg), indexExpr)), {regs[i]}, reads, true);
 
@@ -480,9 +529,17 @@ function Expressions.BinaryExpression(compiler, expression, funcDepth, numReturn
                         end
                 end
 
+                -- PERF-OPT: Build reads array with direct indexing instead of table.insert
                 local reads = {}
-                if lhsReg and (not reused or lhsReg ~= targetReg) then table.insert(reads, lhsReg) end
-                if rhsReg and (not reused or rhsReg ~= targetReg) then table.insert(reads, rhsReg) end
+                local readsCount = 0
+                if lhsReg and (not reused or lhsReg ~= targetReg) then
+                    readsCount = readsCount + 1
+                    reads[readsCount] = lhsReg
+                end
+                if rhsReg and (not reused or rhsReg ~= targetReg) then
+                    readsCount = readsCount + 1
+                    reads[readsCount] = rhsReg
+                end
 
                 compiler:addStatement(compiler:setRegister(scope, targetReg, Ast[expression.kind](lhsExpr, rhsExpr)), {targetReg}, reads, true);
             end
@@ -535,9 +592,8 @@ function Expressions.NotExpression(compiler, expression, funcDepth, numReturns, 
                 if inverseName then
                     local lhsExpr, lhsReg = compiler:compileOperand(scope, expression.rhs.lhs, funcDepth);
                     local rhsExpr, rhsReg = compiler:compileOperand(scope, expression.rhs.rhs, funcDepth);
-                    local reads = {}
-                    if lhsReg then table.insert(reads, lhsReg) end
-                    if rhsReg then table.insert(reads, rhsReg) end
+                    -- PERF-OPT: Use buildReadsArray helper instead of table.insert
+                    local reads = buildReadsArray(lhsReg, rhsReg);
                     compiler:addStatement(compiler:setRegister(scope, regs[i], Ast[inverseName](lhsExpr, rhsExpr)), {regs[i]}, reads, true);
                     if lhsReg then compiler:freeRegister(lhsReg, false) end
                     if rhsReg then compiler:freeRegister(rhsReg, false) end
@@ -777,36 +833,52 @@ function Expressions.TableConstructorExpression(compiler, expression, funcDepth,
         end
 
         if(i == 1) then
+            -- PERF-OPT: Use direct indexing instead of table.insert
             local entries = {};
+            local entriesCount = 0;
             local entryRegs = {};
+            local entryRegsCount = 0;
             for i, entry in ipairs(expression.entries) do
                 if(entry.kind == AstKind.TableEntry) then
                     local value = entry.value;
                     if i == #expression.entries and (value.kind == AstKind.FunctionCallExpression or value.kind == AstKind.PassSelfFunctionCallExpression or value.kind == AstKind.VarargExpression) then
                         local reg = compiler:compileExpression(entry.value, funcDepth, compiler.RETURN_ALL)[1];
                         -- VUL-FIX: Unpack using explicit count (.n)
-                        table.insert(entries, Ast.TableEntry(Ast.FunctionCallExpression(
+                        entriesCount = entriesCount + 1;
+                        entries[entriesCount] = Ast.TableEntry(Ast.FunctionCallExpression(
                             compiler:unpack(scope),
                             {
                                 compiler:register(scope, reg),
                                 Ast.NumberExpression(1),
                                 Ast.IndexExpression(compiler:register(scope, reg), Ast.StringExpression("n"))
-                            })));
-                        table.insert(entryRegs, reg);
+                            }));
+                        entryRegsCount = entryRegsCount + 1;
+                        entryRegs[entryRegsCount] = reg;
                     else
                         -- OPTIMIZATION: Inline literals/vars/safe-expressions for array part
                         local valExpr, valReg = compiler:compileOperand(scope, entry.value, funcDepth);
-                        table.insert(entries, Ast.TableEntry(valExpr));
-                        if valReg then table.insert(entryRegs, valReg) end
+                        entriesCount = entriesCount + 1;
+                        entries[entriesCount] = Ast.TableEntry(valExpr);
+                        if valReg then
+                            entryRegsCount = entryRegsCount + 1;
+                            entryRegs[entryRegsCount] = valReg;
+                        end
                     end
                 else
                     -- OPTIMIZATION: Literal Inlining for Table Constructor Keys/Values
                     local keyExpr, keyReg = compiler:compileOperand(scope, entry.key, funcDepth);
                     local valExpr, valReg = compiler:compileOperand(scope, entry.value, funcDepth);
 
-                    table.insert(entries, Ast.KeyedTableEntry(keyExpr, valExpr));
-                    if keyReg then table.insert(entryRegs, keyReg) end
-                    if valReg then table.insert(entryRegs, valReg) end
+                    entriesCount = entriesCount + 1;
+                    entries[entriesCount] = Ast.KeyedTableEntry(keyExpr, valExpr);
+                    if keyReg then
+                        entryRegsCount = entryRegsCount + 1;
+                        entryRegs[entryRegsCount] = keyReg;
+                    end
+                    if valReg then
+                        entryRegsCount = entryRegsCount + 1;
+                        entryRegs[entryRegsCount] = valReg;
+                    end
                 end
             end
             compiler:addStatement(compiler:setRegister(scope, regs[i], Ast.TableConstructorExpression(entries)), {regs[i]}, entryRegs, false);
@@ -859,14 +931,17 @@ end
 --   - Expected improvement: ~20-30% smaller output for concat-heavy code
 
 -- Helper: Recursively collect all operands from a chained StrCatExpression tree
-local function collectConcatOperands(expr, operands)
+-- PERF-OPT: Uses count parameter to avoid table.insert
+local function collectConcatOperands(expr, operands, count)
     if expr.kind == AstKind.StrCatExpression then
         -- StrCat is right-associative, so we recurse into both sides
-        collectConcatOperands(expr.lhs, operands)
-        collectConcatOperands(expr.rhs, operands)
+        count = collectConcatOperands(expr.lhs, operands, count)
+        count = collectConcatOperands(expr.rhs, operands, count)
     else
-        table.insert(operands, expr)
+        count = count + 1
+        operands[count] = expr
     end
+    return count
 end
 
 function Expressions.StrCatExpression(compiler, expression, funcDepth, numReturns, targetRegs)
@@ -883,12 +958,14 @@ function Expressions.StrCatExpression(compiler, expression, funcDepth, numReturn
         if(i == 1) then
             -- Collect all operands from the concatenation chain
             local operands = {}
-            collectConcatOperands(expression, operands)
+            collectConcatOperands(expression, operands, 0)
             
             -- OPTIMIZATION: Constant String Folding
             -- Merge adjacent string literals: "a" .. "b" .. x .. "c" → "ab" .. x .. "c"
             -- Security: Does not affect obfuscation as strings are still processed normally
+            -- PERF-OPT: Use direct indexing instead of table.insert
             local foldedOperands = {}
+            local foldedCount = 0
             local pendingString = nil
             
             for _, op in ipairs(operands) do
@@ -902,16 +979,19 @@ function Expressions.StrCatExpression(compiler, expression, funcDepth, numReturn
                 else
                     -- Flush pending string if any
                     if pendingString then
-                        table.insert(foldedOperands, Ast.StringExpression(pendingString))
+                        foldedCount = foldedCount + 1
+                        foldedOperands[foldedCount] = Ast.StringExpression(pendingString)
                         pendingString = nil
                     end
-                    table.insert(foldedOperands, op)
+                    foldedCount = foldedCount + 1
+                    foldedOperands[foldedCount] = op
                 end
             end
             
             -- Flush final pending string
             if pendingString then
-                table.insert(foldedOperands, Ast.StringExpression(pendingString))
+                foldedCount = foldedCount + 1
+                foldedOperands[foldedCount] = Ast.StringExpression(pendingString)
             end
             
             operands = foldedOperands
@@ -1006,8 +1086,8 @@ function Expressions.StrCatExpression(compiler, expression, funcDepth, numReturn
                     -- 3. Iteratively append subsequent operands
                     for k = 2, #operands do
                          local nextExpr, nextReg = compiler:compileOperand(scope, operands[k], funcDepth)
-                         local reads = {regs[i]}
-                         if nextReg then table.insert(reads, nextReg) end
+                         -- PERF-OPT: Use direct array construction instead of table.insert
+                         local reads = nextReg and {regs[i], nextReg} or {regs[i]}
                          
                          -- regs[i] = regs[i] .. nextReg
                          compiler:addStatement(

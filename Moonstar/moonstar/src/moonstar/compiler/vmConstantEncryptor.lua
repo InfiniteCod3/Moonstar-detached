@@ -9,35 +9,38 @@ local LCG_A = 1664525
 local LCG_C = 1013904223
 local LCG_M = 4294967296
 
--- Cache for unique seeds to avoid collisions
-local usedSeeds = {}
+-- PERF-OPT: Cache string.byte and math.floor locally
+local string_byte = string.byte
+local math_floor = math.floor
+
+-- PERF-OPT: Counter-based unique seed generation
+-- Avoids repeat-until loop which can be slow with many collisions
+local seedCounter = 0
+local seedBase = math.random(1, 1000000000)
 
 local function getUniqueSeed()
-    local seed
-    repeat
-        seed = math.random(1, 2147483647)
-    until not usedSeeds[seed]
-    usedSeeds[seed] = true
-    return seed
+    seedCounter = seedCounter + 1
+    -- Combine base with counter using multiplication and XOR-like operation
+    -- This ensures uniqueness without collision checks
+    return (seedBase + seedCounter * 7919) % 2147483647 + 1
 end
 
 function VmConstantEncryptor.encrypt(str)
     local seed = getUniqueSeed()
     local state = seed
+    -- PERF-OPT: Use direct indexing instead of table.insert
     local encrypted = {}
     local len = #str
 
     for i = 1, len do
-        local byte = string.byte(str, i)
+        local byte = string_byte(str, i)
 
         -- LCG Step
         state = (LCG_A * state + LCG_C) % LCG_M
-        local key = math.floor(state / 65536) % 256
+        local key = math_floor(state / 65536) % 256
 
         -- Encryption: (byte + key) % 256
-        local encByte = (byte + key) % 256
-
-        table.insert(encrypted, encByte)
+        encrypted[i] = (byte + key) % 256
     end
 
     return encrypted, seed

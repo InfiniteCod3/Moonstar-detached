@@ -225,13 +225,15 @@ function VmGen.emitContainerFuncBody(compiler)
                                 -- Rewrite currStmt to write to targetReg instead of writtenReg
                                 -- We need to update the LHS of currStmt
                                 
-                                -- Create new LHS writing to targetReg
+                                -- PERF-OPT: Create new LHS writing to targetReg with direct indexing
                                 local newLhs = {}
+                                local newLhsCount = 0
                                 for _, lhsNode in ipairs(currStmt.lhs) do
                                     -- Replace the assignment target
                                     -- We'll create a new assignment to targetReg
                                     local newNode = compiler:registerAssignment(block.scope, targetReg)
-                                    table.insert(newLhs, newNode)
+                                    newLhsCount = newLhsCount + 1
+                                    newLhs[newLhsCount] = newNode
                                 end
                                 
                                 -- Update currStat
@@ -462,6 +464,10 @@ function VmGen.createJunkBlock(compiler)
     local block = compiler:createBlock();
     local scope = block.scope;
 
+    -- PERF-OPT: Use direct indexing instead of table.insert
+    local statements = block.statements;
+    local stmtCount = 0;
+
     -- Generate 3-8 random instructions
     local numInstr = math.random(3, 8);
     for i = 1, numInstr do
@@ -473,58 +479,60 @@ function VmGen.createJunkBlock(compiler)
 
         -- We manually construct simple AST nodes to avoid complexity
         -- These references are safe because 'blocks' are processed later
+        stmtCount = stmtCount + 1;
         if op == 1 then -- Add
-             table.insert(block.statements, {
+             statements[stmtCount] = {
                 statement = Ast.AssignmentStatement({
                     compiler:registerAssignment(scope, reg1)
                 }, {
                     Ast.AddExpression(compiler:register(scope, reg2), compiler:register(scope, reg3))
                 }),
                 writes = lookupify({reg1}), reads = lookupify({reg2, reg3}), usesUpvals = false
-            });
+            };
         elseif op == 2 then -- Mul
-             table.insert(block.statements, {
+             statements[stmtCount] = {
                 statement = Ast.AssignmentStatement({
                     compiler:registerAssignment(scope, reg1)
                 }, {
                     Ast.MulExpression(compiler:register(scope, reg2), Ast.NumberExpression(math.random(1, 100)))
                 }),
                 writes = lookupify({reg1}), reads = lookupify({reg2}), usesUpvals = false
-            });
+            };
         elseif op == 3 then -- Set Global (Fake)
              -- We can't easily fake globals safely without risk of crashing if env is strict
              -- So just do local assign
-             table.insert(block.statements, {
+             statements[stmtCount] = {
                 statement = Ast.AssignmentStatement({
                     compiler:registerAssignment(scope, reg1)
                 }, {
                     Ast.StringExpression(randomStrings.randomString(5))
                 }),
                 writes = lookupify({reg1}), reads = lookupify({}), usesUpvals = false
-            });
+            };
         elseif op == 4 then -- Table Create
-             table.insert(block.statements, {
+             statements[stmtCount] = {
                 statement = Ast.AssignmentStatement({
                     compiler:registerAssignment(scope, reg1)
                 }, {
                     Ast.TableConstructorExpression({})
                 }),
                 writes = lookupify({reg1}), reads = lookupify({}), usesUpvals = false
-            });
+            };
         else -- JUMP (Fake)
              -- Jump to itself or random number (harmless since unreachable)
-             table.insert(block.statements, {
+             statements[stmtCount] = {
                 statement = compiler:setPos(scope, math.random(0, 100000)),
                 writes = lookupify({compiler.POS_REGISTER}), reads = lookupify({}), usesUpvals = false
-            });
+            };
         end
     end
 
     -- End with a jump or return to be syntactically valid flow
-    table.insert(block.statements, {
+    stmtCount = stmtCount + 1;
+    statements[stmtCount] = {
         statement = compiler:setPos(scope, nil), -- Random jump
         writes = lookupify({compiler.POS_REGISTER}), reads = lookupify({}), usesUpvals = false
-    });
+    };
 
     -- Mark as not advancing so we don't append more to it accidentally
     block.advanceToNextBlock = false;
