@@ -70,34 +70,47 @@ local function generateWarning(token, message)
 end
 
 function Tokenizer:getPosition(i)
-	local column = self.columnMap[i]
+	i = (i > self.length) and self.length or (i < 1 and 1 or i)
 
-	if not column then --// `i` is bigger than self.length, this shouldnt happen, but it did. (Theres probably some error in the tokenizer, cant find it.)
-		column = self.columnMap[#self.columnMap] 
+	local lineStarts = self.lineStarts or {1}
+	local line = self.lastLineIndex or 1
+
+	-- Verify cache hit (common case: sequential scan)
+	if not (lineStarts[line] <= i and (line == #lineStarts or i < lineStarts[line + 1])) then
+		-- Binary search for the correct line
+		local low, high = 1, #lineStarts
+		while low <= high do
+			local mid = math.floor((low + high) / 2)
+			if lineStarts[mid] <= i then
+				line = mid
+				low = mid + 1
+			else
+				high = mid - 1
+			end
+		end
 	end
 
-	return column.id, column.charMap[i]
+	self.lastLineIndex = line
+	return line, i - lineStarts[line] + 1
 end
 
---// Prepare columnMap for getPosition
+--// Prepare lineStarts for getPosition
 function Tokenizer:prepareGetPosition()
-	local columnMap, column = {}, { charMap = {}, id = 1, length = 0 }
+	local lineStarts = {1}
+	local source = self.source
+	local len = self.length
+	local i = 1
 
-	for index = 1, self.length do
-		local character = string.sub(self.source, index, index) -- NOTE_1: this could use table.clone to reduce amount of NEWTABLE (if that causes any performance issues)
-
-		local columnLength = column.length + 1
-		column.length = columnLength
-		column.charMap[index] = columnLength
-
-		if character == "\n" then
-			column = { charMap = {}, id = column.id + 1, length = 0 } -- NOTE_1
-		end
-
-		columnMap[index] = column
+	-- Scan for newlines to build line index
+	while i <= len do
+		local ni = string.find(source, "\n", i, true)
+		if not ni then break end
+		table.insert(lineStarts, ni + 1)
+		i = ni + 1
 	end
 
-	self.columnMap = columnMap
+	self.lineStarts = lineStarts
+	self.lastLineIndex = 1
 end
 
 -- Constructor for Tokenizer
@@ -159,7 +172,8 @@ function Tokenizer:reset()
 	self.length = 0;
 	self.source = "";
 	self.annotations = {};
-	self.columnMap = {};
+	self.lineStarts = {1};
+	self.lastLineIndex = 1;
 end
 
 -- Append String to this Tokenizer
