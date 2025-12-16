@@ -1,5 +1,6 @@
 -- Moonstar Preset: Medium
--- Balanced protection (encryption + VM + all features) [recommended]
+-- Balanced protection (encryption + constant obfuscation) [recommended]
+-- Removed overhead: SplitStrings (redundant with EncryptStrings), AddVararg, NumbersToExpressions
 
 return {
     LuaVersion    = "Lua51";
@@ -8,32 +9,27 @@ return {
     PrettyPrint   = false;
     Seed          = 0;
 
-    WrapInFunction = { Enabled = true };
-
+    -- String protection
     EncryptStrings = {
         Enabled = true;
         Mode = "standard";
+        DecryptorVariant = "arith";
     };
 
-    SplitStrings = {
-        Enabled = true;
-        MaxSegmentLength = 16;
-        Strategy = "random";
-    };
-
+    -- Constant protection with index obfuscation
     ConstantArray = {
         Enabled = true;
         EncodeStrings = true;
         IndexObfuscation = true;
+        AntiDeobfuscation = true;
     };
 
-    NumbersToExpressions = {
-        Enabled = true;
-        Complexity = "low";
-    };
+    -- Module isolation wrapper
+    WrapInFunction = { Enabled = true };
 
-    AddVararg = {
-        Enabled = true;
-        Probability = 0.15;
+    -- Compression (optional, disabled by default)
+    Compression = {
+        Enabled = false;
+        FastMode = true;
     };
 }

@@ -13,12 +13,9 @@ Moonstar is an advanced Lua/Luau obfuscator designed to provide high-level prote
 - **Anti-Tamper Protection:** Prevents unauthorized modification of the obfuscated script (`AntiTamper`).
 - **Instruction Randomization:** Randomizes VM instructions to make reverse engineering more difficult (`VmProfileRandomizer`).
 - **Compression:** Compresses the script using advanced algorithms (LZSS, Huffman, Arithmetic, PPM, BWT) to reduce file size and add another layer of obfuscation (`Compression`).
-- **String Encryption:** Encrypts strings to hide sensitive information with multiple modes (Light, Standard, Polymorphic).
-- **String Splitting:** Breaks long strings into smaller chunks to disrupt pattern matching (`SplitStrings`).
-- **Constant Array:** Hides constants in a shuffled array to obscure their original location (`ConstantArray`).
+- **String Encryption:** Encrypts strings to hide sensitive information with multiple modes (Light, Standard, Aggressive, Polymorphic).
+- **Constant Array:** Hides constants in a shuffled array with index obfuscation and anti-deobfuscation features (`ConstantArray`).
 - **Constant Folding:** Pre-calculates constant expressions to simplify code before obfuscation (`ConstantFolding`).
-- **Number to Expression:** Converts plain numbers into complex arithmetic expressions (`NumbersToExpressions`).
-- **Vararg Injection:** Injects unused vararg (`...`) parameters to confuse function signatures (`AddVararg`).
 
 - **Lua 5.1 & LuaU Support:** Fully compatible with standard Lua 5.1 and Roblox's LuaU.
 
@@ -89,13 +86,13 @@ Presets are stored in the `presets/` folder as individual Lua files that return 
 - **Features:** None (structure preservation only)
 
 **Weak** (`presets/weak.lua`) — Basic protection against casual snooping.
-- **Features:** `WrapInFunction`, `EncryptStrings` (Light), `SplitStrings`, `ConstantArray`, `NumbersToExpressions`
+- **Features:** `WrapInFunction`, `EncryptStrings` (Light), `ConstantArray`
 
 **Medium** (`presets/medium.lua`) — Balanced protection for general use.
-- **Features:** All Weak features plus `EncryptStrings` (Standard), `IndexObfuscation`, `AddVararg`
+- **Features:** `WrapInFunction`, `EncryptStrings` (Standard), `ConstantArray` with `IndexObfuscation` and `AntiDeobfuscation`
 
 **Strong** (`presets/strong.lua`) — Maximum protection for sensitive logic.
-- **Features:** All Medium features plus `ControlFlowFlattening`, `GlobalVirtualization`, `AntiTamper`, `Vmify`, `VmProfileRandomizer`, `Compression`
+- **Features:** `WrapInFunction`, `ConstantFolding`, `EncryptStrings` (Aggressive/Polymorphic), `ControlFlowFlattening`, `ConstantArray` with full obfuscation, `Vmify`, `VmProfileRandomizer`, `Compression`
 
 ### Custom Presets
 

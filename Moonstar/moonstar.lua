@@ -129,9 +129,7 @@ local FallbackPresets = {
         Seed          = 0;
         WrapInFunction = { Enabled = true };
         EncryptStrings = { Enabled = true; Mode = "light" };
-        SplitStrings = { Enabled = true; MaxSegmentLength = 16; Strategy = "random" };
         ConstantArray = { Enabled = true; EncodeStrings = true; IndexObfuscation = false };
-        NumbersToExpressions = { Enabled = true; Complexity = "low" };
     };
     ["Medium"] = {
         LuaVersion    = "Lua51";
@@ -141,10 +139,7 @@ local FallbackPresets = {
         Seed          = 0;
         WrapInFunction = { Enabled = true };
         EncryptStrings = { Enabled = true; Mode = "standard" };
-        SplitStrings = { Enabled = true; MaxSegmentLength = 16; Strategy = "random" };
-        ConstantArray = { Enabled = true; EncodeStrings = true; IndexObfuscation = true };
-        NumbersToExpressions = { Enabled = true; Complexity = "low" };
-        AddVararg = { Enabled = true; Probability = 0.15 };
+        ConstantArray = { Enabled = true; EncodeStrings = true; IndexObfuscation = true; AntiDeobfuscation = true };
     };
     ["Strong"] = {
         LuaVersion    = "Lua51";
@@ -152,15 +147,11 @@ local FallbackPresets = {
         NameGenerator = "MangledShuffled";
         PrettyPrint   = false;
         Seed          = 0;
-        GlobalVirtualization = { Enabled = true; VirtualizeEnv = true };
         WrapInFunction = { Enabled = true };
         ConstantFolding = { Enabled = true };
-        EncryptStrings = { Enabled = true; Mode = "standard"; DecryptorVariant = "polymorphic"; LayerDepth = 1; InlineThreshold = 16; EnvironmentCheck = true };
+        EncryptStrings = { Enabled = true; Mode = "aggressive"; DecryptorVariant = "polymorphic"; LayerDepth = 1; InlineThreshold = 16; EnvironmentCheck = true };
         ControlFlowFlattening = { Enabled = true; ChunkSize = 3 };
-        ConstantArray = { Enabled = true; EncodeStrings = true; IndexObfuscation = true };
-        NumbersToExpressions = { Enabled = true; Complexity = "medium" };
-        AddVararg = { Enabled = true; Probability = 0.1 };
-        AntiTamper = { Enabled = true };
+        ConstantArray = { Enabled = true; EncodeStrings = true; IndexObfuscation = true; AntiDeobfuscation = true };
         Vmify = { Enabled = true; InlineVMState = true; ObfuscateHandlers = true; InstructionRandomization = true; EncryptVmStrings = true };
         VmProfileRandomizer = { Enabled = true; PermuteOpcodes = true; ShuffleHandlers = true; RandomizeNames = true };
         Compression = { Enabled = false; FastMode = true; Preseed = true; BWT = true; RLE = true; Huffman = true; ArithmeticCoding = true; PPM = true; PPMOrder = 2; ParallelTests = 4 };

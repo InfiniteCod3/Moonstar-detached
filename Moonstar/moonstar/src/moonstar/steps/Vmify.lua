@@ -80,6 +80,17 @@ function Vmify:apply(ast, pipeline)
     -- Determine instruction randomization based on Profile
     local enableRandomization = self.InstructionRandomization
     
+    -- Check if AntiTamper step is active in the pipeline
+    local antiTamperEnabled = false
+    if pipeline and pipeline.steps then
+        for _, step in ipairs(pipeline.steps) do
+            if step.Name == "Anti-Tamper" and step.Enabled ~= false then
+                antiTamperEnabled = true
+                break
+            end
+        end
+    end
+    
     -- Check PartialRatio for selective vmification
     local partialRatio = self.PartialRatio or 1.0
     if partialRatio < 1.0 then
@@ -101,7 +112,8 @@ function Vmify:apply(ast, pipeline)
 		enableInstructionRandomization = enableRandomization,
 		inlineVMState = self.InlineVMState or false,
 		obfuscateHandlers = self.ObfuscateHandlers ~= false,  -- Default true
-		encryptVmStrings = self.EncryptVmStrings or false
+		encryptVmStrings = self.EncryptVmStrings or false,
+		enableAntiTamper = antiTamperEnabled
 	});
     
     -- Compile the Script into a bytecode vm

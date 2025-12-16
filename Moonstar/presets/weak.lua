@@ -1,5 +1,6 @@
 -- Moonstar Preset: Weak
--- Basic VM protection (Vmify + constant array)
+-- Basic protection (light encryption + constant array)
+-- Removed overhead: SplitStrings (redundant), NumbersToExpressions (trivially reversed)
 
 return {
     LuaVersion    = "Lua51";
@@ -8,29 +9,27 @@ return {
     PrettyPrint   = false;
     Seed          = 0;
 
-    WrapInFunction = {
-        Enabled = true;
-    };
-
+    -- Light string encryption
     EncryptStrings = {
         Enabled = true;
         Mode = "light";
     };
 
-    SplitStrings = {
-        Enabled = true;
-        MaxSegmentLength = 16;
-        Strategy = "random";
-    };
-
+    -- Basic constant array (no index obfuscation for speed)
     ConstantArray = {
         Enabled = true;
         EncodeStrings = true;
         IndexObfuscation = false;
     };
 
-    NumbersToExpressions = {
+    -- Module isolation wrapper
+    WrapInFunction = {
         Enabled = true;
-        Complexity = "low";
+    };
+
+    -- Compression (optional, disabled by default)
+    Compression = {
+        Enabled = false;
+        FastMode = true;
     };
 }

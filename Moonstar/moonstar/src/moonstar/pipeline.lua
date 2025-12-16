@@ -98,12 +98,9 @@ local CANONICAL_ORDER = {
 	"ConstantFolding",
 
 	"EncryptStrings",
-	"SplitStrings",
 	"ConstantArray",
 	"LayeredStringDecrypt",
-	"NumbersToExpressions",
 
-	"AddVararg",
 	"ControlFlowRestructuring",
 	"ControlFlowFlattening",
 	"OpaquePredicates",
@@ -126,12 +123,9 @@ local DEFAULT_ENABLED = {
 	ConstantFolding          = false,
 
 	EncryptStrings           = false,
-	SplitStrings             = false,
 	ConstantArray            = false,
 	LayeredStringDecrypt     = false,
-	NumbersToExpressions     = false,
 
-	AddVararg                = false,
 	ControlFlowRestructuring = false,
 	ControlFlowFlattening    = false,
 	OpaquePredicates         = false,

@@ -343,9 +343,11 @@ function VmGen.emitContainerFuncBody(compiler)
     -- OPTIMIZATION: Sort blocks by ID to ensure the BST is built over a sorted range
     -- This is critical for the binary search logic to work correctly
     local blocksCount = 0
+    
     for _, block in ipairs(compiler.blocks) do
         local blockstats = {};
         local bsCount = 0
+        
         for i, stat in ipairs(block.statements) do
             bsCount = bsCount + 1
             blockstats[bsCount] = stat.statement;

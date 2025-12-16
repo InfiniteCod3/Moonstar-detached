@@ -137,6 +137,9 @@ function Compiler:new(config)
         -- VM string encryption config
         encryptVmStrings = config.encryptVmStrings or false;
         
+        -- AntiTamper VM integration config
+        enableAntiTamper = config.enableAntiTamper or false;
+        
         -- VUL-2025-003 FIX: Per-compilation salt for non-uniform distribution
         compilationSalt = config.enableInstructionRandomization and math.random(0, 2^20) or 0;
 

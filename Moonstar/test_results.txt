@@ -1,5 +1,5 @@
 MOONSTAR OBFUSCATOR - TEST RESULTS
-Generated: 2025-12-16 15:27:56
+Generated: 2025-12-16 21:56:54
 Test Files: 26
 Compression: disabled
 
@@ -130,11 +130,11 @@ PERFORMANCE METRICS
 Total Assertions Passed: 288
 Total Assertions Failed: 0
 Original Code Size:      292608 bytes
-Obfuscated Code Size:    2926663 bytes
-Size Change:             +900.2%
-Original Execution:      0.012s
-Obfuscated Execution:    0.094s
-Performance Ratio:       8.14x
+Obfuscated Code Size:    2580146 bytes
+Size Change:             +781.8%
+Original Execution:      0.009s
+Obfuscated Execution:    0.064s
+Performance Ratio:       7.01x
 
 
 ================================================================================
@@ -146,7 +146,7 @@ Passed:        104
 Failed:        0
 Skipped:       0
 Success Rate:  100.0%
-Duration:      40s
+Duration:      31s
 
 ================================================================================
 END OF REPORT
