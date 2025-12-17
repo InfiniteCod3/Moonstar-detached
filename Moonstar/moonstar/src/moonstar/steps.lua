@@ -7,7 +7,12 @@ return {
 	VmProfileRandomizer      = require("moonstar.steps.VmProfileRandomizer");
 	ConstantFolding          = require("moonstar.steps.ConstantFolding");
 	AntiTamper               = require("moonstar.steps.AntiTamper");
+	AntiDebug                = require("moonstar.steps.AntiDebug");
 	GlobalVirtualization     = require("moonstar.steps.GlobalVirtualization");
 	ControlFlowFlattening    = require("moonstar.steps.ControlFlowFlattening");
 	Compression              = require("moonstar.steps.Compression");
+	OpaquePredicates         = require("moonstar.steps.OpaquePredicates");
+	NumberObfuscation        = require("moonstar.steps.NumberObfuscation");
+	StringSplitting          = require("moonstar.steps.StringSplitting");
+	BytecodePoisoning        = require("moonstar.steps.BytecodePoisoning");
 }

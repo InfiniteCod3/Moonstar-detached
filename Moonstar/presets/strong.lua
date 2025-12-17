@@ -1,7 +1,7 @@
 -- Moonstar Preset: Strong
 -- Maximum protection (VM + core security features)
--- Removed overhead steps: AddVararg, NumbersToExpressions (contradicts ConstantFolding)
--- AntiTamper integrates with Vmify for periodic integrity checks
+-- Includes new security steps: OpaquePredicates, NumberObfuscation, AntiDebug, StringSplitting, BytecodePoisoning
+-- AntiTamper and AntiDebug integrate with Vmify for comprehensive protection
 
 return {
     LuaVersion    = "Lua51";
@@ -20,6 +20,18 @@ return {
         TimingCheck = false;  -- Can cause false positives
     };
 
+    -- Anti-debugging protection
+    AntiDebug = {
+        Enabled = true;
+        DetectDebugLib = true;
+        DetectHooking = true;
+        DetectTiming = false;  -- Disabled by default, can cause false positives
+        DetectStackInspection = true;
+        CheckInterval = 100;
+        ResponseType = "corrupt";  -- "error", "silent", or "corrupt"
+        RobloxChecks = true;
+    };
+
     -- Core protection: Custom bytecode VM
     Vmify = {
         Enabled = true;
@@ -35,6 +47,54 @@ return {
         PermuteOpcodes = true;
         ShuffleHandlers = true;
         RandomizeNames = true;
+    };
+
+    -- Bytecode poisoning to break decompilers
+    BytecodePoisoning = {
+        Enabled = true;
+        DeepNesting = true;
+        UnusualSyntax = true;
+        ConfusingVariables = true;
+        TableEdgeCases = true;
+        SelfReference = true;
+        Intensity = 0.3;
+        MaxNestingDepth = 15;
+    };
+
+    -- Opaque predicates for control flow obfuscation
+    OpaquePredicates = {
+        Enabled = true;
+        Intensity = 0.3;
+        UseMathPredicates = true;
+        UseModuloPredicates = true;
+        UseComparisonPredicates = true;
+        WrapConditions = true;
+        InsertFakeBranches = true;
+    };
+
+    -- Number obfuscation (transforms literals to expressions)
+    NumberObfuscation = {
+        Enabled = true;
+        Intensity = 0.5;
+        MaxDepth = 3;
+        MinValue = 0;
+        UseAddSub = true;
+        UseMulDiv = true;
+        UseMod = true;
+        UseBitArith = true;
+    };
+
+    -- String splitting (breaks strings into runtime-concatenated chunks)
+    StringSplitting = {
+        Enabled = true;
+        MinLength = 4;
+        MaxChunks = 5;
+        MinChunkSize = 1;
+        Intensity = 0.7;
+        UseTableConcat = true;
+        ShuffleChunks = true;
+        UseCharEncoding = true;
+        ReverseChunks = true;
     };
 
     -- String protection with polymorphic decryptor
