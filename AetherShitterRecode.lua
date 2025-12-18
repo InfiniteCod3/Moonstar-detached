@@ -220,6 +220,7 @@ end
 local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
 local WeldsRemote = Remotes and Remotes:FindFirstChild("Welds")
 local ToolEquipRemote = Remotes and Remotes:FindFirstChild("ToolEquip")
+local ClientInfoRemote = Remotes and Remotes:FindFirstChild("ClientInfo")
 
 -- Load shared UI module
 local LunarityUI = loadstring(game:HttpGet("https://api.relayed.network/ui"))()
@@ -807,6 +808,42 @@ task.spawn(function()
     end
 end)
 
+-- // Weapon Exploits
+local function FireQuickBreeze(size)
+    if not ClientInfoRemote then return notify("ClientInfo remote not found") end
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    ClientInfoRemote:FireServer("Quick Breeze", {
+        CF = hrp.CFrame,
+        SizeZ = size or 50000
+    })
+    debugLog("Fired Quick Breeze with size " .. tostring(size or 50000))
+end
+
+local function FireBloodBind(target)
+    if not ClientInfoRemote then return notify("ClientInfo remote not found") end
+    local pos
+    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+        pos = target.Character.HumanoidRootPart.CFrame
+    else
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then pos = hrp.CFrame else return end
+    end
+    
+    -- The server code: clone_2_upvr.CFrame = arg3 + arg3.LookVector * 30 + Vector3.new(0, -2.9, 0)
+    ClientInfoRemote:FireServer("Bind", pos)
+    debugLog("Fired Blood Bind at " .. (target and target.Name or "Self"))
+end
+
+local function MassBloodBind()
+    local players = GetUnwhitelistedPlayers()
+    for _, player in pairs(players) do
+        FireBloodBind(player)
+    end
+    notify("Mass Blood Bind Fired (" .. #players .. " targets)")
+end
+
 local function GetClosestPlayer()
     local mouse = LocalPlayer:GetMouse()
     local mousePos = Vector2.new(mouse.X, mouse.Y)
@@ -1057,6 +1094,24 @@ local function createMenu()
     end)
     
     window.createButton("Spam Tools (5s)", SpamTools)
+    
+    -- [ Weapon Exploits Section ] --
+    window.createSection("Weapon Exploits")
+    
+    window.createButton("Quick Breeze (Global Hitbox)", function()
+        FireQuickBreeze(50000)
+        notify("Quick Breeze: Global Hitbox Spawned")
+    end, true)
+    
+    window.createButton("Blood Bind (Target/Self)", function()
+        local target = Settings.TargetName and Players:FindFirstChild(Settings.TargetName)
+        FireBloodBind(target)
+        notify("Blood Bind: Fired at " .. (target and target.Name or "Self"))
+    end)
+    
+    window.createButton("Mass Blood Bind", function()
+        MassBloodBind()
+    end, true)
     
     -- [ Movement Section ] --
     window.createSection("Movement")

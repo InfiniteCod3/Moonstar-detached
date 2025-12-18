@@ -4,7 +4,10 @@
       "Bash(lua5.1:*)",
       "Bash(git reset:*)",
       "Bash(git rev-parse:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(luac5.1:*)",
+      "Bash(ls:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }
