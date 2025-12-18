@@ -11,7 +11,10 @@ local LCG_M = 4294967296
 
 -- PERF-OPT: Cache string.byte and math.floor locally
 local string_byte = string.byte
+local string_char = string.char
 local math_floor = math.floor
+local t_insert = table.insert
+local t_concat = table.concat
 
 -- PERF-OPT: Counter-based unique seed generation
 -- Avoids repeat-until loop which can be slow with many collisions
@@ -28,12 +31,13 @@ end
 function VmConstantEncryptor.encrypt(str)
     local seed = getUniqueSeed()
     local state = seed
-    -- PERF-OPT: Use direct indexing instead of table.insert
+    -- PERF-OPT: Fetch all bytes at once instead of calling string.byte N times
+    local bytes = {string_byte(str, 1, -1)}
     local encrypted = {}
-    local len = #str
+    local len = #bytes
 
     for i = 1, len do
-        local byte = string_byte(str, i)
+        local byte = bytes[i]
 
         -- LCG Step
         state = (LCG_A * state + LCG_C) % LCG_M

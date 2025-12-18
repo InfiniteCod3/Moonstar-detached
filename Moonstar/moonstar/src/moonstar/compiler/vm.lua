@@ -6,6 +6,12 @@ local randomStrings = require("moonstar.randomStrings")
 
 local lookupify = util.lookupify;
 
+-- PERF-OPT: Cache commonly used globals to avoid repeated table lookups
+local ipairs, pairs, type = ipairs, pairs, type
+local t_insert, t_remove, t_sort = table.insert, table.remove, table.sort
+local m_random, m_ceil, m_floor = math.random, math.ceil, math.floor
+local s_format = string.format
+
 local VmGen = {}
 
 function VmGen.emitContainerFuncBody(compiler)
@@ -87,7 +93,7 @@ function VmGen.emitContainerFuncBody(compiler)
 
                             if isMergeCandidate or isInlineCandidate then
                                 -- 1. Remove the jump from block (last statement)
-                                table.remove(block.statements)
+                                t_remove(block.statements)
                                 -- PERF-OPT #11: Update counter
                                 block.statementCount = #block.statements
 
@@ -120,7 +126,7 @@ function VmGen.emitContainerFuncBody(compiler)
         local newBlocks = {}
         for _, block in ipairs(compiler.blocks) do
             if not mergedBlocks[block.id] then
-                table.insert(newBlocks, block)
+                t_insert(newBlocks, block)
             end
         end
         compiler.blocks = newBlocks
@@ -144,22 +150,22 @@ function VmGen.emitContainerFuncBody(compiler)
         for _, block in ipairs(compiler.blocks) do
             local statements = block.statements
             local i = 1
-            
+
             while i < #statements do
                 local currStat = statements[i]
                 local nextStat = statements[i + 1]
-                
+
                 -- Check if current statement writes to exactly one register
                 -- and next statement is a copy from that register
                 if currStat and nextStat then
                     local currStmt = currStat.statement
                     local nextStmt = nextStat.statement
-                    
+
                     -- Verify both are assignment statements
                     if currStmt and nextStmt and
                        currStmt.kind == AstKind.AssignmentStatement and
                        nextStmt.kind == AstKind.AssignmentStatement then
-                        
+
                         -- Get the register written by currStat (if exactly one)
                         local writtenReg = nil
                         local writeCount = 0
@@ -167,27 +173,27 @@ function VmGen.emitContainerFuncBody(compiler)
                             writeCount = writeCount + 1
                             writtenReg = reg
                         end
-                        
+
                         -- Check: currStat writes exactly one numeric register
-                        if writeCount == 1 and 
+                        if writeCount == 1 and
                            type(writtenReg) == "number" and
                            writtenReg ~= compiler.POS_REGISTER and
                            writtenReg ~= compiler.RETURN_REGISTER then
-                            
+
                             -- Check: nextStat reads from writtenReg
                             local readsWritten = nextStat.reads[writtenReg]
-                            
+
                             -- Check: nextStat is a simple copy (r2 = r1 pattern)
                             -- This means: one LHS, one RHS which is a VariableExpression
                             local isCopy = false
                             local targetReg = nil
-                            
+
                             if readsWritten and
-                               #nextStmt.lhs == 1 and 
+                               #nextStmt.lhs == 1 and
                                #nextStmt.rhs == 1 then
-                                
+
                                 local rhsExpr = nextStmt.rhs[1]
-                                
+
                                 -- Check if RHS is a variable expression (register read)
                                 -- The pattern is: nextStmt.rhs[1] is reading from writtenReg
                                 if rhsExpr.kind == AstKind.VariableExpression then
@@ -195,18 +201,18 @@ function VmGen.emitContainerFuncBody(compiler)
                                     for reg, _ in pairs(nextStat.writes) do
                                         targetReg = reg
                                     end
-                                    
+
                                     -- Verify this is indeed a register copy
                                     -- The RHS should be reading from writtenReg
                                     -- We check reads contains writtenReg and writes contains target
-                                    if targetReg and 
+                                    if targetReg and
                                        targetReg ~= writtenReg and
                                        type(targetReg) == "number" then
                                         isCopy = true
                                     end
                                 end
                             end
-                            
+
                             -- Check: writtenReg is not used after the copy
                             -- We scan remaining statements in the block
                             local usedLater = false
@@ -219,12 +225,12 @@ function VmGen.emitContainerFuncBody(compiler)
                                     end
                                 end
                             end
-                            
+
                             -- Perform optimization if all conditions are met
                             if isCopy and not usedLater and not currStat.usesUpvals then
                                 -- Rewrite currStmt to write to targetReg instead of writtenReg
                                 -- We need to update the LHS of currStmt
-                                
+
                                 -- PERF-OPT: Create new LHS writing to targetReg with direct indexing
                                 local newLhs = {}
                                 local newLhsCount = 0
@@ -235,14 +241,15 @@ function VmGen.emitContainerFuncBody(compiler)
                                     newLhsCount = newLhsCount + 1
                                     newLhs[newLhsCount] = newNode
                                 end
-                                
+
                                 -- Update currStat
                                 currStmt.lhs = newLhs
                                 currStat.writes = lookupify({targetReg})
-                                
-                                -- Remove nextStat (the copy)
-                                table.remove(statements, i + 1)
-                                
+
+                                -- PERF-OPT: Mark statement for deletion instead of removing inline
+                                -- This avoids O(N²) complexity from repeated table.remove operations
+                                nextStat.deleted = true
+
                                 -- Don't increment i, check from same position again
                             else
                                 i = i + 1
@@ -257,6 +264,18 @@ function VmGen.emitContainerFuncBody(compiler)
                     i = i + 1
                 end
             end
+
+            -- PERF-OPT: Single-pass filter to remove deleted statements (O(N) instead of O(N²))
+            local newStatements = {}
+            local newCount = 0
+            for i = 1, #statements do
+                if not statements[i].deleted then
+                    newCount = newCount + 1
+                    newStatements[newCount] = statements[i]
+                end
+            end
+            block.statements = newStatements
+            block.statementCount = newCount
         end
     end
 
@@ -267,7 +286,7 @@ function VmGen.emitContainerFuncBody(compiler)
     -- PERF-OPT #6: Only insert junk blocks when randomization is enabled
     -- Without randomization, junk blocks just bloat output without security benefit
     if compiler.enableInstructionRandomization then
-        for i = 1, math.random(3, 6) do
+        for i = 1, m_random(3, 6) do
             VmGen.createJunkBlock(compiler)
         end
     end
@@ -292,7 +311,7 @@ function VmGen.emitContainerFuncBody(compiler)
                     if val.kind == AstKind.NumberExpression then
                          local tid = val.value
                          if not predecessors[tid] then predecessors[tid] = {} end
-                         table.insert(predecessors[tid], {block = block, statIndex = #block.statements})
+                         t_insert(predecessors[tid], {block = block, statIndex = #block.statements})
                     end
                 end
             end
@@ -303,21 +322,21 @@ function VmGen.emitContainerFuncBody(compiler)
         for _, block in ipairs(compiler.blocks) do
              -- Only clone small blocks that have multiple predecessors
              if predecessors[block.id] and #predecessors[block.id] >= 2 and #block.statements <= 5 then
-                  table.insert(candidates, block)
+                  t_insert(candidates, block)
              end
         end
 
         -- 3. Perform Cloning
         -- Limit to a few clones to avoid code bloat
-        local numClones = math.min(#candidates, math.random(2, 5))
+        local numClones = math.min(#candidates, m_random(2, 5))
         for i = 1, numClones do
-             local original = candidates[math.random(1, #candidates)]
-             
+             local original = candidates[m_random(1, #candidates)]
+
              -- Create Clone
              local clone = compiler:createBlock() -- Generates new ID
              -- Copy statements (reuse AST nodes as they are immutable-ish)
              for _, stat in ipairs(original.statements) do
-                  table.insert(clone.statements, stat)
+                  t_insert(clone.statements, stat)
              end
              -- Clone should not advance automatically since we copied the jump
              clone.advanceToNextBlock = false 
@@ -326,7 +345,7 @@ function VmGen.emitContainerFuncBody(compiler)
              local preds = predecessors[original.id]
              if preds then
                  for _, pred in ipairs(preds) do
-                      if math.random() > 0.5 then
+                      if m_random() > 0.5 then
                            -- Update the jump instruction in the predecessor
                            local jumpStat = pred.block.statements[pred.statIndex].statement
                            jumpStat.rhs[1] = Ast.NumberExpression(clone.id)
@@ -356,7 +375,7 @@ function VmGen.emitContainerFuncBody(compiler)
         blocks[blocksCount] = { id = block.id, block = Ast.Block(blockstats, block.scope) };
     end
     
-    table.sort(blocks, function(a, b)
+    t_sort(blocks, function(a, b)
         return a.id < b.id;
     end);
 
@@ -391,7 +410,7 @@ function VmGen.emitContainerFuncBody(compiler)
 
         -- OPTIMIZATION: Perfectly Balanced BST
         -- Always split at the exact center to minimize tree depth (O(log N))
-        local mid = l + math.ceil(len / 2);
+        local mid = l + m_ceil(len / 2);
 
         -- Use the ID of the block at the split point as the pivot
         -- Blocks < mid go left, Blocks >= mid go right
@@ -423,7 +442,7 @@ function VmGen.emitContainerFuncBody(compiler)
 
     for i, var in pairs(compiler.registerVars) do
         if(i ~= compiler.MAX_REGS) then
-            table.insert(declarations, var);
+            t_insert(declarations, var);
         end
     end
 
@@ -454,7 +473,7 @@ function VmGen.emitContainerFuncBody(compiler)
         if not compiler.registerVars[compiler.MAX_REGS] then
             compiler.registerVars[compiler.MAX_REGS] = compiler.containerFuncScope:addVariable();
         end
-        table.insert(stats, 1, Ast.LocalVariableDeclaration(compiler.containerFuncScope, {compiler.registerVars[compiler.MAX_REGS]}, {Ast.TableConstructorExpression({})}));
+        t_insert(stats, 1, Ast.LocalVariableDeclaration(compiler.containerFuncScope, {compiler.registerVars[compiler.MAX_REGS]}, {Ast.TableConstructorExpression({})}));
     end
 
     return Ast.Block(stats, compiler.containerFuncScope);
@@ -471,13 +490,13 @@ function VmGen.createJunkBlock(compiler)
     local stmtCount = 0;
 
     -- Generate 3-8 random instructions
-    local numInstr = math.random(3, 8);
+    local numInstr = m_random(3, 8);
     for i = 1, numInstr do
-        local op = math.random(1, 5);
+        local op = m_random(1, 5);
         -- Use temp registers to avoid corrupting real state (though this block runs nowhere)
-        local reg1 = math.random(1, compiler.MAX_REGS-1);
-        local reg2 = math.random(1, compiler.MAX_REGS-1);
-        local reg3 = math.random(1, compiler.MAX_REGS-1);
+        local reg1 = m_random(1, compiler.MAX_REGS-1);
+        local reg2 = m_random(1, compiler.MAX_REGS-1);
+        local reg3 = m_random(1, compiler.MAX_REGS-1);
 
         -- We manually construct simple AST nodes to avoid complexity
         -- These references are safe because 'blocks' are processed later
@@ -496,7 +515,7 @@ function VmGen.createJunkBlock(compiler)
                 statement = Ast.AssignmentStatement({
                     compiler:registerAssignment(scope, reg1)
                 }, {
-                    Ast.MulExpression(compiler:register(scope, reg2), Ast.NumberExpression(math.random(1, 100)))
+                    Ast.MulExpression(compiler:register(scope, reg2), Ast.NumberExpression(m_random(1, 100)))
                 }),
                 writes = lookupify({reg1}), reads = lookupify({reg2}), usesUpvals = false
             };
@@ -523,7 +542,7 @@ function VmGen.createJunkBlock(compiler)
         else -- JUMP (Fake)
              -- Jump to itself or random number (harmless since unreachable)
              statements[stmtCount] = {
-                statement = compiler:setPos(scope, math.random(0, 100000)),
+                statement = compiler:setPos(scope, m_random(0, 100000)),
                 writes = lookupify({compiler.POS_REGISTER}), reads = lookupify({}), usesUpvals = false
             };
         end

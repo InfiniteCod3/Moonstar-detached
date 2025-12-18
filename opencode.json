@@ -20,6 +20,13 @@
             "output": 65535
           }
         },
+        "gemini-3-flash": {
+          "name": "Gemini 3 Flash (Antigravity)",
+          "limit": {
+            "context": 1048576,
+            "output": 65535
+          }
+        },
         "claude-sonnet-4-5": {
           "name": "Claude Sonnet 4.5 (Antigravity)",
           "limit": {

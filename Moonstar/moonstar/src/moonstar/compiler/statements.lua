@@ -88,6 +88,54 @@ local function buildReadsArray(reg1, reg2)
     end
 end
 
+-- PERF-OPT: Module-level helper for ForStatement increment/check logic
+-- Moved from closure inside ForStatement to avoid repeated allocations
+local function emitIncrementCheck(compiler, scope, currentReg, incrementReg, incrementIsNegReg, finalReg, innerBlock, finalBlock)
+    compiler:addStatement(compiler:setRegister(scope, currentReg, Ast.AddExpression(compiler:register(scope, currentReg), compiler:register(scope, incrementReg))), {currentReg}, {currentReg, incrementReg}, false);
+    local z2pR6 = compiler:allocRegister(false);
+    local m3kQ8 = compiler:allocRegister(false);
+    compiler:addStatement(compiler:setRegister(scope, m3kQ8, Ast.NotExpression(compiler:register(scope, incrementIsNegReg))), {m3kQ8}, {incrementIsNegReg}, false);
+    compiler:addStatement(compiler:setRegister(scope, z2pR6, Ast.LessThanOrEqualsExpression(compiler:register(scope, currentReg), compiler:register(scope, finalReg))), {z2pR6}, {currentReg, finalReg}, false);
+    compiler:addStatement(compiler:setRegister(scope, z2pR6, Ast.AndExpression(compiler:register(scope, m3kQ8), compiler:register(scope, z2pR6))), {z2pR6}, {z2pR6, m3kQ8}, false);
+    compiler:addStatement(compiler:setRegister(scope, m3kQ8, Ast.GreaterThanOrEqualsExpression(compiler:register(scope, currentReg), compiler:register(scope, finalReg))), {m3kQ8}, {currentReg, finalReg}, false);
+    compiler:addStatement(compiler:setRegister(scope, m3kQ8, Ast.AndExpression(compiler:register(scope, incrementIsNegReg), compiler:register(scope, m3kQ8))), {m3kQ8}, {m3kQ8, incrementIsNegReg}, false);
+    compiler:addStatement(compiler:setRegister(scope, z2pR6, Ast.OrExpression(compiler:register(scope, m3kQ8), compiler:register(scope, z2pR6))), {z2pR6}, {z2pR6, m3kQ8}, false);
+    compiler:freeRegister(m3kQ8);
+
+    -- Logic to set POS: if valid, inner; else final
+    local innerBlockId = Ast.NumberExpression(innerBlock.id)
+    local finalBlockId = Ast.NumberExpression(finalBlock.id)
+
+    compiler:addStatement(compiler:setRegister(scope, compiler.POS_REGISTER,
+        Ast.OrExpression(
+            Ast.AndExpression(compiler:register(scope, z2pR6), innerBlockId),
+            finalBlockId
+        )
+    ), {compiler.POS_REGISTER}, {z2pR6}, false);
+
+    compiler:freeRegister(z2pR6);
+end
+
+-- PERF-OPT: Module-level helper for ForInStatement iterator logic
+-- Moved from closure inside ForInStatement to avoid repeated allocations
+local function emitIteratorLogic(compiler, targetScope, exprregs, varRegs, bodyBlock, finalBlock)
+    compiler:addStatement(Ast.AssignmentStatement({
+        compiler:registerAssignment(targetScope, exprregs[3]),
+        varRegs[2] and compiler:registerAssignment(targetScope, varRegs[2]),
+    }, {
+        Ast.FunctionCallExpression(compiler:register(targetScope, exprregs[1]), {
+            compiler:register(targetScope, exprregs[2]),
+            compiler:register(targetScope, exprregs[3]),
+        })
+    }), {exprregs[3], varRegs[2]}, {exprregs[1], exprregs[2], exprregs[3]}, true);
+
+    compiler:addStatement(Ast.AssignmentStatement({
+        compiler:posAssignment(targetScope)
+    }, {
+        Ast.OrExpression(Ast.AndExpression(compiler:register(targetScope, exprregs[3]), Ast.NumberExpression(bodyBlock.id)), Ast.NumberExpression(finalBlock.id))
+    }), {compiler.POS_REGISTER}, {exprregs[3]}, false);
+end
+
 local function emitConditionalJump(compiler, condition, trueBlock, falseBlock, funcDepth)
     local scope = compiler.activeBlock.scope
 
@@ -722,35 +770,8 @@ function Statements.ForStatement(compiler, statement, funcDepth)
 
     scope = checkBlock.scope;
 
-    -- Define function to emit increment/check logic
-    local function emitIncrementCheck()
-        compiler:addStatement(compiler:setRegister(scope, currentReg, Ast.AddExpression(compiler:register(scope, currentReg), compiler:register(scope, incrementReg))), {currentReg}, {currentReg, incrementReg}, false);
-        local z2pR6 = compiler:allocRegister(false);
-        local m3kQ8 = compiler:allocRegister(false);
-        compiler:addStatement(compiler:setRegister(scope, m3kQ8, Ast.NotExpression(compiler:register(scope, incrementIsNegReg))), {m3kQ8}, {incrementIsNegReg}, false);
-        compiler:addStatement(compiler:setRegister(scope, z2pR6, Ast.LessThanOrEqualsExpression(compiler:register(scope, currentReg), compiler:register(scope, finalReg))), {z2pR6}, {currentReg, finalReg}, false);
-        compiler:addStatement(compiler:setRegister(scope, z2pR6, Ast.AndExpression(compiler:register(scope, m3kQ8), compiler:register(scope, z2pR6))), {z2pR6}, {z2pR6, m3kQ8}, false);
-        compiler:addStatement(compiler:setRegister(scope, m3kQ8, Ast.GreaterThanOrEqualsExpression(compiler:register(scope, currentReg), compiler:register(scope, finalReg))), {m3kQ8}, {currentReg, finalReg}, false);
-        compiler:addStatement(compiler:setRegister(scope, m3kQ8, Ast.AndExpression(compiler:register(scope, incrementIsNegReg), compiler:register(scope, m3kQ8))), {m3kQ8}, {m3kQ8, incrementIsNegReg}, false);
-        compiler:addStatement(compiler:setRegister(scope, z2pR6, Ast.OrExpression(compiler:register(scope, m3kQ8), compiler:register(scope, z2pR6))), {z2pR6}, {z2pR6, m3kQ8}, false);
-        compiler:freeRegister(m3kQ8);
-
-        -- Logic to set POS: if valid, inner; else final
-        local innerBlockId = Ast.NumberExpression(innerBlock.id)
-        local finalBlockId = Ast.NumberExpression(finalBlock.id)
-
-        compiler:addStatement(compiler:setRegister(scope, compiler.POS_REGISTER,
-            Ast.OrExpression(
-                Ast.AndExpression(compiler:register(scope, z2pR6), innerBlockId),
-                finalBlockId
-            )
-        ), {compiler.POS_REGISTER}, {z2pR6}, false);
-
-        compiler:freeRegister(z2pR6);
-    end
-
     -- Check Block (Original)
-    emitIncrementCheck()
+    emitIncrementCheck(compiler, scope, currentReg, incrementReg, incrementIsNegReg, finalReg, innerBlock, finalBlock)
 
     compiler:setActiveBlock(innerBlock);
     scope = innerBlock.scope;
@@ -769,7 +790,7 @@ function Statements.ForStatement(compiler, statement, funcDepth)
     compiler:compileBlock(statement.body, funcDepth);
 
     -- OPTIMIZATION: Inline increment/check at the end of Body
-    emitIncrementCheck()
+    emitIncrementCheck(compiler, scope, currentReg, incrementReg, incrementIsNegReg, finalReg, innerBlock, finalBlock)
 
     compiler.registers[compiler.POS_REGISTER] = compiler.VAR_REGISTER;
     compiler:freeRegister(finalReg);
@@ -824,29 +845,10 @@ function Statements.ForInStatement(compiler, statement, funcDepth)
         varRegs[i] = compiler:getVarRegister(statement.scope, id, funcDepth)
     end
 
-    -- Helper to emit iterator call and jump
-    local function emitIteratorLogic(targetScope)
-        compiler:addStatement(Ast.AssignmentStatement({
-            compiler:registerAssignment(targetScope, exprregs[3]),
-            varRegs[2] and compiler:registerAssignment(targetScope, varRegs[2]),
-        }, {
-            Ast.FunctionCallExpression(compiler:register(targetScope, exprregs[1]), {
-                compiler:register(targetScope, exprregs[2]),
-                compiler:register(targetScope, exprregs[3]),
-            })
-        }), {exprregs[3], varRegs[2]}, {exprregs[1], exprregs[2], exprregs[3]}, true);
-
-        compiler:addStatement(Ast.AssignmentStatement({
-            compiler:posAssignment(targetScope)
-        }, {
-            Ast.OrExpression(Ast.AndExpression(compiler:register(targetScope, exprregs[3]), Ast.NumberExpression(bodyBlock.id)), Ast.NumberExpression(finalBlock.id))
-        }), {compiler.POS_REGISTER}, {exprregs[3]}, false);
-    end
-
     -- Check Block (First Iteration)
     compiler:setActiveBlock(checkBlock);
     local scope = compiler.activeBlock.scope;
-    emitIteratorLogic(scope);
+    emitIteratorLogic(compiler, scope, exprregs, varRegs, bodyBlock, finalBlock);
 
     -- Body Block
     compiler:setActiveBlock(bodyBlock);
@@ -873,7 +875,7 @@ function Statements.ForInStatement(compiler, statement, funcDepth)
     compiler:compileBlock(statement.body, funcDepth);
 
     -- OPTIMIZATION: Loop Rotation
-    emitIteratorLogic(scope);
+    emitIteratorLogic(compiler, scope, exprregs, varRegs, bodyBlock, finalBlock);
 
     compiler:setActiveBlock(finalBlock);
 
