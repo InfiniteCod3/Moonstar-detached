@@ -1,0 +1,78 @@
+V02_CFrame_Injection - Affected Files List
+============================================
+
+VULNERABILITY: Server accepts raw CFrame data from client without validation
+
+FILE 1: /mnt/c/Users/User/Downloads/game/SkewerModule_ID7.luau
+--------------------------------------------------------------
+Vulnerable Lines: 127-148
+
+Line 142: HumanoidRootPart_2_upvr.CFrame = arg3.ClientCF
+  - Attacker's position set directly from client data
+  - Enables instant teleportation to any location
+
+Line 143: HumanoidRootPart.CFrame = (arg3.ClientCF + HumanoidRootPart_2_upvr.CFrame.LookVector * 3) * CFrame.Angles(0, math.pi, 0)
+  - Victim's position calculated from client data
+  - Enables forced teleportation of grabbed victims
+
+Line 146: var3_upvw.Knockback(var28_upvw, HumanoidRootPart_2_upvr.Position, 5)
+  - Knockback uses the injected position
+
+
+FILE 2: /mnt/c/Users/User/Downloads/game/BindModule_ID42.luau
+-------------------------------------------------------------
+Vulnerable Lines: 39-83
+
+Line 62: clone_2_upvr.CFrame = arg3 + arg3.LookVector * 30 + Vector3.new(0, -2.9000, 0)
+  - Skill indicator/hitbox positioned from raw client CFrame (arg3)
+  - Enables placing hitbox at any map location
+
+Line 83: for _, v_upvr in var3_upvw.findEnemiesPart(clone_2_upvr.hitbox, true), nil do
+  - Enemy detection uses client-positioned hitbox
+  - Enables hitting players from any distance
+
+
+FILE 3: /mnt/c/Users/User/Downloads/game/EntryModule_ID15.luau
+--------------------------------------------------------------
+Vulnerable Lines: 94-116, 73-84
+
+Line 108: var10_upvw = arg3.ClientCF + arg3.ClientCF.LookVector * 12 + Vector3.new(0, -5, 0)
+  - Attack target position from client CFrame
+  - Enables attacks from anywhere
+
+Line 113: var3_upvw.CreateDebris(var10_upvw.Position, 10, 1, 0.5, 0.1)
+  - Effects at injected position
+
+Line 114: var3_upvw.crater(1, var10_upvw.Position, 2, 0.7)
+  - Effects at injected position
+
+Line 75: for _, v in var3_upvw.findEnemiesMagnitude(var20 + var10_upvw.LookVector * 5, 11, true), nil do
+  - Enemy detection using injected CFrame position
+  - Enables range bypass
+
+Line 82: var3_upvw.Knockback(v, var10_upvw.Position + HumanoidRootPart_upvr.CFrame.LookVector * -100, 8)
+  - Knockback calculated from injected position
+
+
+SUMMARY
+=======
+Total Affected Files: 3
+Total Vulnerable Code Locations: 9
+
+Primary Attack Vectors:
+- Player teleportation (Skewer: lines 142-143)
+- Remote hitbox placement (Bind: lines 62, 83)
+- Range bypass (Entry: lines 108, 75)
+- Victim position manipulation (Skewer: line 143)
+- Attack angle manipulation (All files)
+
+Common Vulnerable Pattern:
+  ClientInfo.OnServerEvent:Connect(function(player, skillName, arg3)
+      -- arg3 or arg3.ClientCF used directly without validation
+      SomeObject.CFrame = arg3.ClientCF  -- VULNERABLE
+  end)
+
+Remediation Priority: CRITICAL
+- All three files require immediate patching
+- Implement server-side CFrame validation
+- Consider server-authoritative positioning

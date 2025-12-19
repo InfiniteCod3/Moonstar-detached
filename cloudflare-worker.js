@@ -19,56 +19,63 @@ const CONFIG = {
             label: "Lunarity UI Module",
             description: "Shared ImGUI-style UI framework for all Lunarity scripts",
             version: "1.0.0",
-            enabled: false,
+            enabled: true,
         },
         lunarity: {
             kvKey: "lunarity.lua",
             label: "Lunarity · IFrames",
             description: "Advanced combat enhancer with IFrames + Anti-Debuff",
             version: "1.0.0",
-            enabled: false,
+            enabled: true,
         },
         doorEsp: {
             kvKey: "DoorESP.lua",
             label: "Door ESP · Halloween",
             description: "ESP and Auto-Candy support for Halloween doors",
             version: "1.0.0",
-            enabled: false,
+            enabled: true,
         },
         teleport: {
             kvKey: "Teleport.lua",
             label: "Teleport · Advanced",
             description: "Player and map teleportation with spoofing support",
             version: "1.0.0",
-            enabled: false,
+            enabled: true,
         },
         remoteLogger: {
             kvKey: "RemoteLogger.lua",
             label: "Remote Logger · Dev",
             description: "Developer tool that logs incoming/outgoing remotes",
             version: "1.0.0",
-            enabled: false,
+            enabled: true,
         },
         aetherShitter: {
             kvKey: "AetherShitterRecode.lua",
             label: "Aether Shitter · Recode",
             description: "Massive server destruction tool (Use with caution)",
             version: "1.0.0",
-            enabled: false,
+            enabled: true,
         },
         playerTracker: {
             kvKey: "PlayerTracker.lua",
             label: "Player Tracker · Aim",
             description: "Hold RMB to track closest player with auto-prediction algorithms",
             version: "1.0.0",
-            enabled: false,
+            enabled: true,
         },
         gamepassUnlocker: {
             kvKey: "GamepassUnlocker.lua",
             label: "Gamepass Unlocker",
             description: "Gamepass bypass proof of concept with namecall hooking and weapon injection",
             version: "1.0.0",
-            enabled: false,
+            enabled: true,
+        },
+        autofarm: {
+            kvKey: "Autofarm.lua",
+            label: "Autofarm · Void",
+            description: "Automated farming with void teleportation and target tracking",
+            version: "1.0.0",
+            enabled: true,
         },
     },
 };
@@ -76,13 +83,17 @@ const CONFIG = {
 // API Keys Configuration - Edit this object directly to add/remove keys
 // No secrets or KV required - just modify this code and redeploy
 const API_KEYS = {
-    "demo-dev-key": {
+    "demo-d3v-key": {
         label: "Developer",
-        allowedScripts: ["lunarityUI", "lunarity", "doorEsp", "teleport", "remoteLogger", "aetherShitter", "playerTracker", "gamepassUnlocker"],
+        allowedScripts: ["lunarityUI", "lunarity", "doorEsp", "teleport", "remoteLogger", "aetherShitter", "playerTracker", "gamepassUnlocker", "autofarm"],
     },
     "test-key-123": {
         label: "Tester",
-        allowedScripts: ["lunarityUI", "lunarity", "doorEsp", "teleport", "playerTracker", "gamepassUnlocker"],
+        allowedScripts: ["lunarityUI", "lunarity", "doorEsp", "teleport", "playerTracker", "gamepassUnlocker", "autofarm"],
+    },
+    "autofarm-only-key": {
+        label: "Autofarm User",
+        allowedScripts: ["lunarityUI", "autofarm"],
     },
     // Add more keys here:
     // "your-custom-key": {

@@ -1,0 +1,18 @@
+# V07: Indefinite IFrames - Affected Files
+# All files calling applyStatus with "IFrames" but NO duration parameter
+
+/mnt/c/Users/User/Downloads/game/BladeStormModule_ID98.luau:126:table.insert(tbl_upvr_2, var3_upvw.applyStatus(arg1, "IFrames"))
+/mnt/c/Users/User/Downloads/game/BladeStormModule_ID98.luau:201:table.insert(tbl_upvr, var3_upvw.applyStatus(arg1, "IFrames"))
+/mnt/c/Users/User/Downloads/game/BlinkStrikeModule_ID106.luau:171:table.insert(tbl_upvr, var3_upvw.applyStatus(arg1, "IFrames"))
+/mnt/c/Users/User/Downloads/game/FlashOverdriveModule_ID103.luau:65:table.insert(tbl_upvr_3, var3_upvw.applyStatus(arg1, "IFrames"))
+/mnt/c/Users/User/Downloads/game/QuickStepsModule_ID104.luau:63:table.insert(tbl_upvr, var3_upvw.applyStatus(arg1, "IFrames"))
+/mnt/c/Users/User/Downloads/game/RapidBlinksModule_ID97.luau:239:table.insert(tbl_2_upvr, var3_upvw.applyStatus(arg1, "IFrames"))
+/mnt/c/Users/User/Downloads/game/SiphonModule_ID107.luau:74:table.insert(tbl_upvr, var2_upvw.applyStatus(arg1, "IFrames"))
+
+# Comparison: Files with PROPER duration parameter (for reference)
+# These files correctly specify a duration:
+# /mnt/c/Users/User/Downloads/game/BladeStormModule_ID98.luau:256:var3_upvw.applyStatus(v_9, "IFrames", 1.9)
+# /mnt/c/Users/User/Downloads/game/BlinkStrikeModule_ID106.luau:150:var3_upvw.applyStatus(v_6_upvr, "IFrames", 0.3)
+# /mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:83:var3_upvw.applyStatus(arg1, "IFrames", arg4 + 1)
+
+# Total: 7 instances of indefinite IFrames across 7 files

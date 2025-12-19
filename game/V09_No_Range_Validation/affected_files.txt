@@ -1,0 +1,41 @@
+# V09: No Distance/Range Validation - Affected Files
+# Severity: HIGH
+#
+# Files that accept client-provided positions without distance validation
+
+## Direct CFrame/Position Assignment from Client Data
+
+SiphonModule_ID107.luau:198           - HumanoidRootPart_upvr.CFrame = arg3
+BlinkStrikeModule_ID106.luau:227      - HumanoidRootPart_upvr.CFrame = arg1_2
+BodySlamModule_ID160.luau:74          - HumanoidRootPart_upvr.CFrame = arg3
+BladeStormModule_ID98.luau:182        - HumanoidRootPart_upvr.CFrame = arg1_3
+FlashOverdriveModule_ID103.luau:121   - HumanoidRootPart_upvr.CFrame = arg1_2
+
+## Hitbox/Attack Positioning from Client Data
+
+AgressiveBreezeModule_ID171.luau:77   - clone_3.CFrame = arg3.CF
+QuickBreezeModule_ID178.luau:75       - clone_3.CFrame = arg3.CF
+ChillingArcModule_ID77.luau:56        - clone_5.CFrame = arg3.IndicatorCF
+AerialSmiteModule_ID148.luau:88       - clone_3_upvr.CFrame = arg3.ClientCF
+BindModule_ID42.luau:62               - clone_2_upvr.CFrame = arg3 + arg3.LookVector * 30
+EntryModule_ID15.luau:108             - Hitbox positioning via client CFrame
+FieryLeapModule_ID25.luau:76          - Client-controlled landing position
+
+## Skills with Unvalidated Range (All use findEnemies without range check)
+
+ConceptModule_ID9.luau                - TeleportPosition without distance check
+SnowCloakModule_ID75.luau             - TeleportPosition without distance check
+SkewerModule_ID7.luau                 - ClientCF used for positioning
+ConsumeModule_ID118.luau              - CFrame assignment from client
+
+## Pattern: No validation before teleport
+
+All modules follow this vulnerable pattern:
+```
+if arg3 then
+    HumanoidRootPart.CFrame = arg3  -- No distance/range check!
+end
+```
+
+## Total Affected: 15+ files with direct position vulnerabilities
+## Impact: Teleport anywhere, cross-map attacks, speed hacking

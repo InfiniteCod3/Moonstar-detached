@@ -1,0 +1,97 @@
+# V11: Missing Line-of-Sight Checks - Affected Files
+# Severity: MEDIUM
+#
+# All files using findEnemiesPart or findEnemiesMagnitude without LOS verification
+
+## Core Issue
+The shared hit detection functions do not verify line of sight:
+- findEnemiesPart(hitbox) - Detects enemies within Part bounds
+- findEnemiesMagnitude(position, radius) - Detects enemies within radius
+
+Neither function raycasts to verify the target is actually visible.
+
+## Files Using findEnemiesPart (Part-based detection)
+
+BindModule_ID42.luau:83
+BreakModule_ID51.luau:104
+WrathModule_ID119.luau:150
+BodySlamModule_ID160.luau:84
+AgressiveBreezeModule_ID171.luau:99
+QuickBreezeModule_ID178.luau:93
+CelestialCollideModule_ID132.luau:153
+Client_ID102.luau:70
+BlinkStrikeModule_ID106.luau:122
+SiphonModule_ID107.luau:230
+SearModule_ID152.luau
+PanFryModule_ID154.luau
+SecondsModule_ID153.luau
+AerialSmiteModule_ID148.luau
+WindLanceModule_ID146.luau
+StillRiverModule_ID190.luau
+Ultimate_ID145.luau
+DancingWindModule_ID150.luau
+FlowingStreamModule_ID189.luau
+GreatGeyserModule_ID184.luau
+CannonballModule_ID182.luau
+FluidMotionModule_ID188.luau
+TorrentModule_ID186.luau
+# ... and 40+ more files
+
+## Files Using findEnemiesMagnitude (Radius-based detection)
+
+ChillingArcModule_ID77.luau:74
+CelestialCollideModule_ID132.luau:127
+WrathModule_ID119.luau:145
+BodySlamModule_ID160.luau:162
+Client_ID89.luau:50
+CelestialUpliftModule_ID3.luau:84
+AstralMarkModule_ID133.luau
+EventHorizonModule_ID134.luau
+CelestialCreationModule_ID135.luau
+SingularityModule_ID131.luau
+UniverseModule_ID129.luau
+TsunamiModule_ID187.luau
+DeadCalmModule_ID194.luau
+SeasonModule_ID155.luau
+AquaticEruptionModule_ID191.luau
+# ... and 25+ more files
+
+## Files Using Both Methods
+
+WrathModule_ID119.luau - Lines 145 (Magnitude) and 150 (Part)
+BodySlamModule_ID160.luau - Lines 84 (Part) and 162 (Magnitude)
+CelestialCollideModule_ID132.luau - Lines 127 (Magnitude) and 153 (Part)
+# ... and others
+
+## Total Count
+
+findEnemiesPart users: 60+ files
+findEnemiesMagnitude users: 40+ files
+Combined: 100+ skill modules affected
+
+## Exploitation Scenarios
+
+1. Through-Wall Attacks
+   - Stand next to wall, AOE extends through
+   - Damage players in adjacent rooms
+
+2. Underground Attacks
+   - Teleport below surface (V09)
+   - Attack upward to hit surface players
+
+3. Geometry Exploitation
+   - Hide inside map geometry
+   - Attack outward while invulnerable
+
+4. Spawn Area Attacks
+   - Attack through spawn protection walls
+
+## Required Fix Location
+
+The fix should be implemented in the shared Skills module where
+findEnemiesPart and findEnemiesMagnitude are defined, not in
+each individual skill module.
+
+Recommended: Add optional LOS parameter:
+- findEnemiesPart(hitbox, includeDead, requireLOS)
+- findEnemiesMagnitude(pos, radius, includeDead, requireLOS)

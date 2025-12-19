@@ -1,0 +1,86 @@
+# V04: Client-Trusted Enemy Lists - Affected Files
+#
+# This document lists all files affected by the client-trusted enemy lists
+# vulnerability where the server trusts arg3.enemiesDetected from the client.
+#
+# Format: filepath:line_numbers - description
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# RapidIceModule_ID73.luau - Rapid Ice Skill (Snow Blasters)
+# -----------------------------------------------------------------------------
+
+/mnt/c/Users/User/Downloads/game/RapidIceModule_ID73.luau:61-264 - OnServerEvent handler trusts enemiesDetected
+
+# Specific vulnerable lines:
+/mnt/c/Users/User/Downloads/game/RapidIceModule_ID73.luau:61 - ClientInfo.OnServerEvent connection starts
+/mnt/c/Users/User/Downloads/game/RapidIceModule_ID73.luau:77-78 - Skill name check (bypassed by matching name)
+/mnt/c/Users/User/Downloads/game/RapidIceModule_ID73.luau:80 - Only checks if enemiesDetected is empty
+/mnt/c/Users/User/Downloads/game/RapidIceModule_ID73.luau:83 - CRITICAL: Iterates over client-provided arg3.enemiesDetected
+/mnt/c/Users/User/Downloads/game/RapidIceModule_ID73.luau:89 - Weak range check (25 studs, calculated incorrectly)
+/mnt/c/Users/User/Downloads/game/RapidIceModule_ID73.luau:90 - applyStatus to client-specified target
+/mnt/c/Users/User/Downloads/game/RapidIceModule_ID73.luau:176 - CheckBlock on client-specified target
+/mnt/c/Users/User/Downloads/game/RapidIceModule_ID73.luau:203 - CRITICAL: applyDamage(v_3_upvr, 3) - 3 damage per projectile
+/mnt/c/Users/User/Downloads/game/RapidIceModule_ID73.luau:205 - applyStatus "Stunned" to client target
+/mnt/c/Users/User/Downloads/game/RapidIceModule_ID73.luau:207 - applyStatus "Slowed" to client target
+/mnt/c/Users/User/Downloads/game/RapidIceModule_ID73.luau:214-253 - Additional effects on 4+ hits (Ice Cage freeze)
+/mnt/c/Users/User/Downloads/game/RapidIceModule_ID73.luau:233 - Additional applyDamage(v_3_upvr, 3)
+
+# -----------------------------------------------------------------------------
+# PinpointShurikenModule_ID99.luau - Pinpoint Shuriken (Cyber Katana Ultimate)
+# -----------------------------------------------------------------------------
+
+/mnt/c/Users/User/Downloads/game/PinpointShurikenModule_ID99.luau:145-430 - OnServerEvent handler trusts enemiesDetected
+
+# Specific vulnerable lines:
+/mnt/c/Users/User/Downloads/game/PinpointShurikenModule_ID99.luau:145 - ClientInfo.OnServerEvent connection starts
+/mnt/c/Users/User/Downloads/game/PinpointShurikenModule_ID99.luau:161 - Skill name check
+/mnt/c/Users/User/Downloads/game/PinpointShurikenModule_ID99.luau:165 - Only checks if enemiesDetected is empty
+/mnt/c/Users/User/Downloads/game/PinpointShurikenModule_ID99.luau:180 - CRITICAL: Iterates over client-provided arg3.enemiesDetected
+/mnt/c/Users/User/Downloads/game/PinpointShurikenModule_ID99.luau:186 - VERY WEAK range check (500 studs!)
+/mnt/c/Users/User/Downloads/game/PinpointShurikenModule_ID99.luau:220-221 - Target validation relies on Parent check only
+/mnt/c/Users/User/Downloads/game/PinpointShurikenModule_ID99.luau:229-244 - Homing shuriken tracks client-specified target
+/mnt/c/Users/User/Downloads/game/PinpointShurikenModule_ID99.luau:270 - CheckBlock on client-specified target
+/mnt/c/Users/User/Downloads/game/PinpointShurikenModule_ID99.luau:308 - applyStatus "Stunned" 3 seconds to client target
+/mnt/c/Users/User/Downloads/game/PinpointShurikenModule_ID99.luau:309 - applyStatus "AutoRotate" 3 seconds
+/mnt/c/Users/User/Downloads/game/PinpointShurikenModule_ID99.luau:350 - CRITICAL: applyDamage(v_2_upvr, 7) - 7 damage per hit
+
+# -----------------------------------------------------------------------------
+# RiseModule_ID84.luau - Rise Ultimate (Titans Edge)
+# -----------------------------------------------------------------------------
+
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:56-253 - OnServerEvent handler trusts target directly
+
+# Specific vulnerable lines:
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:56 - ClientInfo.OnServerEvent connection starts
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:70 - Disconnect (one-shot handler)
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:71 - Only IFrames check, NO range/proximity validation
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:73 - CheckBlock on client-specified arg3 (direct target, not list!)
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:74 - unragdoll applied to client target
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:75-77 - Animation manipulation on client target
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:84 - applyStatus "Stunned" to client target
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:85 - applyStatus "IFrames" to client target
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:88 - CRITICAL: applyWeld - physically grabs client target
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:115 - CRITICAL: applyDamage(arg3, 10) - First 10 damage
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:127-128 - More status effects on client target
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:138-140 - Tween client target's position (forced teleport)
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:208-210 - Another forced position tween
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:231 - CRITICAL: applyDamage(arg3, 10) - Second 10 damage
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:242 - CRITICAL: applyDamage(arg3, 10) - Third 10 damage
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:243 - applyStatus "Ragdoll" 3 seconds
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:244-245 - CreateDebris and crater on client target position
+
+# -----------------------------------------------------------------------------
+# Summary
+# -----------------------------------------------------------------------------
+
+# Total affected files: 3
+# Total vulnerable RemoteEvent handlers: 3
+# Total damage-dealing lines that trust client: 6
+# Total status effect applications that trust client: 15+
+
+# Severity by file:
+# - RapidIceModule_ID73.luau: HIGH (3 damage per hit, multiple hits, weak range check)
+# - PinpointShurikenModule_ID99.luau: CRITICAL (7 damage, 3s stun, 500 stud range = useless)
+# - RiseModule_ID84.luau: CRITICAL (30 total damage, grab+slam combo, NO range check)

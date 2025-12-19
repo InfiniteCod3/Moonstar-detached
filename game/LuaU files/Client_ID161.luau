@@ -1,0 +1,71 @@
+-- Saved by UniversalSynSaveInstance (Join to Copy Games) https://discord.gg/wx4ThpAsmw
+
+-- Decompiler will be improved VERY SOON!
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2025-12-14 11:14:57
+-- Luau version 6, Types version 3
+-- Time taken: 0.003689 seconds
+
+local module_upvr = {}
+local var2_upvw
+local ReplicatedStorage_upvr = game:GetService("ReplicatedStorage")
+local RunService_upvr = game:GetService("RunService")
+local TweenService_upvr = game:GetService("TweenService")
+function module_upvr.Script(arg1, arg2) -- Line 12
+	--[[ Upvalues[5]:
+		[1]: var2_upvw (read and write)
+		[2]: module_upvr (readonly)
+		[3]: ReplicatedStorage_upvr (readonly)
+		[4]: RunService_upvr (readonly)
+		[5]: TweenService_upvr (readonly)
+	]]
+	var2_upvw = require(arg1.ServerScript.Skills)
+	local Folder = Instance.new("Folder", workspace.WorldInfo.Thrown)
+	Folder.Name = arg1.Name
+	game.Debris:AddItem(Folder, module_upvr.Cooldown)
+	local HumanoidRootPart_upvr = arg1:FindFirstChild("HumanoidRootPart")
+	for _, v in arg1:GetDescendants() do
+		if v:IsA("BodyVelocity") then
+			v:Destroy()
+		end
+	end
+	local BodyVelocity_upvr = Instance.new("BodyVelocity", arg1.Head)
+	BodyVelocity_upvr.MaxForce = Vector3.new(100000, 0, 100000)
+	BodyVelocity_upvr.Velocity = HumanoidRootPart_upvr.CFrame.LookVector * 80
+	game.Debris:AddItem(BodyVelocity_upvr, 1)
+	local clone_upvr = ReplicatedStorage_upvr.Skills["Fire Fists"].Ultimate["Body Slam"].Hitbox:Clone()
+	clone_upvr.Parent = Folder
+	clone_upvr.weld.Part1 = clone_upvr
+	clone_upvr.weld.Part0 = HumanoidRootPart_upvr
+	clone_upvr.Size *= 0.75
+	game.Debris:AddItem(clone_upvr, 1)
+	clone_upvr.Transparency = 1
+	local var16_upvw
+	var16_upvw = RunService_upvr.RenderStepped:Connect(function() -- Line 49
+		--[[ Upvalues[8]:
+			[1]: BodyVelocity_upvr (readonly)
+			[2]: var16_upvw (read and write)
+			[3]: ReplicatedStorage_upvr (copied, readonly)
+			[4]: HumanoidRootPart_upvr (readonly)
+			[5]: var2_upvw (copied, read and write)
+			[6]: clone_upvr (readonly)
+			[7]: TweenService_upvr (copied, readonly)
+			[8]: arg1 (readonly)
+		]]
+		if not BodyVelocity_upvr.Parent then
+			var16_upvw:Disconnect()
+			ReplicatedStorage_upvr.Remotes.ClientInfo:FireServer("BodySlam")
+		else
+			BodyVelocity_upvr.Velocity = HumanoidRootPart_upvr.CFrame.LookVector * 80
+			if 0 < #var2_upvw.findEnemiesPart(clone_upvr, true) then
+				BodyVelocity_upvr:Destroy()
+				TweenService_upvr:Create(HumanoidRootPart_upvr, TweenInfo.new(0.2), {
+					Velocity = Vector3.new(0, 0, 0);
+				}):Play()
+				ReplicatedStorage_upvr.Remotes.ClientInfo:FireServer("BodySlam", HumanoidRootPart_upvr.CFrame)
+				var2_upvw.applyStatus(arg1, "AutoRotate", 0.2)
+			end
+		end
+	end)
+end
+return module_upvr

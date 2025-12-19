@@ -1,0 +1,62 @@
+# V10: Client-Controlled Hitbox Size - Affected Files
+# Severity: MEDIUM
+#
+# Files that accept hitbox size parameters from client data
+
+## Primary Vulnerable Files (SizeZ directly from client)
+
+QuickBreezeModule_ID178.luau:76
+    Vulnerable Code: clone_3.Size = Vector3.new(6, 6, arg3.SizeZ)
+    Description: Creates hitbox with client-controlled Z dimension
+    Normal SizeZ: ~55 studs (based on player dash distance)
+    Exploit: Send SizeZ = 10000+ for map-wide hitbox
+
+AgressiveBreezeModule_ID171.luau:78
+    Vulnerable Code: clone_3.Size = Vector3.new(25, 25, arg3.SizeZ)
+    Description: Larger base hitbox (25x25) with client-controlled length
+    Normal SizeZ: ~55 studs
+    Exploit: Send SizeZ = 10000+ for map-wide hitbox
+
+## Client-Side Files (Show how SizeZ is normally calculated)
+
+Client_ID172.luau:41
+    Code: SizeZ = (HumanoidRootPart_upvr.Position - CFrame.p).Magnitude
+    Description: Calculates SizeZ based on dash distance
+    Note: This is the legitimate calculation that exploits bypass
+
+Client_ID179.luau:47
+    Code: SizeZ = (HumanoidRootPart_upvr.Position - CFrame.p).Magnitude
+    Description: Same pattern for Quick Breeze client
+
+## Related Vulnerabilities
+
+This vulnerability is often combined with:
+
+V09_No_Range_Validation:
+    - CFrame (arg3.CF) is also client-controlled
+    - Allows positioning the massive hitbox anywhere
+
+V05_No_Cooldown_Validation:
+    - Can spam massive hitbox attacks
+    - No server-side rate limiting
+
+## Exploitation Pattern
+
+```lua
+-- Exploit payload structure:
+RemoteEvent:FireServer("Agressive Breeze", {
+    SizeZ = 10000,           -- V10: Massive hitbox
+    CF = arbitraryCFrame     -- V09: Position anywhere
+})
+```
+
+## Impact Analysis
+
+- Normal hitbox volume: 25 * 25 * 55 = 34,375 cubic studs
+- Exploited hitbox volume: 25 * 25 * 10000 = 6,250,000 cubic studs
+- Volume increase: ~182x larger
+
+## Files Requiring Immediate Fix
+
+1. QuickBreezeModule_ID178.luau - Add SizeZ validation/clamping
+2. AgressiveBreezeModule_ID171.luau - Add SizeZ validation/clamping

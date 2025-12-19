@@ -7,7 +7,8 @@
       "Bash(git push:*)",
       "Bash(luac5.1:*)",
       "Bash(ls:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(mkdir:*)"
     ]
   }
 }

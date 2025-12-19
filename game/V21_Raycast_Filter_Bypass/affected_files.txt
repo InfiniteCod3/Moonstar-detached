@@ -1,0 +1,34 @@
+All files using shared raycastParams:
+
+AerialSmiteModule_ID148.luau:84 - workspace:Raycast with var3_upvw.raycastParams
+AnguishModule_ID116.luau:248 - var3_upvw.raycastParams
+AquaticEruptionModule_ID191.luau:64 - var2_upvw.raycastParams
+BindModule_ID42.luau:79 - var3_upvw.raycastParams
+BlinkStrikeModule_ID106.luau:118 - var3_upvw.raycastParams
+BodySlamModule_ID160.luau:140 - var3_upvw.raycastParams
+BoilModule_ID37.luau:62 - var3_upvw.raycastParams
+BruteModule_ID86.luau:54 - var3_upvw.raycastParams
+CannonballModule_ID182.luau:76,89 - var53 / var2_upvw.raycastParams
+CelestialUpliftModule_ID3.luau:134 - var3_upvw.raycastParams
+Client_ID10.luau:84 - var3_upvw.raycastParams
+Client_ID100.luau:62,68 - var2_upvw.raycastParams
+Client_ID179.luau:41 - var2_upvw.raycastParams
+Client_ID26.luau:45 - var2_upvw.raycastParams
+Client_ID40.luau:87 - var3_upvw.raycastParams
+Client_ID74.luau:62,68 - var2_upvw.raycastParams
+Client_ID76.luau:75 - var3_upvw.raycastParams
+Client_ID89.luau:26 - var2_upvw.raycastParams
+ClusterModule_ID127.luau:111 - var2_upvw.raycastParams
+ConceptModule_ID9.luau:198 - var3_upvw.raycastParams
+ConsumeModule_ID118.luau:191 - var3_upvw.raycastParams
+DivineSlashModule_ID5.luau:103,104 - var2_upvw.raycastParams
+EventHorizonModule_ID134.luau:144 - var2_upvw.raycastParams
+FallenModule_ID11.luau:172 - var3_upvw.raycastParams
+FieryLeapModule_ID25.luau:45,56 - var2_upvw.raycastParams
+FlashingStrikesModule_ID111.luau:110 - var3_upvw.raycastParams
+FlashOverdriveModule_ID103.luau:170 - var3_upvw.raycastParams
+FluidMotionModule_ID188.luau:75,79,100 - var2_upvw.raycastParams
+GlowingHailModule_ID4.luau:43 - var2_upvw.raycastParams
+GreatGeyserModule_ID184.luau - var2_upvw.raycastParams
+EarthlyImpactModule_ID144.luau:119,124 - var2_upvw.raycastParams
+EarthPillarsModule_ID142.luau:113 - var2_upvw.raycastParams

@@ -1,0 +1,7 @@
+BladeStormModule_ID98.luau:126 - applyStatus(arg1, "IFrames") without duration
+BladeStormModule_ID98.luau:201 - table.insert(tbl_upvr, var3_upvw.applyStatus(arg1, "IFrames"))
+SiphonModule_ID107.luau:74 - table.insert(tbl_upvr, var2_upvw.applyStatus(arg1, "IFrames"))
+FlashOverdriveModule_ID103.luau - teleport function with IFrames
+QuickStepsModule_ID104.luau - teleport function with IFrames
+RapidBlinksModule_ID97.luau - teleport function with IFrames
+BlinkStrikeModule_ID106.luau - LockBV + IFrames pattern

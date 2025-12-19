@@ -1,0 +1,77 @@
+# V08: Client Duration Control - Affected Files
+# Files where status effect durations are controlled by client parameters
+
+## Primary Affected File
+
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau
+
+### Vulnerable Lines
+
+Line 56-70: Remote event handler receives arg4 from client
+```
+var20_upvw = var3_upvw.conTimer(ReplicatedStorage_upvr.Remotes.ClientInfo.OnServerEvent:Connect(
+    function(arg1_2, arg2_2, arg3, arg4) -- arg4 is CLIENT-CONTROLLED
+```
+
+Line 81: var3_upvw.applyStatus(arg1, "Freeze", arg4 + 1)
+Line 82: var3_upvw.applyStatus(arg1, "GlobalCD", arg4 + 1)
+Line 83: var3_upvw.applyStatus(arg1, "IFrames", arg4 + 1)
+Line 84: var3_upvw.applyStatus(arg3, "Stunned", arg4 + 1)
+Line 85: var3_upvw.applyStatus(arg3, "IFrames", arg4 + 1)
+
+Line 91: task.wait(arg4 + 0.25) -- Server wait time controlled by client
+
+## Full Code Context (Lines 56-91)
+
+```lua
+var20_upvw = var3_upvw.conTimer(ReplicatedStorage_upvr.Remotes.ClientInfo.OnServerEvent:Connect(function(arg1_2, arg2_2, arg3, arg4) -- Line 64
+    --[[ Upvalues[11]:
+        [1]: var20_upvw (read and write)
+        [2]: PlayerStatus_upvr (copied, readonly)
+        [3]: var3_upvw (copied, read and write)
+        [4]: arg1 (readonly)
+        [5]: Rise_upvr (readonly)
+        [6]: HumanoidRootPart_upvr (readonly)
+        [7]: any_LoadAnimation_result1_4_upvr (readonly)
+        [8]: Humanoid_upvr (readonly)
+        [9]: Folder_upvr (readonly)
+        [10]: TweenService_upvr (copied, readonly)
+        [11]: module_upvr (copied, readonly)
+    ]]
+    var20_upvw:Disconnect()
+    if PlayerStatus_upvr.FindStatus(arg3, "IFrames") then
+    else
+        var3_upvw.CheckBlock(arg3, true)
+        var3_upvw.unragdoll(arg3)
+        for _, v_2 in arg3.Humanoid:GetPlayingAnimationTracks() do
+            v_2:AdjustSpeed(0)
+        end
+        task.wait()
+        var3_upvw.camShake(arg1, "SmallBump")
+        var3_upvw.changeFov(arg1, 50, 0, 0.5)
+        var3_upvw.applyStatus(arg1, "Freeze", arg4 + 1)      -- CLIENT DURATION
+        var3_upvw.applyStatus(arg1, "GlobalCD", arg4 + 1)    -- CLIENT DURATION
+        var3_upvw.applyStatus(arg1, "IFrames", arg4 + 1)     -- CLIENT DURATION
+        var3_upvw.applyStatus(arg3, "Stunned", arg4 + 1)     -- CLIENT DURATION
+        var3_upvw.applyStatus(arg3, "IFrames", arg4 + 1)     -- CLIENT DURATION
+        var3_upvw.applySound(Rise_upvr.TeleportSFX, HumanoidRootPart_upvr)
+        var3_upvw.applySound(Rise_upvr.ChargeSFX, HumanoidRootPart_upvr)
+        local any_applyWeld_result1_upvr = var3_upvw.applyWeld(arg3, Vector3.new(0, 0, 6), Vector3.new(0, 180, 0))
+        var3_upvw.applyDebris(any_applyWeld_result1_upvr, 3)
+        any_LoadAnimation_result1_4_upvr:AdjustSpeed(0)
+        task.wait(arg4 + 0.25)                               -- CLIENT CONTROLS WAIT
+```
+
+## Potentially Similar Patterns to Investigate
+
+Any module that:
+1. Uses OnServerEvent to receive parameters
+2. Passes those parameters directly to applyStatus duration
+3. Uses client parameters in task.wait/task.delay
+
+Grep pattern to find similar issues:
+```
+applyStatus\([^,]+,\s*"[^"]+",\s*arg[0-9]
+```
+
+# Total: 1 confirmed file, 5 vulnerable applyStatus calls + 1 vulnerable task.wait

@@ -1,0 +1,174 @@
+-- Saved by UniversalSynSaveInstance (Join to Copy Games) https://discord.gg/wx4ThpAsmw
+
+-- Decompiler will be improved VERY SOON!
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2025-12-14 11:14:58
+-- Luau version 6, Types version 3
+-- Time taken: 0.014152 seconds
+
+local module_upvr = {
+	Cooldown = 30;
+	GlobalCD = 1.5;
+}
+local var2_upvw
+local ReplicatedStorage_upvr = game:GetService("ReplicatedStorage")
+local TweenService_upvr = game:GetService("TweenService")
+function module_upvr.Script(arg1, arg2) -- Line 17
+	--[[ Upvalues[4]:
+		[1]: var2_upvw (read and write)
+		[2]: module_upvr (readonly)
+		[3]: ReplicatedStorage_upvr (readonly)
+		[4]: TweenService_upvr (readonly)
+	]]
+	var2_upvw = require(arg1.ServerScript.Skills)
+	local Folder_upvr = Instance.new("Folder", workspace.WorldInfo.Thrown)
+	Folder_upvr.Name = arg1.Name
+	game.Debris:AddItem(Folder_upvr, module_upvr.Cooldown)
+	local HumanoidRootPart_upvr = arg1:FindFirstChild("HumanoidRootPart")
+	local Explosive_Strikes_upvr = ReplicatedStorage_upvr.Skills["Fire Fists"]["Explosive Strikes"]
+	local any_LoadAnimation_result1_upvr = arg1:FindFirstChild("Humanoid").Animator:LoadAnimation(Explosive_Strikes_upvr.Animation)
+	any_LoadAnimation_result1_upvr:Play()
+	any_LoadAnimation_result1_upvr:AdjustSpeed(1)
+	var2_upvw.applyStatus(arg1, "Freeze", 1.5)
+	local clone_upvr = Explosive_Strikes_upvr.FireBarrageSFX:Clone()
+	clone_upvr.Parent = HumanoidRootPart_upvr
+	clone_upvr:Play()
+	var2_upvw.applyDebris(clone_upvr, 15)
+	local var10_upvw = false
+	any_LoadAnimation_result1_upvr.Stopped:Connect(function() -- Line 43
+		--[[ Upvalues[3]:
+			[1]: any_LoadAnimation_result1_upvr (readonly)
+			[2]: var10_upvw (read and write)
+			[3]: clone_upvr (readonly)
+		]]
+		if any_LoadAnimation_result1_upvr.TimePosition < any_LoadAnimation_result1_upvr.Length then
+			var10_upvw = true
+			clone_upvr:Stop()
+		end
+	end)
+	local clone = Explosive_Strikes_upvr.Whoosh:Clone()
+	clone.Parent = HumanoidRootPart_upvr
+	clone:Play()
+	var2_upvw.applyDebris(clone, 5)
+	var2_upvw.changeFov(arg1, 100, 0.3, 5)
+	local function _(arg1_2, arg2_2, arg3, arg4) -- Line 57, Named "CreateAirtime"
+		--[[ Upvalues[3]:
+			[1]: arg1 (readonly)
+			[2]: HumanoidRootPart_upvr (readonly)
+			[3]: var2_upvw (copied, read and write)
+		]]
+		local var29
+		for _, v in arg1_2.Head:GetChildren() do
+			if v.Name == "AirTime" then
+				v:Destroy()
+			end
+		end
+		if arg1_2 ~= arg1 then
+			var29 += 4
+		end
+		local BodyPosition_2 = Instance.new("BodyPosition", arg1_2.Head)
+		BodyPosition_2.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+		BodyPosition_2.Position = HumanoidRootPart_upvr.Position + HumanoidRootPart_upvr.CFrame.LookVector * var29
+		var2_upvw.applyDebris(BodyPosition_2, arg2_2)
+		BodyPosition_2.Name = "AirTime"
+		if arg4 then
+			if workspace:Raycast(HumanoidRootPart_upvr.Position, Vector3.new(0, -5, 0), var2_upvw.raycastParams) then
+				BodyPosition_2.Name = "UptiltAirTime"
+				BodyPosition_2.Position = HumanoidRootPart_upvr.Position + Vector3.new(0, 15, 0) + HumanoidRootPart_upvr.CFrame.LookVector * var29
+			end
+		end
+		return BodyPosition_2
+	end
+	any_LoadAnimation_result1_upvr:GetMarkerReachedSignal("punch"):Connect(function() -- Line 86
+		--[[ Upvalues[8]:
+			[1]: Explosive_Strikes_upvr (readonly)
+			[2]: Folder_upvr (readonly)
+			[3]: HumanoidRootPart_upvr (readonly)
+			[4]: var2_upvw (copied, read and write)
+			[5]: var10_upvw (read and write)
+			[6]: arg1 (readonly)
+			[7]: TweenService_upvr (copied, readonly)
+			[8]: clone_upvr (readonly)
+		]]
+		local clone_5_upvr = Explosive_Strikes_upvr.Hitbox:Clone()
+		clone_5_upvr.Parent = Folder_upvr
+		clone_5_upvr.weld.Part1 = clone_5_upvr
+		clone_5_upvr.weld.Part0 = HumanoidRootPart_upvr
+		var2_upvw.applyDebris(clone_5_upvr, 3)
+		clone_5_upvr.Transparency = 1
+		local var33_upvw = true
+		task.spawn(function() -- Line 96
+			--[[ Upvalues[7]:
+				[1]: var10_upvw (copied, read and write)
+				[2]: var2_upvw (copied, read and write)
+				[3]: clone_5_upvr (readonly)
+				[4]: HumanoidRootPart_upvr (copied, readonly)
+				[5]: Explosive_Strikes_upvr (copied, readonly)
+				[6]: arg1 (copied, readonly)
+				[7]: var33_upvw (read and write)
+			]]
+			for _ = 1, 16 do
+				task.wait(0.075)
+				if var10_upvw == true then return end
+				local any_findEnemiesPart_result1 = var2_upvw.findEnemiesPart(clone_5_upvr, true)
+				if 0 >= #any_findEnemiesPart_result1 then
+				end
+				for _, v_2 in any_findEnemiesPart_result1 do
+					if not var2_upvw.CheckBlock(v_2) then
+						var2_upvw.applyDamage(v_2, 1)
+						var2_upvw.Knockback(v_2, HumanoidRootPart_upvr.Position + HumanoidRootPart_upvr.CFrame.LookVector * -10, 15)
+						var2_upvw.applyStatus(v_2, "Stunned", 0.25)
+						local clone_4 = Explosive_Strikes_upvr.FlameM1:Clone()
+						clone_4.Parent = v_2.HumanoidRootPart
+						clone_4:Play()
+						var2_upvw.applyDebris(clone_4, 1.5)
+						var2_upvw.camShake(v_2, "SmallBump")
+						var2_upvw.flashScreen(v_2, Color3.new(1, 0.784314, 0.631373), 0.5)
+						var2_upvw.changeFov(v_2, 60, 0.01, 0.5)
+						local clone_3 = Explosive_Strikes_upvr.VFX.hitVFX:Clone()
+						clone_3.Parent = v_2.HumanoidRootPart
+						var2_upvw.EmitAllDescendants(clone_3)
+						var2_upvw.applyDebris(clone_4, 2)
+					end
+				end
+				var2_upvw.camShake(arg1, "SmallBump")
+				var2_upvw.flashScreen(arg1, Color3.new(1, 0.784314, 0.631373), 0.5)
+				var2_upvw.changeFov(arg1, 60, 0.01, 0.5)
+			end
+			var33_upvw = false
+		end)
+		while true do
+			if var10_upvw == true or not var33_upvw or not arg1.Parent then return end
+			task.wait()
+			local clone_2_upvr = Explosive_Strikes_upvr.FireFist:Clone()
+			clone_2_upvr.Parent = Folder_upvr
+			clone_2_upvr.Size = Vector3.new(3.5, 7, 3.5)
+			clone_2_upvr.CFrame = HumanoidRootPart_upvr.CFrame + HumanoidRootPart_upvr.CFrame.RightVector * math.random(-12, 12) + HumanoidRootPart_upvr.CFrame.UpVector * math.random(-12, 12)
+			var2_upvw.applyDebris(clone_2_upvr, 0.36)
+			TweenService_upvr:Create(clone_2_upvr, TweenInfo.new(0.35), {
+				CFrame = clone_2_upvr.CFrame + clone_2_upvr.CFrame.LookVector * 25;
+				Size = Vector3.new(3.90000, 3.90000, 24);
+			}):Play()
+			TweenService_upvr:Create(clone_2_upvr, TweenInfo.new(0.35, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
+				Transparency = 1;
+			}):Play()
+			task.delay(0.35, function() -- Line 152
+				--[[ Upvalues[1]:
+					[1]: clone_2_upvr (readonly)
+				]]
+				for _, v_3 in clone_2_upvr:GetDescendants() do
+					if v_3:IsA("ParticleEmitter") then
+						v_3.Enabled = false
+					end
+				end
+			end)
+		end
+		clone_2_upvr = TweenService_upvr
+		local _ = {
+			Volume = 0;
+		}
+		clone_2_upvr = clone_2_upvr:Create(clone_upvr, TweenInfo.new(1), _):Play
+		clone_2_upvr()
+	end)
+end
+return module_upvr

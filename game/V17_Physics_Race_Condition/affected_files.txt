@@ -1,0 +1,13 @@
+BladeStormModule_ID98.luau:242-245 - GetDescendants loop destroys BodyVelocity/BodyPosition
+BladeStormModule_ID98.luau:247 - New BodyVelocity created after loop
+FluidMotionModule_ID188.luau:139 - Same pattern checking IsA("BodyPosition") or IsA("BodyVelocity")
+GreatGeyserModule_ID184.luau:95 - Same cleanup pattern
+GreatGeyserModule_ID184.luau:136 - Second cleanup location
+LightspeedSlashesModule_ID169.luau:100 - Same pattern
+Ultimate_ID95/init.luau:44 - Same pattern
+CleaveModule_ID13.luau:105 - if IsA("BodyVelocity") then destroy
+Client_ID102.luau:27 - if IsA("BodyVelocity") then destroy
+Client_ID105.luau:51 - Same pattern
+Client_ID8.luau:26 - Same pattern
+Client_ID16.luau:26 - Same pattern
+FrenzyModule_ID39.luau:41 - Same pattern

@@ -1,0 +1,13 @@
+ConsumeModule_ID118.luau:36 - if Humanoid.Health <= 1 and not FindFirstChild("burnVfx") and not GetAttribute("DeathEffect")
+ConsumeModule_ID118.luau:393-394 - Same death effect check pattern
+DestroyModule_ID115.luau:34 - Same death effect check pattern
+DestroyModule_ID115.luau:164 - HealthDisplayType manipulation
+GraspingSoulModule_ID121.luau:333 - Same death effect check pattern
+GraspingSoulModule_ID121.luau:335 - HealthDisplayType = "AlwaysOff"
+GraveDiggerModule_ID122.luau:104-106 - Same death effect pattern
+GraveDiggerModule_ID122.luau:141-142 - HealthDisplayType manipulation
+DecayingSoulModule_ID120.luau:219-221 - Same death effect pattern
+EarthCatastropheModule_ID22.luau:112 - if Humanoid.Health <= 1
+PowerfulStrikeModule_ID28.luau:124 - if Humanoid.Health <= 1
+FieryLeapModule_ID25.luau:178 - if Humanoid.Health <= 1
+GroundDemolitionModule_ID21.luau:154 - if Humanoid.Health <= 1

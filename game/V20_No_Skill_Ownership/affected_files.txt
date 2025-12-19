@@ -1,0 +1,20 @@
+ALL SKILL MODULES ARE AFFECTED - No ownership verification exists
+
+Specific files (all follow same pattern):
+BladeStormModule_ID98.luau - No check for Cyber Katana ownership
+ConsumeModule_ID118.luau - No check for Soul Lantern ownership
+UniverseModule_ID129.luau - No check for Cosmic ownership
+EventHorizonModule_ID134.luau - No check for Cosmic ownership
+SiphonModule_ID107.luau - No check for Cyber Katana ownership
+BerserkModule_ID159.luau - No check for Gauntlet ownership
+GreatGeyserModule_ID184.luau - No check for Water Element ownership
+StillRiverModule_ID190.luau - No check for Water Element ownership
+
+All *Module_ID*.luau files (170+ files)
+All Ultimate_ID*.luau files
+All Client_ID*.luau files
+
+Pattern present in ALL files:
+function module_upvr.Script(arg1, arg2)
+    -- No ownership verification
+    -- Immediately begins skill execution

@@ -1,0 +1,57 @@
+# V05: No Cooldown Validation - Affected Files
+# All files with client-side cooldown definitions (module_upvr.Cooldown)
+
+/mnt/c/Users/User/Downloads/game/BladeStormModule_ID98.luau:11:module_upvr.Cooldown = 19
+/mnt/c/Users/User/Downloads/game/BlinkStrikeModule_ID106.luau:11:module_upvr.Cooldown = 30
+/mnt/c/Users/User/Downloads/game/RiseModule_ID84.luau:11:module_upvr.Cooldown = 18
+/mnt/c/Users/User/Downloads/game/BreakModule_ID51.luau:11:module_upvr.Cooldown = 20
+/mnt/c/Users/User/Downloads/game/WrathModule_ID119.luau:11:module_upvr.Cooldown = 15
+/mnt/c/Users/User/Downloads/game/BoilModule_ID37.luau:11:module_upvr.Cooldown = 17
+/mnt/c/Users/User/Downloads/game/BodySlamModule_ID160.luau:11:module_upvr.Cooldown = 12
+/mnt/c/Users/User/Downloads/game/PossessModule_ID53.luau:11:module_upvr.Cooldown = 27
+/mnt/c/Users/User/Downloads/game/GraspingSoulModule_ID121.luau:11:module_upvr.Cooldown = 20
+/mnt/c/Users/User/Downloads/game/UniverseModule_ID129.luau:11:module_upvr.Cooldown = 120
+/mnt/c/Users/User/Downloads/game/FrenzyModule_ID39.luau:11:module_upvr.Cooldown = 25
+/mnt/c/Users/User/Downloads/game/GraveDiggerModule_ID122.luau:17:module_upvr.Cooldown = 20
+/mnt/c/Users/User/Downloads/game/LightspeedSlashesModule_ID169.luau:11:module_upvr.Cooldown = 14
+/mnt/c/Users/User/Downloads/game/HauntModule_ID59.luau:11:module_upvr.Cooldown = 27
+/mnt/c/Users/User/Downloads/game/InferiorModule_ID88.luau:11:module_upvr.Cooldown = 25
+/mnt/c/Users/User/Downloads/game/LeverageModule_ID81.luau:11:module_upvr.Cooldown = 18
+/mnt/c/Users/User/Downloads/game/KickComboModule_ID63.luau:11:module_upvr.Cooldown = 22
+/mnt/c/Users/User/Downloads/game/NeckGripModule_ID64.luau:11:module_upvr.Cooldown = 18
+/mnt/c/Users/User/Downloads/game/PierceModule_ID12.luau:11:module_upvr.Cooldown = 24
+/mnt/c/Users/User/Downloads/game/PanFryModule_ID154.luau:11:module_upvr.Cooldown = 27
+/mnt/c/Users/User/Downloads/game/SurgeModule_ID35.luau:11:module_upvr.Cooldown = 20
+/mnt/c/Users/User/Downloads/game/BindModule_ID42.luau:11:module_upvr.Cooldown = 26
+/mnt/c/Users/User/Downloads/game/FlashOverdriveModule_ID103.luau:11:module_upvr.Cooldown = 15
+/mnt/c/Users/User/Downloads/game/FallenModule_ID11.luau:11:module_upvr.Cooldown = 23
+/mnt/c/Users/User/Downloads/game/TricksterModule_ID56.luau:11:module_upvr.Cooldown = 22
+/mnt/c/Users/User/Downloads/game/SeasonModule_ID155.luau:11:module_upvr.Cooldown = 28
+/mnt/c/Users/User/Downloads/game/SupremacyModule_ID92.luau:11:module_upvr.Cooldown = 32
+/mnt/c/Users/User/Downloads/game/ConsumeModule_ID118.luau:11:module_upvr.Cooldown = 80
+/mnt/c/Users/User/Downloads/game/ChargeModule_ID82.luau:11:module_upvr.Cooldown = 18
+/mnt/c/Users/User/Downloads/game/FlashingStrikesModule_ID111.luau:11:module_upvr.Cooldown = 28
+/mnt/c/Users/User/Downloads/game/DaggerTrifectaModule_ID113.luau:11:module_upvr.Cooldown = 18
+/mnt/c/Users/User/Downloads/game/TrickModule_ID55.luau:11:module_upvr.Cooldown = 22
+/mnt/c/Users/User/Downloads/game/SearModule_ID152.luau:11:module_upvr.Cooldown = 22
+/mnt/c/Users/User/Downloads/game/ConceptModule_ID9.luau:11:module_upvr.Cooldown = 20
+/mnt/c/Users/User/Downloads/game/CelestialUpliftModule_ID3.luau:11:module_upvr.Cooldown = 26
+/mnt/c/Users/User/Downloads/game/SkewerModule_ID7.luau:11:module_upvr.Cooldown = 18
+/mnt/c/Users/User/Downloads/game/RisingStrikesModule_ID65.luau:11:module_upvr.Cooldown = 30
+/mnt/c/Users/User/Downloads/game/StrainModule_ID54.luau:11:module_upvr.Cooldown = 18
+/mnt/c/Users/User/Downloads/game/ClutchModule_ID34.luau:11:module_upvr.Cooldown = 17
+/mnt/c/Users/User/Downloads/game/RapidBlinksModule_ID97.luau:11:module_upvr.Cooldown = 20
+/mnt/c/Users/User/Downloads/game/AnguishModule_ID116.luau:15:module_upvr.Cooldown = 25
+/mnt/c/Users/User/Downloads/game/RaiseModule_ID14.luau:11:module_upvr.Cooldown = 26
+/mnt/c/Users/User/Downloads/game/CelestialCollideModule_ID132.luau:11:module_upvr.Cooldown = 14
+/mnt/c/Users/User/Downloads/game/EntryModule_ID15.luau:11:module_upvr.Cooldown = 19
+/mnt/c/Users/User/Downloads/game/CrippleModule_ID57.luau:11:module_upvr.Cooldown = 23
+/mnt/c/Users/User/Downloads/game/SingularityModule_ID131.luau:11:module_upvr.Cooldown = 17
+/mnt/c/Users/User/Downloads/game/AerialSmiteModule_ID148.luau:11:module_upvr.Cooldown = 25
+/mnt/c/Users/User/Downloads/game/RestrainModule_ID60.luau:11:module_upvr.Cooldown = 18
+/mnt/c/Users/User/Downloads/game/QuickStepsModule_ID104.luau:11:module_upvr.Cooldown = 22
+/mnt/c/Users/User/Downloads/game/BruteModule_ID86.luau:11:module_upvr.Cooldown = 10
+/mnt/c/Users/User/Downloads/game/RapidJabsModule_ID164.luau:11:module_upvr.Cooldown = 27
+/mnt/c/Users/User/Downloads/game/SecondsModule_ID153.luau:11:module_upvr.Cooldown = 23
+
+# Total: 52 affected skill modules

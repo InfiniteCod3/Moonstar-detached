@@ -1,0 +1,133 @@
+# V12: Weak Player Verification - Affected Files
+# Severity: MEDIUM
+#
+# All skill modules using the weak verification pattern
+
+## The Weak Verification Pattern
+
+```lua
+if arg2_2 ~= "SkillName" or arg1_3 ~= arg2 then
+    -- reject (only checks player ID and skill name)
+else
+    -- execute skill (without comprehensive validation)
+end
+```
+
+## Files with Documented Weak Verification
+
+QuickBreezeModule_ID178.luau:70
+    Pattern: if arg2_2 ~= "Quick Breeze" or arg1_3 ~= arg2 then
+
+AgressiveBreezeModule_ID171.luau:72
+    Pattern: if arg2_2 ~= "Agressive Breeze" or arg1_3 ~= arg2 then
+
+SiphonModule_ID107.luau:195
+    Pattern: if arg2_2 ~= "Siphon" or arg1_3 ~= arg2 then
+
+SuperSiphonModule_ID101.luau:160
+    Pattern: if arg1_3 ~= arg2 or arg2_3 ~= "Super Siphon" then
+
+BreakModule_ID51.luau:75
+    Pattern: if arg1_3 ~= arg2 or arg2_2 ~= "Break" then
+
+CrippleModule_ID57.luau:74
+    Pattern: if arg1_3 ~= arg2 or arg2_2 ~= "Cripple" then
+
+RapidIceModule_ID73.luau:77
+    Pattern: if arg2_2 ~= "RapidIce" or arg1_3 ~= arg2 then
+
+AnguishModule_ID116.luau
+    Pattern: Similar weak verification
+
+BodySlamModule_ID160.luau:70
+    Pattern: if arg2_2 ~= "BodySlam" or arg1_2 ~= arg2 or not var15_upvw then
+    Note: Slightly stronger - also checks connection exists
+
+## Pattern Variations
+
+### Variation 1: Standard
+```lua
+if arg2_2 ~= "SkillName" or arg1_3 ~= arg2 then
+```
+
+### Variation 2: Reversed Order
+```lua
+if arg1_3 ~= arg2 or arg2_2 ~= "SkillName" then
+```
+
+### Variation 3: With Connection Check
+```lua
+if arg2_2 ~= "SkillName" or arg1_2 ~= arg2 or not connectionVar then
+```
+
+## All Skill Modules Using This Pattern
+
+The following modules all use the weak verification pattern:
+(Total: 100+ files)
+
+### Ultimate Abilities
+Ultimate_ID1.luau
+Ultimate_ID6.luau
+Ultimate_ID18.luau
+Ultimate_ID31/init.luau
+Ultimate_ID44.luau
+Ultimate_ID50.luau
+Ultimate_ID61.luau
+Ultimate_ID66.luau
+Ultimate_ID95/init.luau
+Ultimate_ID109.luau
+Ultimate_ID114.luau
+Ultimate_ID136.luau
+Ultimate_ID145.luau
+
+### Regular Skills (Sample)
+BlinkStrikeModule_ID106.luau
+BladeStormModule_ID98.luau
+FlashOverdriveModule_ID103.luau
+ChillingArcModule_ID77.luau
+WrathModule_ID119.luau
+ConsumeModule_ID118.luau
+BindModule_ID42.luau
+EntryModule_ID15.luau
+FieryLeapModule_ID25.luau
+# ... and 80+ more
+
+## What's Checked vs What's Missing
+
+CHECKED:
+- arg1_3 ~= arg2: Player identity matches
+- arg2_2 ~= "SkillName": Skill name matches expected
+
+NOT CHECKED:
+- Skill ownership (player has unlocked skill)
+- Player state (alive, not stunned/frozen)
+- Server-side cooldown
+- Required weapon equipped
+- Resource availability
+- Class/role requirements
+- Skill prerequisites
+
+## Impact
+
+- Use any skill regardless of unlock status
+- Use skills while in disabled states (stunned, frozen, dead)
+- Use skills without required weapons
+- Use skills from other weapon classes
+- Bypass resource/energy costs
+- Use premium/paid skills without purchasing
+
+## Recommended Fix Location
+
+Implement validation in the shared Skills module or create
+a middleware function that all skill modules call before
+executing their logic.
+
+Example fix pattern:
+```lua
+local validation = Skills.validateSkillExecution(arg2, arg1, "SkillName")
+if not validation.success then
+    warn("Skill validation failed:", validation.reason)
+    return
+end
+-- Proceed with skill execution
+```

@@ -1,0 +1,108 @@
+# V03_Client_Hitbox_Positioning - Affected Files List
+# Generated: 2025-12-18
+# Vulnerability: Damage hitboxes/indicators positioned using unvalidated client-provided CFrame/position data
+
+================================================================================
+FILE: /mnt/c/Users/User/Downloads/game/BindModule_ID42.luau
+================================================================================
+
+Line 39: Server event listener accepts client data
+    var11_upvw = ReplicatedStorage_upvr.Remotes.ClientInfo.OnServerEvent:Connect(function(arg1_2, arg2_2, arg3)
+    ^ arg3 contains unvalidated client CFrame data
+
+Line 53-54: Event handler check (insufficient - only checks player identity)
+    if arg1_2 ~= arg2 or arg2_2 ~= "Bind" then
+
+Line 62: VULNERABLE - Client CFrame used directly for indicator positioning
+    clone_2_upvr.CFrame = arg3 + arg3.LookVector * 30 + Vector3.new(0, -2.9000, 0)
+    ^ arg3 is client-provided CFrame, no distance/position validation
+
+Line 83: Damage applied to enemies found at client-controlled hitbox position
+    for _, v_upvr in var3_upvw.findEnemiesPart(clone_2_upvr.hitbox, true), nil do
+
+Line 182: Damage dealt to targets at exploitable location
+    var3_upvw.applyDamage(v_upvr, 10)
+
+Line 184-185: Status effects applied to targets at exploitable location
+    var3_upvw.applyStatus(v_upvr, "Stunned", 2)
+    var3_upvw.applyStatus(v_upvr, "AutoRotate", 2)
+
+================================================================================
+FILE: /mnt/c/Users/User/Downloads/game/ChillingArcModule_ID77.luau
+================================================================================
+
+Line 37: Server event listener accepts client data
+    var10_upvw = var2_upvw.conTimer(ReplicatedStorage_upvr.Remotes.ClientInfo.OnServerEvent:Connect(function(arg1_2, arg2_2, arg3)
+    ^ arg3 contains unvalidated client position data (IndicatorCF)
+
+Line 48: Event handler check (insufficient - only checks player identity and skill name)
+    if arg2_2 ~= "Chilling Arc" or arg1_2 ~= arg2 then
+
+Line 56: VULNERABLE - Client CFrame used directly for VFX positioning
+    clone_5.CFrame = arg3.IndicatorCF
+    ^ arg3.IndicatorCF is client-provided, no validation
+
+Line 74: Damage applied to enemies found at client-controlled position
+    for _, v_2 in var2_upvw.findEnemiesMagnitude(SOME.Position, 18, true), nil do
+    ^ SOME.Position is derived from client-controlled clone_5.CFrame
+
+Line 78-81: Damage and effects applied to targets at exploitable location
+    var2_upvw.Knockback(v_2, HumanoidRootPart_upvr.Position, -20, 5)
+    var2_upvw.applyStatus(v_2, "Ragdoll", 1)
+    var2_upvw.applyStatus(v_2, "Slowed", 1.5)
+    var2_upvw.applyDamage(v_2, 13)
+
+================================================================================
+FILE: /mnt/c/Users/User/Downloads/game/FieryLeapModule_ID25.luau
+================================================================================
+
+Line 67: Server event handler function defined
+    function var37(arg1_2, arg2_2, arg3)
+    ^ arg3 contains unvalidated client position data (ExplosionPosition)
+
+Line 73: Event handler check (insufficient - only checks player identity and skill name)
+    if arg2 ~= arg1_2 or arg2_2 ~= "Fiery Leap" then
+
+Line 76: VULNERABLE - Client-provided explosion position stored without validation
+    var34_upvw = arg3.ExplosionPosition
+    ^ No distance check, no bounds validation
+
+Line 116: Crater created at client-controlled position
+    var2_upvw.crater(1, var37, 4, 1)
+    ^ var37 was set to var34_upvw (client position)
+
+Line 118: Debris created at client-controlled position
+    var2_upvw.CreateDebris(var34_upvw, var37, 1, 1, 0.1)
+
+Line 121-124: VULNERABLE - Hitbox positioned at client-provided location
+    local clone_2 = Fiery_Leap.Hitbox:Clone()
+    clone_2.Parent = Folder
+    var37 = Vector3.new(0, clone_2.Size.Y / 2 - 2, 0)
+    clone_2.Position = var34_upvw + var37
+    ^ Damage hitbox placed at arbitrary client location
+
+Line 127-129: VFX positioned at client-controlled location
+    local clone_3_upvr = Fiery_Leap["Fire Explosion"]:Clone()
+    clone_3_upvr.Parent = Folder
+    clone_3_upvr.Position = var34_upvw
+
+Line 174-177: Damage and effects applied to targets at exploitable location
+    for i_4, v_4 in var2_upvw.findEnemiesPart(clone_2, true), nil do
+        var2_upvw.applyStatus(v_4, "Ragdoll", 2.4)
+        var2_upvw.Knockback(v_4, HumanoidRootPart.Position, 15, 70)
+        var2_upvw.applyDamage(v_4, 15)
+
+================================================================================
+SUMMARY
+================================================================================
+
+Total Affected Files: 3
+Total Vulnerable Lines: 15
+
+Critical Vulnerable Patterns:
+1. Line 62 (BindModule_ID42.luau) - CFrame from arg3 used directly
+2. Line 56 (ChillingArcModule_ID77.luau) - arg3.IndicatorCF used directly
+3. Lines 76, 124, 129 (FieryLeapModule_ID25.luau) - arg3.ExplosionPosition used directly
+
+Root Cause: Server trusts client-provided position/CFrame data without validation
+Impact: Remote players can be attacked from any location on the map

@@ -1,0 +1,21 @@
+# Pattern A: Direct Victim Character Injection
+RiseModule_ID84.luau:84-85,115,127-128,231-243 - arg3 = victim, arg4 = duration
+InferiorModule_ID88.luau:77-98 - arg3 = victim character
+AnguishModule_ID116.luau:199-224 - arg3 = victim, 8-second stun
+
+# Pattern B: CFrame Control Affecting Victim
+SkewerModule_ID7.luau:142-143 - arg3.ClientCF positions BOTH players
+
+# Pattern C: CFrame Teleport + AoE Damage
+BodySlamModule_ID160.luau:74 - arg3 = CFrame for teleport
+RapidJabsModule_ID164.luau:69 - arg3 = CFrame for teleport
+SiphonModule_ID107.luau:198 - arg3 = CFrame for teleport
+
+# Pattern D: Client CFrame for Attack Origin
+AerialSmiteModule_ID148.luau:84-88 - arg3.ClientCF for attack position
+EntryModule_ID15.luau:108 - arg3.ClientCF for hitbox position
+
+# Client-side files that send victim data
+Client_ID85.luau:54 - FireServer("Rise", v, var7_upvw)
+Client_ID89.luau:54 - FireServer("Inferior", var16, var8_upvw)
+Client_ID117.luau:83 - FireServer("Anguish", v)

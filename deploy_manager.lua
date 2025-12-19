@@ -8,6 +8,7 @@ local SCRIPTS = {
     { id = "AetherShitterRecode", label = "AetherShitter", needsPreprocess = false },
     { id = "PlayerTracker", label = "PlayerTracker", needsPreprocess = false },
     { id = "GamepassUnlocker", label = "GamepassUnlocker", needsPreprocess = false },
+    { id = "Autofarm", label = "Autofarm", needsPreprocess = false },
 }
 
 -- Obfuscation preset: Minify, Weak, Medium, Strong, or custom preset file name

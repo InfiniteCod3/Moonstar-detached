@@ -1,0 +1,84 @@
+# V01: Arbitrary Teleportation - Affected Files
+# Generated: 2025-12-18
+# Severity: CRITICAL
+
+================================================================================
+AFFECTED FILES AND LINE NUMBERS
+================================================================================
+
+FILE: /mnt/c/Users/User/Downloads/game/ConceptModule_ID9.luau
+--------------------------------------------------------------------------------
+Skill Name: Concept (Basic Sword Ultimate)
+Vulnerable Lines: 37-62
+Key Vulnerable Line: 61-62
+
+Line 37:  Event listener setup - ReplicatedStorage_upvr.Remotes.ClientInfo.OnServerEvent:Connect
+Line 54:  Insufficient validation - only checks player and action name
+Line 61:  VULNERABLE - CFrame.new(arg3.TeleportPosition) used directly
+Line 62:  VULNERABLE - HumanoidRootPart_upvr.CFrame = NONE_2
+
+Exploit Trigger: FireServer("Concept", {TeleportPosition = Vector3.new(x, y, z)})
+
+================================================================================
+
+FILE: /mnt/c/Users/User/Downloads/game/SnowCloakModule_ID75.luau
+--------------------------------------------------------------------------------
+Skill Name: Snow Cloak (Snow Blasters)
+Vulnerable Lines: 69-102
+Key Vulnerable Line: 102
+
+Line 69:  Event listener setup - ReplicatedStorage_upvr.Remotes.ClientInfo.OnServerEvent:Connect
+Line 82:  Insufficient validation - only checks action name and player
+Line 102: VULNERABLE - HumanoidRootPart_upvr.CFrame = CFrame.new(arg3.TeleportPosition) * ...
+
+Exploit Trigger: FireServer("SnowCloak", {TeleportPosition = Vector3.new(x, y, z)})
+
+================================================================================
+
+FILE: /mnt/c/Users/User/Downloads/game/BodySlamModule_ID160.luau
+--------------------------------------------------------------------------------
+Skill Name: Body Slam (Fire Fists Ultimate)
+Vulnerable Lines: 55-74
+Key Vulnerable Line: 73-74
+
+Line 55:  Event listener setup - ReplicatedStorage_upvr.Remotes.ClientInfo.OnServerEvent:Connect
+Line 70:  Insufficient validation - only checks action name and player
+Line 73:  Conditional check for arg3 existence (no validation of value)
+Line 74:  VULNERABLE - HumanoidRootPart_upvr.CFrame = arg3 (accepts raw CFrame)
+
+Exploit Trigger: FireServer("BodySlam", CFrame.new(x, y, z))
+
+Note: This variant is MORE DANGEROUS as it accepts full CFrame including rotation
+
+================================================================================
+SUMMARY
+================================================================================
+
+Total Affected Files: 3
+Total Vulnerable Code Locations: 3
+
+Common Vulnerability Pattern:
+  1. Server listens on ReplicatedStorage.Remotes.ClientInfo.OnServerEvent
+  2. Server only validates player identity and action name
+  3. Server directly uses client-provided position/CFrame
+  4. No distance, bounds, or reachability validation
+
+Shared RemoteEvent: ReplicatedStorage.Remotes.ClientInfo
+
+================================================================================
+REMEDIATION PRIORITY
+================================================================================
+
+Priority 1 (Immediate): BodySlamModule_ID160.luau
+  - Accepts raw CFrame giving attacker full position AND rotation control
+  - Most exploitable variant
+
+Priority 2 (High): ConceptModule_ID9.luau
+  - Popular skill with short cooldown (20 seconds)
+  - High abuse potential
+
+Priority 3 (High): SnowCloakModule_ID75.luau
+  - Longer cooldown (26 seconds) slightly reduces abuse frequency
+  - Still critical vulnerability
+
+================================================================================

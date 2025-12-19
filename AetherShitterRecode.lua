@@ -867,6 +867,58 @@ local function GetClosestPlayer()
     return closest
 end
 
+-- // New Exploit Functions from Security Analysis
+local function FireInfiniteHealth()
+    if not ClientInfoRemote then return notify("ClientInfo remote not found") end
+    -- Vuln #2: BladeStormModule Siphon (Health += arg3)
+    ClientInfoRemote:FireServer("Siphon", 9e9) 
+    notify("Attempted Infinite Health (Siphon)")
+end
+
+local function FireShurikenKillAll()
+    if not ClientInfoRemote then return notify("ClientInfo remote not found") end
+    local targets = {}
+    for _, player in ipairs(GetUnwhitelistedPlayers()) do
+        if player.Character then
+            table.insert(targets, player.Character)
+        end
+    end
+    -- Vuln #5: Pinpoint Shuriken (Client controlled list)
+    ClientInfoRemote:FireServer("Pinpoint Shuriken", targets)
+    notify("Hit " .. #targets .. " players with Shuriken")
+end
+
+local function FireStaffUltimate()
+    if not ClientInfoRemote then return notify("ClientInfo remote not found") end
+    -- Vuln #8: Basic Staff Ultimate (Massive damage, client data influence)
+    -- Attempting to fire generic Ultimate action
+    ClientInfoRemote:FireServer("Ultimate", {
+        Origin = LocalPlayer.Character and LocalPlayer.Character.HumanoidRootPart.Position or Vector3.new(0,0,0),
+        Direction = LocalPlayer.Character and LocalPlayer.Character.HumanoidRootPart.CFrame.LookVector or Vector3.new(0,0,-1)
+    })
+    notify("Fired Staff Ultimate")
+end
+
+local function FireEntryExploit()
+    if not ClientInfoRemote then return notify("ClientInfo remote not found") end
+    local targetName = Settings.TargetName
+    if not targetName then return notify("Select a target first") end
+    
+    local target = Players:FindFirstChild(targetName)
+    if target and target.Character then
+        local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
+        if targetHRP then
+            -- Vuln #10: Entry Module (Client Defined Position)
+            ClientInfoRemote:FireServer("Entry", {
+                ClientCF = targetHRP.CFrame
+            })
+            notify("Fired Entry Attack at " .. targetName)
+        end
+    else
+        notify("Target invalid")
+    end
+end
+
 -- // Logic Loops
 -- Click Fling
 addConnection(LocalPlayer:GetMouse().Button1Down:Connect(function()
@@ -1112,6 +1164,14 @@ local function createMenu()
     window.createButton("Mass Blood Bind", function()
         MassBloodBind()
     end, true)
+
+    window.createButton("Infinite Health (Siphon)", FireInfiniteHealth, true)
+    
+    window.createButton("Shuriken Kill All", FireShurikenKillAll, true)
+    
+    window.createButton("Staff Ultimate Hit", FireStaffUltimate, true)
+    
+    window.createButton("Entry Attack (Target)", FireEntryExploit)
     
     -- [ Movement Section ] --
     window.createSection("Movement")

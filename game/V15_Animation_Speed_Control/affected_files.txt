@@ -1,0 +1,10 @@
+BladeStormModule_ID98.luau:196-197 - LoadAnimation + AdjustSpeed(0.5)
+BladeStormModule_ID98.luau:214-215 - AdjustSpeed(0.5) mid-skill
+BladeStormModule_ID98.luau:297 - GetMarkerReachedSignal("teleport")
+ConsumeModule_ID118.luau:67-69 - LiftAnimation with AdjustSpeed(0.7)
+ConsumeModule_ID118.luau:73 - GetMarkerReachedSignal("snap")
+SiphonModule_ID107.luau:41-43 - Animation with AdjustSpeed(1.05)
+SiphonModule_ID107.luau:148 - GetMarkerReachedSignal("slash")
+EntryModule_ID15.luau - Animation marker damage triggers
+FinalStrikesModule_ID19.luau - Multi-marker damage system
+All skill modules using GetMarkerReachedSignal pattern

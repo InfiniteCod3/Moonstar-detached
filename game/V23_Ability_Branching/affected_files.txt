@@ -1,0 +1,3 @@
+Client_ID117.luau:98-120 - Anguish phase handling
+All multi-phase combo skills with client-driven phase transitions
+Skills with "v2" variants (FinalStrike, PowerfulStrike, etc.)
