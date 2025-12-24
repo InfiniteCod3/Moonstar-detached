@@ -9,13 +9,12 @@ local Lighting = game:GetService("Lighting")
 local TextChatService = game:GetService("TextChatService")
 
 local LocalPlayer = Players.LocalPlayer
-local LOADER_SCRIPT_ID = "autofarm"
 local LoaderAccess = rawget(getgenv(), "LunarityAccess")
-local ScriptActive = true
+local LOADER_SCRIPT_ID = (LoaderAccess and LoaderAccess.scriptId) or "lunarity"
 
--- // ===========================
--- // AUTHENTICATION & BOILERPLATE
--- // ===========================
+-- // ============================
+-- // AUTHENTICATION / LOADER PROTECTION
+-- // ============================
 
 -- XOR encryption/decryption for payload obfuscation (matches loader)
 local function xorCrypt(input, key)
@@ -162,7 +161,8 @@ do
     end
 
     local function enforceLoaderWhitelist()
-        if not LoaderAccess or LoaderAccess.scriptId ~= LOADER_SCRIPT_ID then
+        -- Skip check if running in studio or specific test environments if needed, but here we enforce
+        if not LoaderAccess then
             warn("[Lunarity] This build must be launched via the official loader.")
             return false
         end
@@ -180,12 +180,18 @@ do
 
         local refreshInterval = math.clamp(LoaderAccess.refreshInterval or 90, 30, 240)
         task.spawn(function()
-            while ScriptActive do
+            while scriptActive do
                 task.wait(refreshInterval)
                 local valid, data = requestLoaderValidation(true)
                 if not valid or (data and data.killSwitch) then
                     warn("[Lunarity] Access revoked or kill switch activated. Shutting down.")
-                    ScriptActive = false
+                    scriptActive = false
+                    autofarmEnabled = false
+                    -- Trigger full unload via global function if available
+                    local unloadFunc = rawget(getgenv(), "_AutofarmUnload")
+                    if typeof(unloadFunc) == "function" then
+                        pcall(unloadFunc)
+                    end
                     break
                 end
             end
@@ -200,27 +206,44 @@ do
     end
 end
 
--- // ===========================
--- // SCRIPT LOGIC
--- // ===========================
+-- // ============================
+-- // AUTOFARM LOGIC
+-- // ============================
 
--- Load shared UI module
-local LunarityUI = loadstring(game:HttpGet("https://api.relayed.network/ui"))()
-local Theme = LunarityUI.Theme
+local autofarmEnabled = false
+local antiAfkEnabled = true
+local isRunning = false
+local targetPlayer = nil
+local targetPlayerName = "InfiniteCod3" -- Default target
+local scriptActive = true
 
--- Performance Optimization (Optional)
+-- Performance Settings (Optional: Can be toggled via GUI later, kept static for now)
 pcall(function()
-    setfpscap(60)
+    setfpscap(30) -- Set FPS cap to 30
+
+    local UserGameSettings = UserSettings():GetService("UserGameSettings")
+    UserGameSettings.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
+    UserGameSettings.GraphicsQualityLevel = 1
+
     Lighting.GlobalShadows = false
     Lighting.ShadowSoftness = 0
     Lighting.Technology = Enum.Technology.Compatibility
+    for _, effect in pairs(Lighting:GetChildren()) do
+        if effect:IsA("PostEffect") then effect.Enabled = false end
+    end
+
+    workspace.StreamingEnabled = false
+    workspace.Terrain.WaterWaveSize = 0
+    workspace.Terrain.WaterWaveSpeed = 0
+    workspace.Terrain.WaterReflectance = 0
+    workspace.Terrain.WaterTransparency = 1
+
+    -- Disable 3D Rendering to save resources
+    RunService:Set3dRenderingEnabled(false)
 end)
 
+-- Variables for Autofarm
 local VOID_POSITION = Vector3.new(-22517, -130, -10235)
-local damageRemote = ReplicatedStorage:FindFirstChild("Damage")
-local knockbackRemote = ReplicatedStorage:FindFirstChild("Knockback")
-local statusRemote = ReplicatedStorage:FindFirstChild("Status")
-
 local TELEPORT_DELAY = 2
 local MAX_TIMEOUT = 30
 local DAMAGE_THRESHOLD = 5
@@ -228,118 +251,77 @@ local AFK_PREVENTION_INTERVAL = 15
 local VOID_DEATH_TIMEOUT = 2
 local MAX_VOID_RETRIES = 3
 
-local isRunning = false
-local targetPlayer = nil
-local targetPlayerName = ""
-local initialHealth = nil
+local damageRemote = ReplicatedStorage:FindFirstChild("Damage")
+local knockbackRemote = ReplicatedStorage:FindFirstChild("Knockback")
+local statusRemote = ReplicatedStorage:FindFirstChild("Status")
+
+-- State variables
 local hasBeenHit = false
 local damageDetected = false
 local healthConnection = nil
 local damageConnection = nil
 local knockbackConnection = nil
-local autofarmEnabled = false
-local antiAfkEnabled = true
 local lastAfkAction = 0
 
--- UI Variables
-local statusLabel
-local targetLabel
-local toggleBtn
-local mainWindow
-
+-- Helper Functions
 local function getCharacterAndHumanoid(player)
-    if not player or not player.Character then
-        return nil, nil
-    end
-
+    if not player or not player.Character then return nil, nil, nil end
     local character = player.Character
     local humanoid = character:FindFirstChild("Humanoid")
     local rootPart = character:FindFirstChild("HumanoidRootPart")
-
-    if humanoid and rootPart then
-        return character, humanoid, rootPart
-    end
-
+    if humanoid and rootPart then return character, humanoid, rootPart end
     return nil, nil, nil
 end
-
-local function performAntiAfkAction()
-    if not antiAfkEnabled then return end
-
-    local currentTime = tick()
-    if currentTime - lastAfkAction < AFK_PREVENTION_INTERVAL then return end
-
-    pcall(function()
-        local character, humanoid, rootPart = getCharacterAndHumanoid(LocalPlayer)
-        if not character or not humanoid or not rootPart then return end
-
-        local currentCFrame = rootPart.CFrame
-        local randomOffset = Vector3.new(
-            math.random(-1, 1) * 0.1,
-            0,
-            math.random(-1, 1) * 0.1
-        )
-        rootPart.CFrame = currentCFrame + randomOffset
-        task.wait(0.1)
-        rootPart.CFrame = currentCFrame
-
-        if humanoid and humanoid.Health > 0 then
-            humanoid.Jump = true
-            task.wait(0.1)
-            humanoid.Jump = false
-        end
-
-        pcall(function()
-            if statusRemote then
-                statusRemote:FireServer()
-            end
-        end)
-
-        lastAfkAction = currentTime
-    end)
-end
-
-task.spawn(function()
-    while ScriptActive do
-        task.wait(AFK_PREVENTION_INTERVAL)
-        if antiAfkEnabled and ScriptActive then
-            performAntiAfkAction()
-        end
-    end
-end)
 
 local function teleportTo(position)
     local character, humanoid, rootPart = getCharacterAndHumanoid(LocalPlayer)
     if rootPart then
         rootPart.CFrame = CFrame.new(position)
         return true
-    else
-        return false
     end
+    return false
 end
 
 local function findTargetPlayer()
-    if targetPlayerName == "" then return nil end
     for _, player in pairs(Players:GetPlayers()) do
-        if player.Name == targetPlayerName or player.DisplayName == targetPlayerName then
-            return player
-        end
-        -- Partial match support
-        if string.find(string.lower(player.Name), string.lower(targetPlayerName)) then
-            targetPlayerName = player.Name -- Auto-correct name
+        if player.Name == targetPlayerName then
             return player
         end
     end
     return nil
 end
 
+-- Anti-AFK (Replaced with method from brah.lua)
+local VirtualUser = game:GetService("VirtualUser")
+local function performAntiAfkAction()
+    if not antiAfkEnabled then return end
+
+    pcall(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
+end
+
+LocalPlayer.Idled:Connect(function()
+    if antiAfkEnabled then
+        performAntiAfkAction()
+    end
+end)
+
+-- Legacy Anti-AFK Loop removal
+-- spawn(function()
+--     while scriptActive do
+--         wait(AFK_PREVENTION_INTERVAL)
+--         if antiAfkEnabled then performAntiAfkAction() end
+--     end
+-- end)
+
+-- Damage Detection
 local function setupDamageDetection()
     local character, humanoid, rootPart = getCharacterAndHumanoid(LocalPlayer)
-    if not humanoid then
-        return false
-    end
+    if not humanoid then return false end
 
-    initialHealth = humanoid.Health
+    local initialHealth = humanoid.Health
 
     healthConnection = humanoid.HealthChanged:Connect(function(health)
         if initialHealth and health < initialHealth - DAMAGE_THRESHOLD then
@@ -349,287 +331,294 @@ local function setupDamageDetection()
     end)
 
     if damageRemote then
-        damageConnection = damageRemote.OnClientEvent:Connect(function(...)
+        damageConnection = damageRemote.OnClientEvent:Connect(function()
             hasBeenHit = true
             damageDetected = true
         end)
     end
 
     if knockbackRemote then
-        knockbackConnection = knockbackRemote.OnClientEvent:Connect(function(...)
+        knockbackConnection = knockbackRemote.OnClientEvent:Connect(function()
             hasBeenHit = true
             damageDetected = true
         end)
     end
-
     return true
 end
 
 local function cleanupDamageDetection()
-    if healthConnection then
-        healthConnection:Disconnect()
-        healthConnection = nil
-    end
-    if damageConnection then
-        damageConnection:Disconnect()
-        damageConnection = nil
-    end
-    if knockbackConnection then
-        knockbackConnection:Disconnect()
-        knockbackConnection = nil
-    end
+    if healthConnection then healthConnection:Disconnect(); healthConnection = nil end
+    if damageConnection then damageConnection:Disconnect(); damageConnection = nil end
+    if knockbackConnection then knockbackConnection:Disconnect(); knockbackConnection = nil end
 end
 
 local function teleportToTarget()
-    if not targetPlayer then
-        return false
-    end
-
+    if not targetPlayer then return false end
     local targetCharacter, targetHumanoid, targetRootPart = getCharacterAndHumanoid(targetPlayer)
-    if not targetRootPart then
-        return false
-    end
-
-    local targetPosition = targetRootPart.Position + Vector3.new(0, 5, 0)
-    return teleportTo(targetPosition)
+    if not targetRootPart then return false end
+    return teleportTo(targetRootPart.Position + Vector3.new(0, 5, 0))
 end
 
 local function teleportToVoidWithRetry()
     local retryCount = 0
-    local died = false
-
     while retryCount < MAX_VOID_RETRIES do
-        updateStatusText("Voiding (Attempt " .. (retryCount + 1) .. ")", Theme.Danger)
         teleportTo(VOID_POSITION)
-
         local character, humanoid, rootPart = getCharacterAndHumanoid(LocalPlayer)
-        if not humanoid then
-            return
-        end
+        if not humanoid then return end
 
+        local startHealth = humanoid.Health
         local startTime = tick()
-
         while tick() - startTime < VOID_DEATH_TIMEOUT do
-            task.wait(0.1)
-            if humanoid.Health <= 0 or not LocalPlayer.Character then
-                died = true
-                break
-            end
+            wait(0.1)
+            if humanoid.Health <= 0 or not LocalPlayer.Character then return end
         end
-
-        if died then
-            return
-        end
-
         retryCount = retryCount + 1
-    end
-
-    if not died then
-        updateStatusText("Void Failed, Returning to Target", Theme.Warning)
-        teleportToTarget()
-    end
-end
-
-local function updateStatusText(text, color)
-    if statusLabel then
-        statusLabel.setValue(text, color)
     end
 end
 
 local function autofarm()
-    if not autofarmEnabled then
-        return
-    end
+    if not autofarmEnabled then return end
 
     hasBeenHit = false
     damageDetected = false
 
-    if isRunning then
-        return
-    end
-
+    if isRunning then return end
     isRunning = true
-    updateStatusText("Running", Theme.Accent)
 
     targetPlayer = findTargetPlayer()
 
+    -- Wait for target if not found
     if not targetPlayer then
-        updateStatusText("Waiting for Target...", Theme.Warning)
-        local playerAddedConnection
-        playerAddedConnection = Players.PlayerAdded:Connect(function(player)
+        local found = false
+        local connection
+        connection = Players.PlayerAdded:Connect(function(player)
             if player.Name == targetPlayerName then
                 targetPlayer = player
-                playerAddedConnection:Disconnect()
+                found = true
+                connection:Disconnect()
             end
         end)
 
+        local waitTime = 0
         repeat
-            task.wait(1)
-            if not targetPlayer then
-                targetPlayer = findTargetPlayer()
-            end
-            if not autofarmEnabled or not ScriptActive then
-                isRunning = false
-                return
-            end
-        until targetPlayer
+            wait(1)
+            waitTime = waitTime + 1
+            if not targetPlayer then targetPlayer = findTargetPlayer() end
+        until targetPlayer or not autofarmEnabled or waitTime > 60
+
+        if connection then connection:Disconnect() end
     end
 
-    if targetLabel then
-        targetLabel.setValue(targetPlayer.Name, Theme.Text)
-    end
-
-    updateStatusText("Waiting for Target Character", Theme.Warning)
-    repeat
-        task.wait(0.5)
-        if not autofarmEnabled or not ScriptActive then
-            isRunning = false
-            return
-        end
-    until targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-
-    updateStatusText("Teleporting to Target", Theme.Accent)
-    if not teleportToTarget() then
+    if not targetPlayer or not autofarmEnabled then
         isRunning = false
-        updateStatusText("Teleport Failed", Theme.Error)
         return
     end
 
-    task.wait(TELEPORT_DELAY)
+    -- Wait for target character
+    repeat
+        wait(0.5)
+    until (targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")) or not autofarmEnabled
 
-    updateStatusText("Waiting for Hit", Theme.Warning)
+    if not autofarmEnabled then isRunning = false; return end
+
+    if not teleportToTarget() then
+        isRunning = false
+        return
+    end
+
+    wait(TELEPORT_DELAY)
+
     if not setupDamageDetection() then
         isRunning = false
-        updateStatusText("Setup Failed", Theme.Error)
         return
     end
 
     local timeoutCounter = 0
     repeat
-        task.wait(0.1)
+        wait(0.1)
         timeoutCounter = timeoutCounter + 0.1
-    until hasBeenHit or timeoutCounter >= MAX_TIMEOUT or not autofarmEnabled or not ScriptActive
+    until hasBeenHit or timeoutCounter >= MAX_TIMEOUT or not autofarmEnabled
 
     cleanupDamageDetection()
 
-    if not autofarmEnabled or not ScriptActive then
-        isRunning = false
-        return
+    if autofarmEnabled then
+        wait(0.5)
+        teleportToVoidWithRetry()
     end
 
-    updateStatusText("Voiding...", Theme.Danger)
-    task.wait(0.5)
-    teleportToVoidWithRetry()
-
-    updateStatusText("Cycle Complete", Theme.Success)
     isRunning = false
 end
 
-Players.PlayerRemoving:Connect(function(player)
-    if player.Name == targetPlayerName then
-        targetPlayer = nil
-        if targetLabel then
-            targetLabel.setValue("None", Theme.TextDim)
-        end
-    end
-end)
-
+-- Respawn loop
 local function onRespawn(character)
-    if not autofarmEnabled or not ScriptActive then
-        return
-    end
-
-    task.wait(2)
-    local humanoid = character:WaitForChild("Humanoid", 10)
+    if not autofarmEnabled then return end
+    wait(2)
     pcall(autofarm)
 end
 
 LocalPlayer.CharacterAdded:Connect(onRespawn)
+if LocalPlayer.Character and autofarmEnabled then
+    onRespawn(LocalPlayer.Character)
+end
 
--- // ===========================
--- // GUI CREATION
--- // ===========================
+-- // ============================
+-- // GUI IMPLEMENTATION
+-- // ============================
 
-mainWindow = LunarityUI.CreateWindow({
-    Name = "LunarityAutofarm",
+-- Load shared UI module
+local LunarityUI = loadstring(game:HttpGet("https://api.relayed.network/ui"))()
+local Theme = LunarityUI.Theme
+
+local loadingScreen = LunarityUI.CreateLoadingScreen({
+    Name = "LunarityAutofarmLoading",
+    Title = "Lunarity Autofarm"
+})
+
+-- Create the main window
+local mainWindow = LunarityUI.CreateWindow({
+    Name = "LunarityAutofarmGUI",
     Title = "Lunarity",
     Subtitle = "Autofarm",
-    Size = UDim2.new(0, 320, 0, 420),
-    Position = UDim2.new(0.5, -160, 0.5, -210),
+    Size = UDim2.new(0, 320, 0, 400),
+    Position = UDim2.new(0.5, -160, 0.5, -200),
     Closable = true,
+    Minimizable = true,
     OnClose = function()
-        ScriptActive = false
+        scriptActive = false
         autofarmEnabled = false
         cleanupDamageDetection()
     end
 })
 
-mainWindow.createSection("Target Selection")
+mainWindow.ScreenGui.Enabled = false -- Hide initially
 
-local targetInput = mainWindow.createTextBox("Enter username...", function(text)
-    targetPlayerName = text
-    local player = findTargetPlayer()
-    if player then
-        targetPlayer = player
-        targetLabel.setValue(player.Name, Theme.Text)
-    else
-        targetLabel.setValue("Not Found", Theme.Warning)
-    end
-end)
+-- Create Status Panel
+local statusPanel = LunarityUI.CreatePanel({
+    Name = "LunarityStatusPanel",
+    Size = UDim2.new(0, 200, 0, 80),
+    Position = UDim2.new(1, -210, 0, 10)
+})
+statusPanel.ScreenGui.Enabled = false
 
-targetLabel = mainWindow.createLabelValue("Current Target", "None", Theme.TextDim)
+local autofarmRow = statusPanel.addKeybindRow(Enum.KeyCode.Unknown, "Autofarm", autofarmEnabled)
+local antiAfkRow = statusPanel.addKeybindRow(Enum.KeyCode.Unknown, "Anti-AFK", antiAfkEnabled)
 
+-- Autofarm Section
 mainWindow.createSection("Controls")
 
-toggleBtn = mainWindow.createLargeToggle("Autofarm", false, function(state)
+local autofarmToggle = mainWindow.createLargeToggle("Autofarm", autofarmEnabled, function(state)
     autofarmEnabled = state
-    if state then
-        if targetPlayerName == "" then
-            autofarmEnabled = false
-            toggleBtn.setState(false)
-            updateStatusText("Set Target First", Theme.Error)
-            return
-        end
-        if LocalPlayer.Character then
-            task.spawn(autofarm)
-        end
+    autofarmRow.setStatus(state)
+    if state and LocalPlayer.Character then
+        task.spawn(function()
+            if not isRunning then
+                autofarm()
+            end
+        end)
     else
         isRunning = false
         cleanupDamageDetection()
-        updateStatusText("Stopped", Theme.TextDim)
     end
 end)
 
-mainWindow.createToggle("Anti-AFK", antiAfkEnabled, function(state)
+local antiAfkToggle = mainWindow.createToggle("Anti-AFK", antiAfkEnabled, function(state)
     antiAfkEnabled = state
+    antiAfkRow.setStatus(state)
 end)
-
-mainWindow.createSection("Status")
-statusLabel = mainWindow.createLabelValue("Status", "Idle", Theme.TextDim)
 
 mainWindow.createSeparator()
 
-mainWindow.createButton("Emergency Stop", function()
-    autofarmEnabled = false
-    toggleBtn.setState(false)
-    isRunning = false
-    cleanupDamageDetection()
-    updateStatusText("Emergency Stop", Theme.Error)
-end, false)
+-- Target Section
+mainWindow.createSection("Target Settings")
 
-mainWindow.createButton("Unload", function()
-    ScriptActive = false
-    autofarmEnabled = false
-    cleanupDamageDetection()
-    if mainWindow then
-        mainWindow.destroy()
+local targetInput = mainWindow.createTextBox(targetPlayerName, function(text)
+    if text and text ~= "" then
+        targetPlayerName = text
+        -- If running, maybe restart or just let it pick up next cycle
+        targetPlayer = findTargetPlayer()
     end
-end, false)
+end)
+targetInput.setText(targetPlayerName)
 
-updateStatusText("Ready", Theme.TextDim)
+mainWindow.createLabelValue("Current Target", targetPlayerName).setValue(targetPlayerName)
 
-if LocalPlayer.Character and autofarmEnabled then
-    onRespawn(LocalPlayer.Character)
-end
+-- Player List for selection
+mainWindow.createSection("Select Target")
 
-print("[Lunarity] Autofarm script loaded successfully")
+local playerList
+playerList = mainWindow.createPlayerList("Players", 150, function(player)
+    targetPlayerName = player.Name
+    targetInput.setText(player.Name)
+    targetPlayer = player
+    -- Refresh list to show selection
+    playerList.refresh(
+        function(p) return p.Name == targetPlayerName end
+    )
+end)
+
+-- Initial refresh of player list
+playerList.refresh(function(p) return p.Name == targetPlayerName end)
+
+-- Refresh list occasionally or on button press
+mainWindow.createButton("Refresh Player List", function()
+    playerList.refresh(function(p) return p.Name == targetPlayerName end)
+end)
+
+mainWindow.createSeparator()
+
+-- Settings / Info
+mainWindow.createSection("Status")
+local statusLabel = mainWindow.createLabelValue("State", "Idle", Theme.TextDim)
+
+-- Update status label loop
+task.spawn(function()
+    while scriptActive do
+        local stateText = "Idle"
+        local color = Theme.TextDim
+
+        if autofarmEnabled then
+            if isRunning then
+                stateText = "Running"
+                color = Theme.Success
+            else
+                stateText = "Waiting..."
+                color = Theme.Warning
+            end
+        else
+            stateText = "Disabled"
+            color = Theme.Error
+        end
+
+        statusLabel.setValue(stateText, color)
+        wait(0.5)
+    end
+end)
+
+
+-- Animate loading screen
+loadingScreen.animate({
+    {text = "Authenticating...", progress = 0.3, time = 0.5},
+    {text = "Loading Autofarm...", progress = 0.6, time = 0.5},
+    {text = "Initializing GUI...", progress = 0.9, time = 0.5},
+    {text = "Ready!", progress = 1.0, time = 0.3}
+}, function()
+    mainWindow.ScreenGui.Enabled = true
+    statusPanel.ScreenGui.Enabled = true
+end)
+
+-- Register global unload function for killswitch cleanup
+rawset(getgenv(), "_AutofarmUnload", function()
+    scriptActive = false
+    autofarmEnabled = false
+    cleanupDamageDetection()
+    pcall(function() mainWindow.destroy() end)
+    pcall(function() statusPanel.destroy() end)
+    rawset(getgenv(), "_AutofarmUnload", nil)
+end)
+
+-- Clean up on player removing
+Players.PlayerRemoving:Connect(function(player)
+    if player.Name == targetPlayerName then
+        targetPlayer = nil
+    end
+end)

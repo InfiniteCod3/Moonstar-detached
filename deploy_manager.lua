@@ -232,10 +232,10 @@ local function build_full_pipeline_cmd(scriptObj)
     obfCmd = obfCmd .. ")"  -- Close the subshell
     table.insert(cmds, obfCmd)
     
-    -- Upload step
+    -- Upload step (R2 instead of KV)
     local key = name .. ".lua"
     local path = name .. ".obfuscated.lua"
-    local uploadCmd = 'wrangler kv key put "' .. key .. '" --binding=SCRIPTS --path="' .. path .. '" --config wrangler.toml --remote'
+    local uploadCmd = 'wrangler r2 object put "lunarity-scripts/' .. key .. '" --file="' .. path .. '" --config wrangler.toml --remote'
     table.insert(cmds, uploadCmd)
     
     -- Join commands with && for sequential execution within this job
@@ -243,11 +243,11 @@ local function build_full_pipeline_cmd(scriptObj)
 end
 
 local function upload(scriptName)
-    print("  [+] Uploading " .. scriptName .. " to Cloudflare KV...")
+    print("  [+] Uploading " .. scriptName .. " to Cloudflare R2...")
     local key = scriptName .. ".lua"
     local path = scriptName .. ".obfuscated.lua"
-    -- Using --remote to ensure it goes to the real KV
-    local cmd = 'wrangler kv key put "' .. key .. '" --binding=SCRIPTS --path="' .. path .. '" --config wrangler.toml --remote'
+    -- Using R2 object put instead of KV
+    local cmd = 'wrangler r2 object put "lunarity-scripts/' .. key .. '" --file="' .. path .. '" --config wrangler.toml --remote'
     return run_command(cmd)
 end
 
@@ -373,7 +373,7 @@ local function execute_all_parallel(action)
         elseif action == "upload" then
             local key = s.id .. ".lua"
             local path = s.id .. ".obfuscated.lua"
-            cmd = 'wrangler kv key put "' .. key .. '" --binding=SCRIPTS --path="' .. path .. '" --config wrangler.toml --remote'
+            cmd = 'wrangler r2 object put "lunarity-scripts/' .. key .. '" --file="' .. path .. '" --config wrangler.toml --remote'
         end
         
         if cmd then
@@ -422,7 +422,7 @@ local function show_main_menu()
     print("")
     print("#############################################")
     print("#      LUNARITY DEPLOYMENT MANAGER          #")
-    print("#      (" .. OBFUSCATION_PRESET .. " Preset + KV Upload)          #")
+    print("#      (" .. OBFUSCATION_PRESET .. " Preset + R2 Upload)          #")
     print("#############################################")
     print("")
     print("1. Full Deployment (Preprocess -> Obfuscate -> Upload -> Cleanup)")

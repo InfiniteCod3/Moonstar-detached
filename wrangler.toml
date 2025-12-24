@@ -3,9 +3,12 @@ main = "cloudflare-worker.js"
 compatibility_date = "2025-11-16"
 workers_dev = false
 
-[[kv_namespaces]]
-binding = "SCRIPTS"
-id = "236ec48cb9ed4b39a73d25ce3654e2c5"
+# R2 bucket for script storage (no size/write limits)
+[[r2_buckets]]
+binding = "SCRIPTS_BUCKET"
+bucket_name = "lunarity-scripts"
+
+# No KV required - uses HMAC-signed tokens for session management
 
 [[routes]]
 pattern = "api.relayed.network"

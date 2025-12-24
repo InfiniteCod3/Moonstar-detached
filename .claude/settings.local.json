@@ -8,7 +8,10 @@
       "Bash(luac5.1:*)",
       "Bash(ls:*)",
       "Bash(git checkout:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(wrangler r2 bucket create:*)",
+      "Bash(wrangler deploy:*)",
+      "Skill(ccs:continue)"
     ]
   }
 }

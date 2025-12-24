@@ -1,77 +1,68 @@
 // Cloudflare Worker entry point for Lunarity authentication + script delivery
-// Deploy with Wrangler and bind a KV namespace named "SCRIPTS" that stores:
-//   - loader.lua (GUI loader served at / or /loader)
-//   - lunarity.lua (combat script)
-//   - DoorESP.lua (ESP script)
-// Provide an API key map via the API_KEYS secret (JSON) and optional kill switch via KILL_SWITCH env var.
+// Deploy with Wrangler and bind:
+//   - R2 bucket named "SCRIPTS_BUCKET" for script storage (loader.lua, lunarity.lua, etc.)
+// Provide an optional kill switch via KILL_SWITCH env var.
+// Security: Uses HMAC-signed tokens (no KV required)
 
 const CONFIG = {
-    loaderKvKey: "loader.lua",
-    tokenKvPrefix: "whitelist:",
-    loaderWhitelistTtl: 120, // seconds loader tokens stay valid before validation
-    sessionTtl: 600, // seconds granted after scripts validate successfully
+    loaderR2Key: "loader.lua",
+    sessionTtl: 600, // seconds tokens stay valid
     requiredUserAgent: "LunarityLoader/1.0",
     encryptionKey: "LunarityXOR2025!SecretKey", // XOR encryption key for payload obfuscation
+    signingSecret: "LunarityHMAC2025!SigningKey", // HMAC signing key for tokens
     discordWebhook: "https://discord.com/api/webhooks/1424094994129485915/tj3RnyDn8DqMprbe-3Is4yuz-shQsHe--r4baFAQ9vGRdRaYqrENVeY92NR2DGUs7u94",
     scripts: {
         lunarityUI: {
-            kvKey: "LunarityUI.lua",
+            r2Key: "LunarityUI.lua",
             label: "Lunarity UI Module",
             description: "Shared ImGUI-style UI framework for all Lunarity scripts",
             version: "1.0.0",
             enabled: true,
         },
         lunarity: {
-            kvKey: "lunarity.lua",
+            r2Key: "lunarity.lua",
             label: "Lunarity · IFrames",
             description: "Advanced combat enhancer with IFrames + Anti-Debuff",
             version: "1.0.0",
             enabled: true,
         },
         doorEsp: {
-            kvKey: "DoorESP.lua",
+            r2Key: "DoorESP.lua",
             label: "Door ESP · Halloween",
             description: "ESP and Auto-Candy support for Halloween doors",
             version: "1.0.0",
             enabled: true,
         },
         teleport: {
-            kvKey: "Teleport.lua",
+            r2Key: "Teleport.lua",
             label: "Teleport · Advanced",
             description: "Player and map teleportation with spoofing support",
             version: "1.0.0",
             enabled: true,
         },
         remoteLogger: {
-            kvKey: "RemoteLogger.lua",
+            r2Key: "RemoteLogger.lua",
             label: "Remote Logger · Dev",
             description: "Developer tool that logs incoming/outgoing remotes",
             version: "1.0.0",
             enabled: true,
         },
         aetherShitter: {
-            kvKey: "AetherShitterRecode.lua",
+            r2Key: "AetherShitterRecode.lua",
             label: "Aether Shitter · Recode",
             description: "Massive server destruction tool (Use with caution)",
             version: "1.0.0",
             enabled: true,
         },
-        playerTracker: {
-            kvKey: "PlayerTracker.lua",
-            label: "Player Tracker · Aim",
-            description: "Hold RMB to track closest player with auto-prediction algorithms",
-            version: "1.0.0",
-            enabled: true,
-        },
         gamepassUnlocker: {
-            kvKey: "GamepassUnlocker.lua",
+            r2Key: "GamepassUnlocker.lua",
             label: "Gamepass Unlocker",
             description: "Gamepass bypass proof of concept with namecall hooking and weapon injection",
             version: "1.0.0",
             enabled: true,
         },
         autofarm: {
-            kvKey: "Autofarm.lua",
+            r2Key: "Autofarm.lua",
             label: "Autofarm · Void",
             description: "Automated farming with void teleportation and target tracking",
             version: "1.0.0",
@@ -85,11 +76,11 @@ const CONFIG = {
 const API_KEYS = {
     "demo-d3v-key": {
         label: "Developer",
-        allowedScripts: ["lunarityUI", "lunarity", "doorEsp", "teleport", "remoteLogger", "aetherShitter", "playerTracker", "gamepassUnlocker", "autofarm"],
+        allowedScripts: ["lunarityUI", "lunarity", "doorEsp", "teleport", "remoteLogger", "aetherShitter", "gamepassUnlocker", "autofarm"],
     },
     "test-key-123": {
         label: "Tester",
-        allowedScripts: ["lunarityUI", "lunarity", "doorEsp", "teleport", "playerTracker", "gamepassUnlocker", "autofarm"],
+        allowedScripts: ["lunarityUI", "lunarity", "doorEsp", "teleport", "gamepassUnlocker", "autofarm"],
     },
     "autofarm-only-key": {
         label: "Autofarm User",
@@ -271,37 +262,74 @@ function buildScriptList(allowedIds) {
         .filter(Boolean);
 }
 
-function randomToken(bytes = 16) {
-    const buf = new Uint8Array(bytes);
-    crypto.getRandomValues(buf);
-    return [...buf].map((b) => b.toString(16).padStart(2, "0")).join("");
+// HMAC-based token signing (no KV required)
+async function hmacSign(data) {
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+        "raw",
+        encoder.encode(CONFIG.signingSecret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"]
+    );
+    const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(data));
+    return [...new Uint8Array(signature)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function buildTokenKey(token) {
-    return CONFIG.tokenKvPrefix + token;
+async function hmacVerify(data, signature) {
+    const expectedSignature = await hmacSign(data);
+    return expectedSignature === signature;
 }
 
-async function issueWhitelistToken(env, metadata) {
-    const token = randomToken();
-    const key = buildTokenKey(token);
-    await env.SCRIPTS.put(key, JSON.stringify({
+// Create a signed token containing all session data (no server storage needed)
+async function createSignedToken(metadata) {
+    const payload = {
         scriptId: metadata.scriptId,
         userId: metadata.userId,
         username: metadata.username,
         issuedAt: Date.now(),
-    }), { expirationTtl: CONFIG.loaderWhitelistTtl });
-    return { token, expiresIn: CONFIG.loaderWhitelistTtl };
+        expiresAt: Date.now() + (CONFIG.sessionTtl * 1000),
+    };
+    const payloadStr = JSON.stringify(payload);
+    const payloadB64 = btoa(payloadStr);
+    const signature = await hmacSign(payloadB64);
+    // Token format: base64(payload).signature
+    return { token: `${payloadB64}.${signature}`, expiresIn: CONFIG.sessionTtl };
 }
 
-async function refreshWhitelistToken(env, token, record, ttl) {
-    const key = buildTokenKey(token);
-    await env.SCRIPTS.put(key, JSON.stringify(record), { expirationTtl: ttl });
+// Verify and decode a signed token
+async function verifySignedToken(token) {
+    if (!token || typeof token !== "string") return null;
+
+    const parts = token.split(".");
+    if (parts.length !== 2) return null;
+
+    const [payloadB64, signature] = parts;
+
+    // Verify signature
+    const isValid = await hmacVerify(payloadB64, signature);
+    if (!isValid) return null;
+
+    // Decode payload
+    try {
+        const payloadStr = atob(payloadB64);
+        const payload = JSON.parse(payloadStr);
+
+        // Check expiration
+        if (payload.expiresAt && Date.now() > payload.expiresAt) {
+            return null; // Token expired
+        }
+
+        return payload;
+    } catch (e) {
+        return null;
+    }
 }
 
 async function handleLoader(env) {
-    const source = await env.SCRIPTS.get(CONFIG.loaderKvKey, "text");
-    if (!source) {
-        return new Response("-- Loader not uploaded to KV (key: " + CONFIG.loaderKvKey + ")", {
+    const object = await env.SCRIPTS_BUCKET.get(CONFIG.loaderR2Key);
+    if (!object) {
+        return new Response("-- Loader not uploaded to R2 (key: " + CONFIG.loaderR2Key + ")", {
             status: 503,
             headers: {
                 "content-type": "text/plain; charset=utf-8",
@@ -309,6 +337,7 @@ async function handleLoader(env) {
             },
         });
     }
+    const source = await object.text();
     return new Response(source, {
         headers: {
             "content-type": "text/plain; charset=utf-8",
@@ -403,12 +432,13 @@ async function handleAuthorize(request, env) {
         return jsonResponse({ ok: false, reason: "Requested script is disabled." }, { status: 503 });
     }
 
-    const scriptBody = await env.SCRIPTS.get(scriptMeta.kvKey, "text");
-    if (!scriptBody) {
-        return jsonResponse({ ok: false, reason: `Script body missing in KV (${scriptMeta.kvKey}).` }, { status: 500 });
+    const scriptObject = await env.SCRIPTS_BUCKET.get(scriptMeta.r2Key);
+    if (!scriptObject) {
+        return jsonResponse({ ok: false, reason: `Script body missing in R2 (${scriptMeta.r2Key}).` }, { status: 500 });
     }
+    const scriptBody = await scriptObject.text();
 
-    const tokenInfo = await issueWhitelistToken(env, {
+    const tokenInfo = await createSignedToken({
         scriptId,
         userId: body.userId,
         username: body.username,
@@ -476,11 +506,11 @@ async function handleValidate(request, env) {
         return jsonResponse({ ok: false, reason: "Token missing." }, { status: 400 });
     }
 
-    const tokenKey = buildTokenKey(token);
-    const record = await env.SCRIPTS.get(tokenKey, { type: "json" });
+    // Verify the signed token (no KV lookup needed)
+    const record = await verifySignedToken(token);
     if (!record) {
         await logToDiscord("validate_fail", {
-            reason: "Token expired or invalid (possible replay attack)",
+            reason: "Token expired or invalid signature",
             scriptId: body.scriptId,
         }, request);
         return jsonResponse({ ok: false, reason: "Token expired or invalid." }, { status: 401 });
@@ -495,23 +525,12 @@ async function handleValidate(request, env) {
         return jsonResponse({ ok: false, reason: "Token/script mismatch." }, { status: 403 });
     }
 
-    // Dynamic Token Rotation: Delete old token and issue a new one
-    // This prevents replay attacks - each token can only be used once
-    await env.SCRIPTS.delete(tokenKey);
-
-    const newTokenInfo = await issueWhitelistToken(env, {
+    // Issue a fresh signed token with extended expiry
+    const newTokenInfo = await createSignedToken({
         scriptId: record.scriptId,
         userId: record.userId,
         username: record.username,
     });
-
-    // Extend TTL for the new token to sessionTtl
-    await refreshWhitelistToken(env, newTokenInfo.token, {
-        scriptId: record.scriptId,
-        userId: record.userId,
-        username: record.username,
-        issuedAt: Date.now(),
-    }, CONFIG.sessionTtl);
 
     // Log successful validation (rate-limited to avoid spam - only log occasionally)
     // Uncomment below if you want to log every heartbeat:
@@ -547,9 +566,9 @@ export default {
 
         // Serve LunarityUI module directly for scripts to load
         if (url.pathname === "/ui" || url.pathname === "/LunarityUI") {
-            const source = await env.SCRIPTS.get("LunarityUI.lua", "text");
-            if (!source) {
-                return new Response("-- LunarityUI not uploaded to KV", {
+            const object = await env.SCRIPTS_BUCKET.get("LunarityUI.lua");
+            if (!object) {
+                return new Response("-- LunarityUI not uploaded to R2", {
                     status: 503,
                     headers: {
                         "content-type": "text/plain; charset=utf-8",
@@ -557,6 +576,7 @@ export default {
                     },
                 });
             }
+            const source = await object.text();
             return new Response(source, {
                 headers: {
                     "content-type": "text/plain; charset=utf-8",

@@ -98,9 +98,10 @@ local function saveSettings()
         AntiDebuffKeybind = getKeyNameOrDefault(AntiDebuffKeybind, "Two"),
         ToggleKeybindUIKeybind = getKeyNameOrDefault(ToggleKeybindUIKeybind, "F1"),
         IFramesDuration = IFramesDuration,
-        isInfiniteDuration = isInfiniteDuration
+        isInfiniteDuration = isInfiniteDuration,
+        AntiCombatStunEnabled = AntiCombatStunEnabled
     }
-    
+
     local HttpService = game:GetService("HttpService")
     local success, err = pcall(function()
         local jsonData = HttpService:JSONEncode(settings)
@@ -135,6 +136,7 @@ local savedSettings = loadSettings()
 
 local IFramesEnabled = false
 local AntiDebuffEnabled = true
+local AntiCombatStunEnabled = false
 local ScriptActive = true
 local GuiVisible = true
 local KeybindUIVisible = true
@@ -153,6 +155,7 @@ if savedSettings then
     AntiDebuffEnabled = savedSettings.AntiDebuffEnabled ~= nil and savedSettings.AntiDebuffEnabled or true
     IFramesDuration = savedSettings.IFramesDuration or 2
     isInfiniteDuration = savedSettings.isInfiniteDuration ~= nil and savedSettings.isInfiniteDuration or true
+    AntiCombatStunEnabled = savedSettings.AntiCombatStunEnabled or false
 
     -- Load keybinds
     IFramesKeybind = resolveKeyCode(savedSettings.IFramesKeybind, Enum.KeyCode.One)
@@ -283,6 +286,14 @@ do
                 if not valid or (data and data.killSwitch) then
                     warn("[Lunarity] Access revoked or kill switch activated. Shutting down.")
                     ScriptActive = false
+                    IFramesEnabled = false
+                    AntiDebuffEnabled = false
+
+                    -- Trigger full unload via global function if available
+                    local unloadFunc = rawget(getgenv(), "_LunarityUnload")
+                    if typeof(unloadFunc) == "function" then
+                        pcall(unloadFunc)
+                    end
                     break
                 end
             end
@@ -335,11 +346,21 @@ local function remove_status(statusIndex)
 end
 
 spawn(function()
+    local lastApplyTime = 0
+    local IFRAMES_DURATION = 10
+    local IFRAMES_REFRESH_INTERVAL = 9 -- Reapply 1 second before expiry for overlap
+    local POLL_INTERVAL = 0.5 -- Short interval for responsiveness
+
     while ScriptActive do
         if IFramesEnabled and ScriptActive then
             if isInfiniteDuration then
-                apply_status("IFrames", 2)
-                task.wait(1.5)
+                local now = tick()
+                -- Apply immediately on first run OR when refresh interval has passed
+                if lastApplyTime == 0 or (now - lastApplyTime) >= IFRAMES_REFRESH_INTERVAL then
+                    apply_status("IFrames", IFRAMES_DURATION)
+                    lastApplyTime = now
+                end
+                task.wait(POLL_INTERVAL)
             else
                 apply_status("IFrames", IFramesDuration)
 
@@ -351,18 +372,31 @@ spawn(function()
                 end
             end
         else
+            lastApplyTime = 0 -- Reset so it applies immediately when re-enabled
             task.wait(0.1)
         end
     end
 end)
 
 StatusRemoteConnection = StatusRemote.OnClientEvent:Connect(function(statusTable)
-    if not AntiDebuffEnabled or not ScriptActive then return end
-    
+    if not ScriptActive then return end
+
+    -- Early exit if nothing is enabled
+    if not AntiDebuffEnabled and not AntiCombatStunEnabled then return end
+
     if type(statusTable) == "table" then
+        local combatStunRemoved = false
+
         for index, statusName in pairs(statusTable) do
-            if DEBUFF_BLACKLIST[statusName] then
+            if AntiDebuffEnabled and DEBUFF_BLACKLIST[statusName] then
                 remove_status(index)
+            elseif AntiCombatStunEnabled and not combatStunRemoved and statusName == "CombatStun" then
+                remove_status(index)
+                combatStunRemoved = true
+                -- If only CombatStun removal is needed, break early
+                if not AntiDebuffEnabled then
+                    break
+                end
             end
         end
     end
@@ -477,6 +511,11 @@ antiDebuffToggle = mainWindow.createLargeToggle("Anti-Debuff", AntiDebuffEnabled
     saveSettings()
 end)
 
+mainWindow.createToggle("Anti-CombatStun", AntiCombatStunEnabled, function(state)
+    AntiCombatStunEnabled = state
+    saveSettings()
+end)
+
 local antiDebuffKeybindBtn = mainWindow.createKeybindButton("Anti-Debuff Keybind", AntiDebuffKeybind, function(newKey)
     AntiDebuffKeybind = newKey
     antiDebuffRow.setKey(newKey)
@@ -503,19 +542,41 @@ mainWindow.createButton("Self Destruct", function()
     ScriptActive = false
     IFramesEnabled = false
     AntiDebuffEnabled = false
-    
+
     pcall(function()
         apply_status("IFrames", 1)
     end)
-    
+
     if StatusRemoteConnection then
         StatusRemoteConnection:Disconnect()
         StatusRemoteConnection = nil
     end
-    
+
     keybindPanel.destroy()
     mainWindow.destroy()
 end, false)
+
+-- Register global unload function for killswitch cleanup
+rawset(getgenv(), "_LunarityUnload", function()
+    ScriptActive = false
+    IFramesEnabled = false
+    AntiDebuffEnabled = false
+
+    pcall(function()
+        apply_status("IFrames", 1)
+    end)
+
+    if StatusRemoteConnection then
+        StatusRemoteConnection:Disconnect()
+        StatusRemoteConnection = nil
+    end
+
+    pcall(function() keybindPanel.destroy() end)
+    pcall(function() mainWindow.destroy() end)
+
+    -- Clear the unload function itself
+    rawset(getgenv(), "_LunarityUnload", nil)
+end)
 
 -- Animate loading screen and show main GUI after
 loadingScreen.animate({
